@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { RotateCcw, ScanLine } from 'lucide-react'
-import type { GearAgentUIMessage } from '@/lib/agent/gear-agent'
 import { SAMPLE_BRIEFS, briefFromReadout, briefLine, type MovementBrief, type ShopperPrefs } from '@/lib/agent/brief'
 import { MIN_EVENTS, SPORTS, type Readout, type Sport } from '@/lib/metrics/readout'
 import type { Passport } from '@/lib/passport/schema'
@@ -11,21 +10,13 @@ import { Button } from '@/components/ui/button'
 import type { Fitting } from '@/lib/wassist/fitting'
 import { DEPTHS, addedLayers, nextDepth, type Depth } from '@/lib/agent/depth'
 import { AgentSteps } from './agent-steps'
+import { outputsOf, type AgentOutputs } from './outputs'
 import { DepthDial } from './depth-dial'
 import { PassportCard, usePassport } from './passport-card'
 import type { GearAgent } from './use-gear-agent'
 import { WhatsAppHandoff } from './whatsapp-handoff'
 
-function outputsOf(messages: GearAgentUIMessage[]) {
-  const parts = messages.flatMap((m) => (m.role === 'assistant' ? m.parts : []))
-  const profile = parts.find((p) => p.type === 'tool-buildGearProfile' && p.state === 'output-available')
-  const shortlist = parts.find((p) => p.type === 'tool-recommendProducts' && p.state === 'output-available')
-  if (profile?.type !== 'tool-buildGearProfile' || profile.state !== 'output-available') return null
-  if (shortlist?.type !== 'tool-recommendProducts' || shortlist.state !== 'output-available') return null
-  return { profile: profile.output, picks: shortlist.output.picks }
-}
-
-function passportFrom(brief: MovementBrief, prefs: ShopperPrefs, outputs: NonNullable<ReturnType<typeof outputsOf>>): Passport {
+function passportFrom(brief: MovementBrief, prefs: ShopperPrefs, outputs: AgentOutputs): Passport {
   return {
     v: 1,
     sport: brief.sport,
