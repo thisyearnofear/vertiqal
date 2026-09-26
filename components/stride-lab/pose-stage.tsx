@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { SPORTS, type MovementSnapshot, type MovementTracker, type Sport } from '@/lib/metrics/readout'
-import type { PoseSession } from '@/lib/pose/types'
+import { captureHero, heroScore, type HeroFrame } from '@/lib/hero/frame'
+import type { Pose, PoseSession } from '@/lib/pose/types'
 import { drawOverlay, readOverlayTheme, videoContentRect, type OverlayTheme } from './draw-overlay'
 
 export type EngineState = 'loading' | 'ready' | 'error'
@@ -19,6 +20,8 @@ interface PoseStageProps {
   /** Replaces the idle boot screen, e.g. a live-capture countdown. */
   overlay?: ReactNode
   onKeyframe?: (frame: Keyframe) => void
+  /** Called whenever a more expressive clean still (longest stride, highest reach) is found. */
+  onHero?: (frame: HeroFrame) => void
   session: PoseSession | null
   tracker: MovementTracker
   sport: Sport
@@ -48,6 +51,10 @@ const SNAPSHOT_INTERVAL_MS = 120
 /** Grab a still (with skeleton) on these event counts, for Grok vision review. */
 const KEYFRAME_EVENTS = new Set([3, 6, 9])
 const KEYFRAME_WIDTH = 640
+const TRAIL_LENGTH = 10
+const HERO_INTERVAL_MS = 250
+/** A new hero must beat the current one by this factor, so near-ties don't churn the card. */
+const HERO_MARGIN = 1.04
 
 const eventCount = (s: MovementSnapshot) => (s.sport === 'running' ? s.totalStrikes : s.totalPlacements)
 
@@ -70,6 +77,7 @@ export function PoseStage({
   stream = null,
   overlay,
   onKeyframe,
+  onHero,
   session,
   tracker,
   sport,
@@ -106,6 +114,9 @@ export function PoseStage({
     let snapshot: MovementSnapshot | null = null
     let needsRedraw = true
     let lastEvents = 0
+    const history: Pose[] = []
+    let bestHero = 0
+    let lastHeroAt = 0
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
@@ -138,6 +149,17 @@ export function PoseStage({
           }
         }
         const now = performance.now()
+        if (onHero && pose) {
+          history.push(pose)
+          if (history.length > TRAIL_LENGTH) history.shift()
+          const score = heroScore(pose, snapshot.sport, video.videoWidth, video.videoHeight)
+          if (score !== null && score > bestHero * HERO_MARGIN && now - lastHeroAt > HERO_INTERVAL_MS) {
+            bestHero = score
+            lastHeroAt = now
+            const hero = captureHero(video, pose, history, snapshot.sport, score)
+            if (hero) onHero(hero)
+          }
+        }
         if (now - lastEmit > SNAPSHOT_INTERVAL_MS) {
           lastEmit = now
           onSnapshot(snapshot)
@@ -161,7 +183,7 @@ export function PoseStage({
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [session, tracker, videoRef, onSnapshot, onKeyframe, themeKey])
+  }, [session, tracker, videoRef, onSnapshot, onKeyframe, onHero, themeKey])
 
   return (
     <div
