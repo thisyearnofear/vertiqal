@@ -12,7 +12,10 @@ import { PHOSPHOR_COLOR, speechFor, type Mood, type Persona } from '@/lib/person
 import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
 import type { PoseSession } from '@/lib/pose/types'
 import { cn } from '@/lib/utils'
+import type { HeroFrame } from '@/lib/hero/frame'
 import { AgentPanel } from './agent/agent-panel'
+import { outputsOf } from './agent/outputs'
+import { HeroCard } from './hero/hero-card'
 import { useGearAgent } from './agent/use-gear-agent'
 import { FittingNotes } from './fitting-notes'
 import { GaitReadout } from './gait-readout'
@@ -56,6 +59,7 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
   const [sport, setSport] = useState<Sport>('running')
   const [providerId, setProviderId] = useState(POSE_PROVIDERS[0].id)
   const [sessionState, setSessionState] = useState<SessionState>({ status: 'loading' })
+  const [providerStatus, setProviderStatus] = useState<string | null>(null)
   const [heightCm, setHeightCm] = useState(DEFAULT_HEIGHT_CM)
   const [tracker, setTracker] = useState(() => createTracker('running', DEFAULT_HEIGHT_CM))
   const [snapshot, setSnapshot] = useState<MovementSnapshot | null>(null)
@@ -68,6 +72,7 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
   const [voiceOn, setVoiceOn] = useState(false)
   const [caption, setCaption] = useState<string | null>(null)
   const [keyframes, setKeyframes] = useState<Keyframe[]>([])
+  const [hero, setHero] = useState<HeroFrame | null>(null)
   const [notes, setNotes] = useState<FittingNotesState>(EMPTY_NOTES)
   const agent = useGearAgent()
   const speak = useVoice(voiceOn)
@@ -76,11 +81,13 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
     let cancelled = false
     let session: PoseSession | null = null
     setSessionState({ status: 'loading' })
+    setProviderStatus(null)
     getPoseProvider(providerId)
       .load()
       .then((loaded) => {
         if (cancelled) return loaded.dispose()
         session = loaded
+        loaded.onStatus?.(setProviderStatus)
         setSessionState({ status: 'ready', session: loaded })
       })
       .catch((error: Error) => {
@@ -94,11 +101,13 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
 
   const readout = useMemo(() => readoutOf(snapshot, sport), [snapshot, sport])
   const context = useMemo(() => contextLines(notes, sport), [notes, sport])
+  const picks = useMemo(() => outputsOf(agent.messages)?.picks ?? [], [agent.messages])
 
   const restartAnalysis = useCallback((nextSport: Sport, height: number) => {
     setTracker(createTracker(nextSport, height))
     setSnapshot(null)
     setKeyframes([])
+    setHero(null)
     setCaption(null)
   }, [])
 
@@ -307,6 +316,7 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
             src={clip?.url ?? null}
             stream={live.stream}
             onKeyframe={addKeyframe}
+            onHero={setHero}
             overlay={
               live.phase === 'off' || live.phase === 'error' ? undefined : (
                 <LiveOverlay
@@ -467,7 +477,12 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
             </div>
           </div>
 
-          <ProviderPicker providers={POSE_PROVIDERS} value={providerId} onChange={setProviderId} />
+          <ProviderPicker
+            providers={POSE_PROVIDERS}
+            value={providerId}
+            onChange={setProviderId}
+            status={sessionState.status === 'error' ? sessionState.message : providerStatus}
+          />
         </aside>
 
         <div className="lg:col-span-2">
@@ -484,6 +499,10 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
             capturing={liveActive}
             context={context}
           />
+        </div>
+
+        <div className="lg:col-span-2">
+          <HeroCard frame={hero} readout={readout} sport={sport} picks={picks} themeKey={persona.phosphor} />
         </div>
       </main>
     </div>

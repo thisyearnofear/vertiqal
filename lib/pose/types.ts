@@ -38,6 +38,8 @@ export type Pose = Partial<Record<KeypointName, Keypoint>>
  */
 export interface PoseSession {
   poseAt(video: HTMLVideoElement): Pose | null
+  /** Background work that improves the track (e.g. hosted refinement) reports progress here. */
+  onStatus?(listener: (status: string | null) => void): void
   dispose(): void
 }
 
