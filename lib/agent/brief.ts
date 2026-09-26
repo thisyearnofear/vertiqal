@@ -1,11 +1,16 @@
-import { deriveSignals, type GaitSnapshot } from '@/lib/metrics/gait'
+import type { Readout, Sport } from '@/lib/metrics/readout'
+import { VOICE_PROFILE, type Voice } from '@/lib/persona'
 
-export interface GaitBrief {
-  cadenceSpm: number | null
-  overstrideCm: number | null
-  kneeAtContactDeg: number | null
-  trunkLeanDeg: number | null
-  footfalls: number
+export interface BriefMetric {
+  label: string
+  value: number | null
+  unit: string
+}
+
+export interface MovementBrief {
+  sport: Sport
+  events: number
+  metrics: BriefMetric[]
   signals: string[]
 }
 
@@ -13,52 +18,77 @@ export interface ShopperPrefs {
   size: string
   budget: string
   heightCm: number
+  voice: Voice
 }
 
-const round = (value: number | null) => (value === null ? null : Math.round(value))
-
-export function briefFromSnapshot(snapshot: GaitSnapshot): GaitBrief {
+export function briefFromReadout(readout: Readout): MovementBrief {
   return {
-    cadenceSpm: round(snapshot.cadenceSpm),
-    overstrideCm: round(snapshot.avgOverstrideCm),
-    kneeAtContactDeg: round(snapshot.avgKneeAtStrike),
-    trunkLeanDeg: round(snapshot.trunkLeanDeg),
-    footfalls: snapshot.totalStrikes,
-    signals: deriveSignals(snapshot).map((s) => `${s.label}: ${s.detail}`),
+    sport: readout.sport,
+    events: readout.events,
+    metrics: readout.metrics.map(({ label, value, unit }) => ({
+      label,
+      value: value === null ? null : Math.round(value),
+      unit,
+    })),
+    signals: readout.signals.map((s) => `${s.label}: ${s.detail}`),
   }
 }
 
-/** A heel-striking overstrider, used to demo the agent without a clip. */
-export const SAMPLE_BRIEF: GaitBrief = {
-  cadenceSpm: 158,
-  overstrideCm: 14,
-  kneeAtContactDeg: 172,
-  trunkLeanDeg: 4,
-  footfalls: 24,
-  signals: [
-    'Low cadence: Longer, heavier strides load the heel on every step',
-    'Landing ahead of hips: Braking force on contact: favour heel cushioning',
-    'Straight knee at contact: Less natural shock absorption: prioritise midsole foam',
-  ],
+/** Realistic measurements for demoing the agent without a clip. */
+export const SAMPLE_BRIEFS: Record<Sport, MovementBrief> = {
+  running: {
+    sport: 'running',
+    events: 24,
+    metrics: [
+      { label: 'Cadence', value: 158, unit: 'spm' },
+      { label: 'Overstride', value: 14, unit: 'cm' },
+      { label: 'Knee @ contact', value: 172, unit: 'deg' },
+      { label: 'Trunk lean', value: 4, unit: 'deg' },
+    ],
+    signals: [
+      'Low cadence: Longer, heavier strides load the heel on every step',
+      'Landing ahead of hips: Braking force on contact: favour heel cushioning',
+      'Straight knee at contact: Less natural shock absorption: prioritise midsole foam',
+    ],
+  },
+  climbing: {
+    sport: 'climbing',
+    events: 18,
+    metrics: [
+      { label: 'Quiet feet', value: 61, unit: '%' },
+      { label: 'Toe-down', value: 27, unit: 'deg' },
+      { label: 'Hip offset', value: 31, unit: 'cm' },
+      { label: 'Reach elbow', value: 148, unit: 'deg' },
+    ],
+    signals: [
+      'Busy feet: Re-adjusting on holds: a snug, precise shoe gives more feedback',
+      'Edging on the toes: Weight on small edges: favour a downturned, stiffer toe box',
+      'Hips off the wall: Weight hangs on your arms: a stiffer sole helps you stand on small holds',
+    ],
+  },
 }
 
-export function briefToPrompt(brief: GaitBrief, prefs: ShopperPrefs) {
-  const line = (label: string, value: number | null, unit: string) =>
-    `- ${label}: ${value === null ? 'not measured' : `${value} ${unit}`}`
+export function briefLine(brief: MovementBrief) {
+  return brief.metrics
+    .slice(0, 3)
+    .map((m) => `${m.label.toUpperCase()} ${m.value ?? '--'}${m.unit === 'deg' ? '°' : m.unit.toUpperCase()}`)
+    .join('  ·  ')
+}
 
+export function briefToPrompt(brief: MovementBrief, prefs: ShopperPrefs) {
+  const source = brief.sport === 'running' ? 'running video (side-on pose tracking)' : 'climbing video (pose tracking on the wall)'
   return [
-    'Measurements from my running video (side-on pose tracking):',
-    line('Cadence', brief.cadenceSpm, 'steps/min'),
-    line('Foot lands ahead of hips (avg)', brief.overstrideCm, 'cm'),
-    line('Knee angle at contact (avg, 180 = straight)', brief.kneeAtContactDeg, 'deg'),
-    line('Trunk lean', brief.trunkLeanDeg, 'deg'),
-    `- Footfalls analysed: ${brief.footfalls}`,
-    `- Runner height: ${prefs.heightCm} cm`,
+    `Sport: ${brief.sport}`,
+    `Measurements from my ${source}:`,
+    ...brief.metrics.map((m) => `- ${m.label}: ${m.value === null ? 'not measured' : `${m.value} ${m.unit}`}`),
+    `- ${brief.sport === 'running' ? 'Footfalls' : 'Foot placements'} analysed: ${brief.events}`,
+    `- My height: ${prefs.heightCm} cm`,
     '',
     'Signals:',
     ...brief.signals.map((s) => `- ${s}`),
     '',
-    `My size: ${prefs.size}. Budget: ${prefs.budget}. I'm in the UK.`,
-    'Find me the right shoe.',
+    `My street shoe size: ${prefs.size}. Budget: ${prefs.budget}. I'm in the UK.`,
+    `Voice: speak to me as ${VOICE_PROFILE[prefs.voice].prompt}.`,
+    `Find me the right ${brief.sport === 'running' ? 'running shoe' : 'climbing shoe'}.`,
   ].join('\n')
 }

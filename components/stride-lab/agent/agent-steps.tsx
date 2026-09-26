@@ -79,7 +79,7 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
       return (
         <Step
           key={key}
-          title={profile ? 'Gear profile built' : 'Reading your stride'}
+          title={profile ? 'Gear profile built' : 'Reading your movement'}
           detail={profile ? `${profile.category} shoe` : undefined}
           state={isPending(part.state) ? 'pending' : 'done'}
         >

@@ -6,6 +6,9 @@ export const phoneSchema = z
   .pipe(z.string().min(8, 'Enter your number with country code').max(15, 'That number is too long'))
 
 export const fittingSchema = z.object({
+  sport: z.enum(['running', 'climbing']),
+  voice: z.string().max(20),
+  passportUrl: z.string().url().max(6000).optional(),
   measurements: z.string().max(200),
   summary: z.string().max(400),
   category: z.string().max(40),

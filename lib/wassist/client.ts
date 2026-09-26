@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { Fitting } from './fitting'
 
 const API = 'https://backend.wassist.app/api/v1'
-const AGENT_NAME = 'Forma · stride fitting'
+const AGENT_NAME = 'Forma · vertiqal'
 
 interface Agent {
   id: string
@@ -63,7 +63,7 @@ const digits = (s: string) => s.replace(/\D/g, '')
 export async function ensureAgent(origin: string): Promise<Agent> {
   const webhookUrl = `${origin}/api/wassist/webhook?token=${webhookToken()}`
   const { results } = await wassist<Paginated<Agent>>('/agents/?limit=100')
-  const forma = results.filter((a) => a.name === AGENT_NAME)
+  const forma = results.filter((a) => a.name.startsWith('Forma ·'))
   const current = forma.find((a) => a.tools.some((t) => t.apiSchema?.url === webhookUrl))
   if (current) return current
 
@@ -73,9 +73,9 @@ export async function ensureAgent(origin: string): Promise<Agent> {
     method: 'PATCH',
     json: {
       name: AGENT_NAME,
-      description: 'Running-shoe fitting from a video of your stride.',
+      description: 'Running and climbing shoe fitting from a video of how you move.',
       firstMessage:
-        "You're linked to *Forma*. Head back to the screen and your fitting will land here in a few seconds.",
+        "You're linked to *Forma* from vertiqal. Head back to the screen and your fitting will land here in a few seconds.",
     },
   })
 }
@@ -95,12 +95,13 @@ const sendUnified = (conversationId: string, text: string, buttons?: UnifiedButt
 
 export async function sendFitting(conversationId: string, fitting: Fitting) {
   const requirements = fitting.requirements.map((r) => `• ${r.attribute}: *${r.target}*`).join('\n')
+  const sportLabel = fitting.sport === 'running' ? 'Running' : 'Climbing'
   const messages: Parameters<typeof sendUnified>[] = [
     [
       conversationId,
-      `*Your Forma fitting*\n${fitting.measurements}\n\n${fitting.summary}\n\nYou need a *${fitting.category}* shoe:\n${requirements}`,
-      undefined,
-      'Measured from your running video',
+      `*Your vertiqal fitting · ${sportLabel}*\n${fitting.measurements}\n\n${fitting.summary}\n\nYou need a *${fitting.category}* shoe:\n${requirements}\n\n_Forma voice: ${fitting.voice}_`,
+      fitting.passportUrl ? [{ type: 'url', text: 'Fit passport', url: fitting.passportUrl.slice(0, 2000) }] : undefined,
+      `Measured from your ${fitting.sport} video`,
     ],
     ...fitting.picks.map((p, i): Parameters<typeof sendUnified> => [
       conversationId,
@@ -113,7 +114,9 @@ export async function sendFitting(conversationId: string, fitting: Fitting) {
       [
         { type: 'quick_reply', text: 'Anything cheaper?', quickReplyId: 'cheaper' },
         { type: 'quick_reply', text: 'Why the best fit?', quickReplyId: 'why-best' },
-        { type: 'quick_reply', text: 'Trail version?', quickReplyId: 'trail' },
+        fitting.sport === 'running'
+          ? { type: 'quick_reply', text: 'Trail version?', quickReplyId: 'trail' }
+          : { type: 'quick_reply', text: 'Comfier for gym?', quickReplyId: 'comfort' },
       ],
     ],
   ]

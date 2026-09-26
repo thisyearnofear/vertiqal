@@ -1,4 +1,6 @@
-import type { GaitSnapshot, Side } from '@/lib/metrics/gait'
+import type { ClimbSnapshot } from '@/lib/metrics/climb'
+import type { Side } from '@/lib/metrics/gait'
+import type { MovementSnapshot } from '@/lib/metrics/readout'
 import type { Keypoint, KeypointName, Pose } from '@/lib/pose/types'
 
 export interface OverlayTheme {
@@ -108,11 +110,81 @@ function pill(
   ctx.restore()
 }
 
+const recentPlacementSide = (s: ClimbSnapshot): Side | null =>
+  s.lastPlacement && s.timeSec - s.lastPlacement.timeSec < 0.8 ? s.lastPlacement.side : null
+
+function drawClimbAnnotations(
+  ctx: CanvasRenderingContext2D,
+  theme: OverlayTheme,
+  snapshot: ClimbSnapshot,
+  ok: (name: KeypointName) => Keypoint | null,
+  at: (k: Keypoint) => { x: number; y: number },
+  unit: number,
+  labelSize: number,
+) {
+  // Elbow angle on whichever arm is reaching overhead.
+  for (const side of ['left', 'right'] as const) {
+    const shoulder = ok(`${side}_shoulder`)
+    const elbow = ok(`${side}_elbow`)
+    const wrist = ok(`${side}_wrist`)
+    const angle = snapshot.elbowAngle[side]
+    if (!shoulder || !elbow || !wrist || angle === undefined || wrist.y >= shoulder.y) continue
+    const pe = at(elbow)
+    const outward = pe.x < at(shoulder).x ? -1 : 1
+    pill(ctx, theme, pe.x + outward * 18 * unit, pe.y, `ELBOW ${Math.round(angle)}°`, {
+      align: outward === 1 ? 'left' : 'right',
+      size: labelSize,
+      accent: angle < 140 ? theme.highlight : theme.bone,
+    })
+    break
+  }
+
+  const placement = snapshot.lastPlacement
+  if (placement) {
+    const age = snapshot.timeSec - placement.timeSec
+    const foot = ok(`${placement.side}_ankle`)
+    if (age >= 0 && age < 1.4 && foot) {
+      ctx.globalAlpha = age < 0.6 ? 1 : Math.max(0.25, 1 - (age - 0.6) / 0.8)
+      const p = at(foot)
+      const r = 14 * unit
+      ctx.strokeStyle = placement.readjust ? theme.highlight : theme.bone
+      ctx.lineWidth = 2 * unit
+      ctx.strokeRect(p.x - r, p.y - r, r * 2, r * 2)
+      ctx.beginPath()
+      ctx.moveTo(p.x - r * 1.6, p.y)
+      ctx.lineTo(p.x - r, p.y)
+      ctx.moveTo(p.x + r, p.y)
+      ctx.lineTo(p.x + r * 1.6, p.y)
+      ctx.stroke()
+      const toe =
+        placement.toeDownDeg === null
+          ? ''
+          : ` · TOE ${placement.toeDownDeg >= 0 ? '+' : '−'}${Math.abs(placement.toeDownDeg).toFixed(0)}°`
+      pill(ctx, theme, p.x, p.y + r + 16 * unit, placement.readjust ? `RE-ADJUST${toe}` : `PLACED${toe}`, {
+        align: 'center',
+        size: labelSize,
+        accent: placement.readjust ? theme.highlight : theme.bone,
+      })
+      ctx.globalAlpha = 1
+    }
+  }
+
+  const nose = ok('nose')
+  if (nose && snapshot.movesPerMin) {
+    const p = at(nose)
+    pill(ctx, theme, p.x, p.y - 32 * unit, `${snapshot.movesPerMin.toFixed(1)} MOVES/MIN`, {
+      align: 'center',
+      size: labelSize,
+      accent: theme.bone,
+    })
+  }
+}
+
 export function drawOverlay(
   ctx: CanvasRenderingContext2D,
   rect: Rect,
   pose: Pose | null,
-  snapshot: GaitSnapshot | null,
+  snapshot: MovementSnapshot | null,
   theme: OverlayTheme,
 ) {
   if (!pose) return
@@ -123,7 +195,10 @@ export function drawOverlay(
     return k && k.score >= MIN_SCORE ? k : null
   }
   const unit = Math.max(1, rect.h / 540)
-  const activeSide = snapshot?.lastStrike?.side ?? null
+  const activeSide =
+    snapshot?.sport === 'climbing'
+      ? (snapshot.movingFoot ?? recentPlacementSide(snapshot))
+      : (snapshot?.lastStrike?.side ?? null)
 
   const strokeBones = (bones: [KeypointName, KeypointName][], color: string, width: number) => {
     for (const [a, b] of bones) {
@@ -185,8 +260,14 @@ export function drawOverlay(
     ctx.stroke()
   }
 
-  const direction = snapshot?.direction ?? 1
   const labelSize = Math.round(12 * unit)
+
+  if (snapshot?.sport === 'climbing') {
+    drawClimbAnnotations(ctx, theme, snapshot, ok, at, unit, labelSize)
+    return
+  }
+
+  const direction = snapshot?.direction ?? 1
 
   // Knee angle, anchored at the knee with an arc between thigh and shin.
   const kneeSide: Side | null =
