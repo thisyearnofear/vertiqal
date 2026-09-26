@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), 'Geist', 'Geist Fallback', ui-sans-serif, system-ui;
-  --font-mono: var(--font-geist-mono), 'Geist Mono', 'Geist Mono Fallback', ui-monospace;
+  --font-sans: var(--font-plex), 'IBM Plex Sans', ui-sans-serif, system-ui;
+  --font-mono: var(--font-vt323), 'VT323', ui-monospace, monospace;
 
   --color-stage: var(--stage);
   --color-stage-foreground: var(--stage-foreground);
@@ -33,35 +33,39 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
+
+  --animate-blink: blink 1.1s steps(1) infinite;
+  --animate-boot: boot 0.9s ease-out both;
 }
 
 /*
-  Palette: chalk (background), ink (text + video stage), slate (muted),
-  tartan track red (primary / flagged), lane blue (skeleton / healthy).
+  Cassette-futurism lab instrument.
+  putty (housing), panel (raised plastic), ink (engraving),
+  screen (CRT glass), amber (phosphor + keys).
 */
 :root {
   color-scheme: light;
-  --background: oklch(0.972 0.004 250);
-  --foreground: oklch(0.21 0.02 260);
-  --card: oklch(0.995 0.002 250);
-  --card-foreground: oklch(0.21 0.02 260);
-  --popover: oklch(0.995 0.002 250);
-  --popover-foreground: oklch(0.21 0.02 260);
-  --primary: oklch(0.62 0.19 33);
-  --primary-foreground: oklch(0.995 0.002 250);
-  --secondary: oklch(0.93 0.006 250);
-  --secondary-foreground: oklch(0.21 0.02 260);
-  --muted: oklch(0.93 0.006 250);
-  --muted-foreground: oklch(0.47 0.02 260);
-  --accent: oklch(0.63 0.16 245);
-  --accent-foreground: oklch(0.995 0.002 250);
-  --destructive: oklch(0.62 0.19 33);
-  --border: oklch(0.89 0.008 250);
-  --input: oklch(0.86 0.008 250);
-  --ring: oklch(0.63 0.16 245);
-  --stage: oklch(0.18 0.018 260);
-  --stage-foreground: oklch(0.995 0.002 250);
-  --radius: 0.625rem;
+  --background: oklch(0.845 0.022 82);
+  --foreground: oklch(0.25 0.018 65);
+  --card: oklch(0.905 0.018 84);
+  --card-foreground: oklch(0.25 0.018 65);
+  --popover: oklch(0.905 0.018 84);
+  --popover-foreground: oklch(0.25 0.018 65);
+  --primary: oklch(0.72 0.18 52);
+  --primary-foreground: oklch(0.25 0.018 65);
+  --secondary: oklch(0.8 0.024 80);
+  --secondary-foreground: oklch(0.25 0.018 65);
+  --muted: oklch(0.8 0.024 80);
+  --muted-foreground: oklch(0.44 0.022 68);
+  --accent: oklch(0.72 0.18 52);
+  --accent-foreground: oklch(0.25 0.018 65);
+  --destructive: oklch(0.72 0.18 52);
+  --border: oklch(0.7 0.026 78);
+  --input: oklch(0.7 0.026 78);
+  --ring: oklch(0.72 0.18 52);
+  --stage: oklch(0.17 0.012 60);
+  --stage-foreground: oklch(0.8 0.15 62);
+  --radius: 0.5rem;
 }
 
 @layer base {
@@ -70,5 +74,128 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Raised plastic panel with a moulded bevel. */
+  .housing {
+    background: linear-gradient(180deg, var(--card), color-mix(in oklch, var(--card) 70%, var(--background)));
+    box-shadow:
+      inset 0 1.5px 0 oklch(from var(--card) calc(l + 0.06) c h),
+      inset 0 -2px 0 color-mix(in oklch, var(--border) 70%, transparent),
+      0 1px 0 color-mix(in oklch, var(--border) 80%, transparent),
+      0 14px 30px -18px color-mix(in oklch, var(--foreground) 45%, transparent);
+  }
+
+  /* Recessed CRT glass: curvature, scanlines, vignette and a specular highlight. */
+  .screen {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-radius: 1.25rem / 1.6rem;
+    background:
+      radial-gradient(120% 90% at 50% 45%, color-mix(in oklch, var(--stage) 88%, var(--stage-foreground)) 0%, var(--stage) 70%);
+    color: var(--stage-foreground);
+    box-shadow:
+      0 0 0 6px color-mix(in oklch, var(--foreground) 88%, var(--stage)),
+      0 0 0 7px color-mix(in oklch, var(--border) 60%, transparent),
+      0 2px 0 7px color-mix(in oklch, var(--card) 70%, transparent),
+      inset 0 0 40px color-mix(in oklch, var(--stage) 90%, transparent);
+  }
+  .screen::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(60% 40% at 22% 12%, color-mix(in oklch, var(--stage-foreground) 7%, transparent), transparent 70%),
+      radial-gradient(ellipse at center, transparent 58%, color-mix(in oklch, var(--stage) 85%, transparent) 100%),
+      repeating-linear-gradient(
+        180deg,
+        color-mix(in oklch, var(--stage) 30%, transparent) 0px,
+        color-mix(in oklch, var(--stage) 30%, transparent) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+  }
+
+  .phosphor {
+    text-shadow:
+      0 0 2px color-mix(in oklch, var(--stage-foreground) 80%, transparent),
+      0 0 10px color-mix(in oklch, var(--primary) 45%, transparent);
+  }
+
+  /* Letters stamped into the plastic. */
+  .engraved {
+    text-shadow: 0 1px 0 color-mix(in oklch, var(--card) 85%, transparent);
+  }
+
+  /* Status LED; data-state drives colour so the light always means something. */
+  .led {
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 9999px;
+    background: color-mix(in oklch, var(--foreground) 55%, var(--background));
+    box-shadow: inset 0 1px 1px color-mix(in oklch, var(--stage) 60%, transparent);
+  }
+  .led[data-state='on'] {
+    background: var(--primary);
+    box-shadow:
+      0 0 6px var(--primary),
+      0 0 14px color-mix(in oklch, var(--primary) 60%, transparent);
+  }
+  .led[data-state='busy'] {
+    background: var(--primary);
+    box-shadow: 0 0 6px var(--primary);
+    animation: var(--animate-blink);
+  }
+
+  /* Recessed well for inputs and toggle groups. */
+  .well {
+    background: color-mix(in oklch, var(--background) 80%, var(--border));
+    box-shadow:
+      inset 0 2px 3px color-mix(in oklch, var(--foreground) 22%, transparent),
+      0 1px 0 color-mix(in oklch, var(--card) 80%, transparent);
+  }
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes boot {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.02);
+    filter: brightness(3);
+  }
+  40% {
+    opacity: 1;
+    transform: scaleY(0.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .led[data-state='busy'] {
+    animation: none;
+  }
+  .animate-boot {
+    animation: none;
   }
 }

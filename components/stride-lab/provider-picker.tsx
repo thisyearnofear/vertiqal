@@ -9,16 +9,18 @@ interface ProviderPickerProps {
 
 export function ProviderPicker({ providers, value, onChange }: ProviderPickerProps) {
   return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="mb-2 text-sm font-semibold text-foreground">Vision provider</legend>
+    <fieldset className="flex flex-col gap-2 border-t border-border pt-5">
+      <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-foreground engraved">
+        Vision provider
+      </legend>
       {providers.map((provider) => {
         const selected = provider.id === value
         return (
           <label
             key={provider.id}
             className={cn(
-              'flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors',
-              selected ? 'border-foreground bg-card' : 'border-border bg-transparent',
+              'flex cursor-pointer items-center gap-3 rounded-md p-3 transition-colors has-focus-visible:ring-3 has-focus-visible:ring-ring/50',
+              selected ? 'housing' : 'well',
               !provider.available && 'cursor-not-allowed opacity-60',
             )}
           >
@@ -29,11 +31,12 @@ export function ProviderPicker({ providers, value, onChange }: ProviderPickerPro
               checked={selected}
               disabled={!provider.available}
               onChange={() => onChange(provider.id)}
-              className="size-4 accent-foreground"
+              className="sr-only"
             />
+            <span className="led shrink-0" data-state={selected ? 'on' : 'off'} aria-hidden />
             <span className="flex flex-1 flex-col">
-              <span className="text-sm font-medium text-foreground">{provider.label}</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm font-semibold text-foreground">{provider.label}</span>
+              <span className="text-xs leading-relaxed text-muted-foreground">
                 {provider.available ? provider.detail : provider.unavailableReason}
               </span>
             </span>
