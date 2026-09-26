@@ -10,6 +10,8 @@
 
   --color-stage: var(--stage);
   --color-stage-foreground: var(--stage-foreground);
+  --color-stage-ink: var(--stage-ink);
+  --color-stage-muted: var(--stage-muted);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -70,6 +72,8 @@
   --ring: oklch(0.72 0.18 52);
   --stage: oklch(0.17 0.012 60);
   --stage-foreground: oklch(0.8 0.15 62);
+  --stage-ink: oklch(0.94 0.014 82);
+  --stage-muted: oklch(0.72 0.018 76);
   --radius: 0.5rem;
 }
 
