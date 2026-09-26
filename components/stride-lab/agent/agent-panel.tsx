@@ -228,7 +228,7 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
               <p className="phosphor">{`> ${sentBrief.sport.toUpperCase()} BRIEF TRANSMITTED · DEPTH ${DEPTHS[ranDepth].label.toUpperCase()}`}</p>
               <p className="opacity-70">{`  ${briefLine(sentBrief)}`}</p>
             </div>
-            <AgentSteps messages={messages} onApproval={addToolApprovalResponse} />
+            <AgentSteps messages={messages} onApproval={addToolApprovalResponse} stockSize={size} />
             {outputs && deeper && !busy && (
               <div className="flex flex-col gap-2 border-y border-dashed border-stage-foreground/30 py-4 text-lg leading-snug">
                 <p className="opacity-70">{`  WANT MORE CONTEXT? ${DEPTHS[deeper].label.toUpperCase()} ADDS ${addedLayers(ranDepth, deeper).join(' + ').toUpperCase()} (~${DEPTHS[deeper].seconds}S).`}</p>

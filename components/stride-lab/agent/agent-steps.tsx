@@ -7,6 +7,7 @@ import type { GearAgentUIMessage } from '@/lib/agent/gear-agent'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { BasketRun } from './basket-run'
+import { StockCheck } from './stock-check'
 
 type Part = GearAgentUIMessage['parts'][number]
 type ApprovalHandler = (response: { id: string; approved: boolean }) => void
@@ -63,7 +64,7 @@ function Step({
 
 const isPending = (state: string) => state === 'input-streaming' || state === 'input-available'
 
-function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
+function renderPart(part: Part, key: string, onApproval: ApprovalHandler, stockSize?: string) {
   switch (part.type) {
     case 'text':
       return part.text.trim() ? (
@@ -312,6 +313,7 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
                       </p>
                     ) : null,
                   )}
+                  {stockSize && <StockCheck productName={p.name} productUrl={p.url} size={stockSize} />}
                   <a
                     href={p.url}
                     target="_blank"
@@ -382,9 +384,12 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
 export function AgentSteps({
   messages,
   onApproval,
+  stockSize,
 }: {
   messages: GearAgentUIMessage[]
   onApproval: ApprovalHandler
+  /** Size to verify on each pick; the check is hidden when empty. */
+  stockSize?: string
 }) {
   const parts = messages
     .filter((m) => m.role === 'assistant')
@@ -392,7 +397,7 @@ export function AgentSteps({
 
   return (
     <ol className="flex flex-col gap-6" aria-label="Agent activity">
-      {parts.map(({ part, key }) => renderPart(part, key, onApproval))}
+      {parts.map(({ part, key }) => renderPart(part, key, onApproval, stockSize?.trim()))}
     </ol>
   )
 }
