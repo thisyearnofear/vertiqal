@@ -15,7 +15,7 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 3. **You choose speed versus depth.** A Depth dial (Quick, Considered, Deep) decides how much research the agent does before it commits.
 4. **Asks before acting.** Nothing touches a retailer until you ask. **Check my size** opens the product page in a stealth UK browser (Solari), and Grok reads the size controls, structured offers and a screenshot to decide whether your size is in stock. Each verdict comes with the screenshot and a session replay as proof. The older Browser Use basket check still exists as an agent tool. Both stop before checkout.
 5. **Carries your fit elsewhere.** A signed **Fit Passport** lets any other shopping agent check a shoe against your profile, over REST or MCP.
-6. **Hands off to WhatsApp and remembers you.** Your fitting and chosen pick land in WhatsApp through Wassist. A Grok reply agent answers follow-ups in your chosen Forma voice and can run live product searches. Once you've linked WhatsApp, a signed cookie remembers your number and last pick. The app then reads what you've said on WhatsApp since, so your next scan builds on it.
+6. **Hands off to WhatsApp and remembers you.** Your fitting and chosen pick land in WhatsApp through Wassist. A Grok reply agent answers follow-ups in your chosen Forma voice and can run live product searches. Once you've linked WhatsApp, a signed cookie remembers your number and last pick. The app then reads what you've said on WhatsApp since, so your next scan builds on it. You can send Forma a photo of worn soles or a sore spot and it reads the wear or the likely fit cause. About 12 days after you pick a shoe, Forma checks in once to ask how it's breaking in.
 7. **Lets you see yourself.** A **hero frame** card grades your best stride or reach into a shareable image, and the opt-in **See yourself in them** shows you wearing the top pick (FLUX Kontext), clearly labelled as an AI impression, not a fit check.
 
 ## Built with
@@ -72,6 +72,13 @@ Server-side only (Vercel **Vars** or an uncommitted `.env.local`). Never expose 
 | `WASSIST_API_KEY` | WhatsApp handoff, webhook auth, passport and member cookie signing fallback | Handoff hidden |
 | `PASSPORT_SECRET` | Dedicated signing secret for passports and the member cookie (optional) | Falls back to `WASSIST_API_KEY` |
 | `NEXT_PUBLIC_SAMPLE_CLIP` | URL of the one-click sample clip (optional, public) | Sample button hidden |
+| `WASSIST_CHECKIN_TEMPLATE` | Name of the approved WhatsApp template for the break-in check-in (optional) | Check-in job skips |
+| `CRON_SECRET` | Authenticates Vercel Cron calls to the check-in job | Check-in job returns 401 |
+
+### WhatsApp setup notes
+
+- Production and preview deployments each get their own Wassist agent (`Forma · vertiqal` and `Forma · vertiqal · preview`). Opening a preview never replaces the live agent.
+- The break-in check-in (`vercel.json` cron, daily 09:00 UTC) messages shoppers after their 24-hour window has closed, which WhatsApp only allows through an approved template. Create a UTILITY template on your own WhatsApp Business number (the Wassist sandbox can't send templates). Give it one body variable, `{{1}}` = shoe name, and keep the phrase **"vertiqal check-in"** in the body, because the job uses it to avoid sending twice. For example: *"Hi, it's Forma with your vertiqal check-in. How are your {{1}} feeling now you've worn them in? Tell me what's working and anything that rubs, and I'll factor it into your next scan."*
 | `VLMRUN_API_KEY` | VLM Run pose refinement | Provider falls back to MediaPipe only |
 
 AI Gateway authenticates automatically on Vercel; no key is needed.

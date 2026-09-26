@@ -23,7 +23,8 @@ Picks ──▶ /api/stock-check     user-triggered Solari stealth browser (UK e
      ├──▶ /api/tryon           opt-in FLUX Kontext impression of the user in a pick
      └──▶ /api/wassist/handoff sends fitting + chosen pick to WhatsApp, writes the member cookie
                                    │
-WhatsApp shopper ──▶ /api/wassist/webhook  (Wassist BYOA) → reply agent (Grok + Tavily) → reply_callback
+WhatsApp shopper ──▶ /api/wassist/webhook  (Wassist BYOA, text and/or photo) → "typing…" → reply agent (Grok vision + Tavily) → reply_callback
+Vercel Cron ─────▶ /api/wassist/checkin   daily: quiet ~12 days since their pick → one templated break-in check-in
                                    │
 Next visit ──▶ /api/member         reads the cookie + shopper's recent WhatsApp lines → fed into the next scan
 ```
@@ -47,8 +48,9 @@ Measurement always comes from untouched frames. The hero card grade and try-on i
 | `/api/passport/[token]` | GET | Reads a passport. |
 | `/api/passport/[token]/fit` | POST | Checks a given shoe against a passport. |
 | `/api/mcp` | GET, POST, DELETE | MCP server exposing passport fit checks to other agents. |
-| `/api/wassist/handoff` | POST | Ensures the BYOA agent exists for this origin, then sends the fitting, or returns a `connectUrl` if the number hasn't linked yet. |
-| `/api/wassist/webhook` | POST | Inbound WhatsApp messages. Returns a silent response right away, then replies through `reply_callback` inside `after()`. Authenticated by an HMAC token in the URL. |
+| `/api/wassist/handoff` | POST | Ensures this environment's BYOA agent exists for this origin, then sends the fitting, or returns a `connectUrl` if the number hasn't linked yet. |
+| `/api/wassist/webhook` | POST | Inbound WhatsApp messages, optionally with a photo (Wassist-hosted JPEG/PNG/WebP up to 5 MB only). Returns a silent response right away, shows "typing…" every 8 s, and replies through `reply_callback` inside `after()`. Authenticated by an HMAC token in the URL. |
+| `/api/wassist/checkin` | GET | Vercel Cron job. Sends the break-in check-in template to shoppers with a pick whose chat has been quiet for 12–13 days. Requires `Authorization: Bearer $CRON_SECRET` and does nothing without `WASSIST_CHECKIN_TEMPLATE`. |
 
 ## Extension points
 
@@ -60,5 +62,7 @@ Measurement always comes from untouched frames. The hero card grade and try-on i
 
 - No database. Passports are signed tokens (`lib/passport/token.ts`), so they carry their own data.
 - Shopper memory is a signed, httpOnly `vq_member` cookie (`lib/member/cookie.ts`) holding the WhatsApp number and last pick. The Wassist conversation is the long-term memory, and guests are never tracked. The number is masked in every response.
+- WhatsApp photos are downloaded only from Wassist hosts, passed to Grok for that one reply, and never stored. Later turns see them as `[sent a photo]`.
+- The check-in is sent at most once per shopper. The template text in the transcript is the marker, so no extra state is kept.
 - Stock checks send only the product URL and size to Solari. Screenshots are returned inline and not stored.
 - Video stays in the browser. Only frames the user explicitly sends (vision notes, VLM Run refinement, try-on) leave the device, one request at a time.
