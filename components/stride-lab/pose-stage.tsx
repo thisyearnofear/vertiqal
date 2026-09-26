@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Upload } from 'lucide-react'
 import type { GaitSnapshot, GaitTracker } from '@/lib/metrics/gait'
 import type { PoseSession } from '@/lib/pose/types'
 import { drawOverlay, readOverlayTheme, videoContentRect, type OverlayTheme } from './draw-overlay'
@@ -98,7 +97,7 @@ export function PoseStage({
   return (
     <div
       ref={containerRef}
-      className="relative aspect-video w-full overflow-hidden rounded-lg bg-stage"
+      className="screen aspect-video w-full"
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -114,7 +113,7 @@ export function PoseStage({
       <video
         ref={videoRef}
         src={src ?? undefined}
-        className="absolute inset-0 h-full w-full object-contain"
+        className="absolute inset-0 h-full w-full object-contain opacity-80 contrast-110 grayscale sepia-[.35]"
         muted
         loop
         playsInline
@@ -125,30 +124,41 @@ export function PoseStage({
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
 
       {!src && !dragging && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-stage-foreground">
-          <Upload className="size-6" aria-hidden />
-          <p className="text-balance text-lg font-medium">Drop a running clip here</p>
-          <p className="max-w-sm text-pretty text-sm leading-relaxed opacity-70">
-            Filmed side-on with the whole body in frame. The skeleton and measurements appear as it plays.
-          </p>
+        <div className="absolute inset-0 flex animate-boot flex-col justify-between p-6 font-mono text-stage-foreground md:p-10">
+          <div className="flex flex-col gap-1 text-lg leading-snug phosphor md:text-xl">
+            <p>{'FORMA F-01 GAIT ANALYSER  ·  ROM v2.6'}</p>
+            <p className="opacity-70">{'POSE ENGINE ........ 33 KEYPOINTS'}</p>
+            <p className="opacity-70">{'SCALE ............. RUNNER HEIGHT'}</p>
+            <p className="opacity-70">{'CHANNEL ........... SAGITTAL / SIDE-ON'}</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-4xl leading-none phosphor md:text-6xl">
+              NO SIGNAL
+              <span className="ml-2 inline-block animate-blink" aria-hidden>
+                {'█'}
+              </span>
+            </p>
+            <p className="max-w-md text-pretty text-lg leading-snug opacity-80 phosphor md:text-xl">
+              {'> DROP A RUNNING CLIP ON THE SCREEN, OR PRESS LOAD CLIP.'}
+            </p>
+          </div>
         </div>
       )}
 
       {src && statusLabel && (
-        <div className="absolute inset-x-0 top-4 flex justify-center">
+        <div className="absolute inset-x-0 top-5 z-10 flex justify-center">
           <p
             role="status"
-            className="rounded-md bg-card px-3 py-1.5 font-mono text-xs uppercase tracking-wider text-foreground"
+            className="rounded border border-stage-foreground/50 bg-stage/80 px-3 py-0.5 font-mono text-lg uppercase text-stage-foreground phosphor"
           >
-            {statusLabel}
+            {`${statusLabel}…`}
           </p>
         </div>
       )}
 
       {dragging && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stage/80 text-stage-foreground">
-          <Upload className="size-6" aria-hidden />
-          <p className="font-mono text-sm uppercase tracking-wider">Drop clip to analyse</p>
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-stage/85">
+          <p className="font-mono text-3xl uppercase text-stage-foreground phosphor">{'[ RELEASE TO ANALYSE ]'}</p>
         </div>
       )}
     </div>

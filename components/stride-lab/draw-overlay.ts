@@ -43,13 +43,13 @@ export function readOverlayTheme(el: HTMLElement): OverlayTheme {
   const css = getComputedStyle(el)
   const v = (name: string) => css.getPropertyValue(name).trim()
   return {
-    bone: v('--accent'),
+    bone: v('--stage-foreground'),
     highlight: v('--primary'),
-    joint: v('--card'),
+    joint: v('--stage'),
     shadow: v('--stage'),
-    labelBg: v('--card'),
-    labelText: v('--foreground'),
-    font: v('--font-geist-mono') || 'ui-monospace, monospace',
+    labelBg: v('--stage'),
+    labelText: v('--stage-foreground'),
+    font: v('--font-vt323') || 'ui-monospace, monospace',
   }
 }
 
@@ -69,30 +69,43 @@ function pill(
   text: string,
   opts: { accent?: string; align?: 'left' | 'right' | 'center'; size?: number } = {},
 ) {
-  const size = opts.size ?? 13
-  ctx.font = `600 ${size}px ${theme.font}`
+  const size = (opts.size ?? 13) * 1.45
+  ctx.font = `400 ${size}px ${theme.font}`
   const padX = 8
-  const w = ctx.measureText(text).width + padX * 2 + (opts.accent ? 8 : 0)
-  const h = size + 12
+  const w = ctx.measureText(text).width + padX * 2 + (opts.accent ? 10 : 0)
+  const h = size + 6
   const left = opts.align === 'right' ? x - w : opts.align === 'center' ? x - w / 2 : x
   const top = y - h / 2
+  const edge = opts.accent ?? theme.labelText
 
+  ctx.save()
+  ctx.globalAlpha *= 0.85
   ctx.fillStyle = theme.labelBg
   ctx.beginPath()
-  ctx.roundRect(left, top, w, h, 6)
+  ctx.roundRect(left, top, w, h, 3)
   ctx.fill()
+  ctx.restore()
+  ctx.save()
+  ctx.shadowColor = edge
+  ctx.shadowBlur = 8
+  ctx.strokeStyle = edge
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.roundRect(left + 0.5, top + 0.5, w - 1, h - 1, 3)
+  ctx.stroke()
 
   let textX = left + padX
   if (opts.accent) {
     ctx.fillStyle = opts.accent
-    ctx.beginPath()
-    ctx.arc(left + padX + 2, y, 3, 0, Math.PI * 2)
-    ctx.fill()
-    textX += 8
+    ctx.fillRect(left + padX, y - 3, 6, 6)
+    textX += 10
   }
+  ctx.shadowColor = theme.labelText
+  ctx.shadowBlur = 6
   ctx.fillStyle = theme.labelText
   ctx.textBaseline = 'middle'
-  ctx.fillText(text, textX, y + 0.5)
+  ctx.fillText(text, textX, y + 1)
+  ctx.restore()
 }
 
 export function drawOverlay(
@@ -128,12 +141,16 @@ export function drawOverlay(
       ctx.lineTo(pb.x, pb.y)
       ctx.stroke()
       ctx.globalAlpha = 1
+      ctx.save()
+      ctx.shadowColor = color
+      ctx.shadowBlur = 14 * unit
       ctx.strokeStyle = color
       ctx.lineWidth = width
       ctx.beginPath()
       ctx.moveTo(pa.x, pa.y)
       ctx.lineTo(pb.x, pb.y)
       ctx.stroke()
+      ctx.restore()
     }
   }
 
@@ -152,19 +169,20 @@ export function drawOverlay(
     if (!k) continue
     const p = at(k)
     ctx.fillStyle = theme.joint
-    ctx.strokeStyle = theme.shadow
-    ctx.lineWidth = 1.5 * unit
+    ctx.strokeStyle = theme.bone
+    ctx.lineWidth = 2 * unit
     ctx.beginPath()
-    ctx.arc(p.x, p.y, 4 * unit, 0, Math.PI * 2)
+    ctx.arc(p.x, p.y, 4.5 * unit, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
   }
   if (nose) {
     const p = at(nose)
-    ctx.fillStyle = theme.joint
+    ctx.strokeStyle = theme.bone
+    ctx.lineWidth = 2 * unit
     ctx.beginPath()
-    ctx.arc(p.x, p.y, 5 * unit, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.arc(p.x, p.y, 9 * unit, 0, Math.PI * 2)
+    ctx.stroke()
   }
 
   const direction = snapshot?.direction ?? 1
@@ -219,7 +237,7 @@ export function drawOverlay(
       const hipY = hipK ? at(hipK).y : ground - rect.h * 0.3
 
       ctx.setLineDash([4 * unit, 4 * unit])
-      ctx.strokeStyle = theme.joint
+      ctx.strokeStyle = theme.bone
       ctx.lineWidth = 1.5 * unit
       ctx.beginPath()
       ctx.moveTo(hipX, hipY)
