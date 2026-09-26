@@ -131,8 +131,12 @@ function FocusShoe({ progress }: { progress: MotionValue<number> }) {
     easing.damp(state.current, 'focus', WALL[beatAt(progress.get())].focus, 0.4, delta)
     const v = state.current.focus
     const narrow = size.width < 768
-    m.position.set(narrow ? 0 : 1.8, (narrow ? 1.25 : 0.2) + Math.sin(clock.elapsedTime * 1.1) * 0.05, 2.4 - (1 - v) * 5)
-    m.scale.setScalar((narrow ? 2.6 : 3.8) * (0.85 + 0.15 * v))
+    // Visible width of the focal plane (z = 2.4, camera at z = 8, 45° fov) so the shoe never clips the edge.
+    const visibleWidth = 2 * 5.6 * Math.tan(Math.PI / 8) * (size.width / size.height)
+    const scale = narrow ? 2.6 : Math.min(3.8, visibleWidth * 0.42)
+    const x = narrow ? 0 : visibleWidth / 2 - scale / 2 - 0.15
+    m.position.set(x, (narrow ? 1.25 : 0.2) + Math.sin(clock.elapsedTime * 1.1) * 0.05, 2.4 - (1 - v) * 5)
+    m.scale.setScalar(scale * (0.85 + 0.15 * v))
     m.rotation.set(pointer.y * 0.06, -0.12 + pointer.x * 0.12, 0)
     const material = m.material as THREE.MeshBasicMaterial
     material.opacity = v

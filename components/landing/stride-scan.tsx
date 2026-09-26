@@ -34,8 +34,8 @@ const framingFor = (mode: 'stage' | 'box', cssWidth: number): Framing =>
   mode === 'box'
     ? { centerX: 0.5, height: 0.72, groundY: 0.88 }
     : cssWidth < 768
-      ? { centerX: 0.5, height: 0.36, groundY: 0.5 }
-      : { centerX: 0.66, height: 0.58, groundY: 0.8 }
+      ? { centerX: 0.5, height: 0.3, groundY: 0.42 }
+      : { centerX: 0.74, height: 0.58, groundY: 0.8 }
 
 const point = (pose: Pose, side: Side, joint: string) => pose[`${side}_${joint}` as KeypointName]
 
@@ -90,7 +90,7 @@ export function StrideScan({
       ctx.lineWidth = dpr
       ctx.setLineDash([4 * dpr, 7 * dpr])
       ctx.beginPath()
-      ctx.moveTo(0, ground)
+      ctx.moveTo(framing === 'box' ? 0 : Math.max(0, frame.centerX - 0.24) * w, ground)
       ctx.lineTo(w, ground)
       ctx.stroke()
       ctx.restore()
@@ -196,7 +196,7 @@ export function StrideScan({
         ctx.lineTo(ax, y + 5 * dpr)
         ctx.stroke()
         ctx.textAlign = 'left'
-        ctx.fillText(`OVERSTRIDE ${Math.round(reach * RUNNER_HEIGHT_CM)} CM`, ax + 10 * dpr, y)
+        ctx.fillText(`REACH ${Math.round(reach * RUNNER_HEIGHT_CM)} CM`, ax + 10 * dpr, y)
         ctx.restore()
       }
 
