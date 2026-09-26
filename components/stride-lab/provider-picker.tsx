@@ -5,9 +5,11 @@ interface ProviderPickerProps {
   providers: PoseProvider[]
   value: string
   onChange: (id: string) => void
+  /** Live progress or fallback message for the selected provider. */
+  status?: string | null
 }
 
-export function ProviderPicker({ providers, value, onChange }: ProviderPickerProps) {
+export function ProviderPicker({ providers, value, onChange, status }: ProviderPickerProps) {
   return (
     <fieldset className="flex flex-col gap-2 border-t border-border pt-5">
       <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-foreground engraved">
@@ -37,8 +39,13 @@ export function ProviderPicker({ providers, value, onChange }: ProviderPickerPro
             <span className="flex flex-1 flex-col">
               <span className="text-sm font-semibold text-foreground">{provider.label}</span>
               <span className="text-xs leading-relaxed text-muted-foreground">
-                {provider.available ? provider.detail : provider.unavailableReason}
-              </span>
+                  {provider.available ? provider.detail : provider.unavailableReason}
+                </span>
+                {selected && status && (
+                  <span className="mt-1 font-mono text-xs leading-relaxed text-foreground" role="status">
+                    {status}
+                  </span>
+                )}
             </span>
           </label>
         )
