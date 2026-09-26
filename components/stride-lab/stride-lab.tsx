@@ -56,6 +56,7 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
   const [sport, setSport] = useState<Sport>('running')
   const [providerId, setProviderId] = useState(POSE_PROVIDERS[0].id)
   const [sessionState, setSessionState] = useState<SessionState>({ status: 'loading' })
+  const [providerStatus, setProviderStatus] = useState<string | null>(null)
   const [heightCm, setHeightCm] = useState(DEFAULT_HEIGHT_CM)
   const [tracker, setTracker] = useState(() => createTracker('running', DEFAULT_HEIGHT_CM))
   const [snapshot, setSnapshot] = useState<MovementSnapshot | null>(null)
@@ -76,11 +77,13 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
     let cancelled = false
     let session: PoseSession | null = null
     setSessionState({ status: 'loading' })
+    setProviderStatus(null)
     getPoseProvider(providerId)
       .load()
       .then((loaded) => {
         if (cancelled) return loaded.dispose()
         session = loaded
+        loaded.onStatus?.(setProviderStatus)
         setSessionState({ status: 'ready', session: loaded })
       })
       .catch((error: Error) => {
@@ -467,7 +470,12 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
             </div>
           </div>
 
-          <ProviderPicker providers={POSE_PROVIDERS} value={providerId} onChange={setProviderId} />
+          <ProviderPicker
+            providers={POSE_PROVIDERS}
+            value={providerId}
+            onChange={setProviderId}
+            status={sessionState.status === 'error' ? sessionState.message : providerStatus}
+          />
         </aside>
 
         <div className="lg:col-span-2">
