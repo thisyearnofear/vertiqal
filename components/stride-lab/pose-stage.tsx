@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'rea
 import { SPORTS, type MovementSnapshot, type MovementTracker, type Sport } from '@/lib/metrics/readout'
 import { captureHero, heroScore, type HeroFrame } from '@/lib/hero/frame'
 import type { Pose, PoseSession } from '@/lib/pose/types'
+import { cn } from '@/lib/utils'
+import { attractPose } from './attract-runner'
 import { drawOverlay, readOverlayTheme, videoContentRect, type OverlayTheme } from './draw-overlay'
 
 export type EngineState = 'loading' | 'ready' | 'error'
@@ -31,12 +33,21 @@ interface PoseStageProps {
   statusLabel: string | null
   onSnapshot: (snapshot: MovementSnapshot) => void
   onFile: (file: File) => void
+  /** Call to action shown on the idle screen, under the promise. */
+  idleAction?: ReactNode
+  /** Measurement progress for a loaded clip: pips fill per event, then a lock banner plays once. */
+  progress?: { events: number; target: number; ready: boolean }
 }
 
 const ENGINE_LINE: Record<EngineState, string> = {
   loading: 'WARMING UP',
   ready: '33 KEYPOINTS · OK',
   error: 'OFFLINE',
+}
+
+const PROMISE: Record<Sport, string> = {
+  running: 'Film 10 seconds of you running. Get shoes matched to how you actually move.',
+  climbing: 'Film one short climb. Get shoes matched to how you actually move.',
 }
 
 function BootLine({ index, children }: { index: number; children: string }) {
@@ -86,10 +97,13 @@ export function PoseStage({
   statusLabel,
   onSnapshot,
   onFile,
+  idleAction,
+  progress,
 }: PoseStageProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [dragging, setDragging] = useState(false)
+  const idle = !src && !stream && !overlay
 
   useEffect(() => {
     const video = videoRef.current
@@ -185,10 +199,52 @@ export function PoseStage({
     }
   }, [session, tracker, videoRef, onSnapshot, onKeyframe, onHero, themeKey])
 
+  // Attract mode: like an arcade cabinet, the idle monitor demonstrates what it watches for.
+  useEffect(() => {
+    if (!idle || sport !== 'running') return
+    const canvas = canvasRef.current
+    const container = containerRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !container || !ctx) return
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const theme = readOverlayTheme(container)
+    const start = performance.now()
+    let frame = 0
+
+    const draw = (now: number) => {
+      const w = container.clientWidth
+      const h = container.clientHeight
+      const t = still ? 0.2 : (now - start) / 1000
+      const groundY = 0.86
+      ctx.clearRect(0, 0, w, h)
+      ctx.save()
+      ctx.strokeStyle = theme.bone
+      ctx.globalAlpha = 0.35
+      ctx.lineWidth = 2
+      ctx.setLineDash([10, 14])
+      ctx.lineDashOffset = t * 190
+      ctx.beginPath()
+      ctx.moveTo(w * 0.56, groundY * h + 8)
+      ctx.lineTo(w * 0.96, groundY * h + 8)
+      ctx.stroke()
+      ctx.restore()
+      const pose = attractPose(t, { centerX: w < 640 ? 0.78 : 0.74, height: w < 640 ? 0.5 : 0.62, groundY, aspect: h / w })
+      drawOverlay(ctx, { x: 0, y: 0, w, h }, pose, null, theme)
+      if (!still) frame = requestAnimationFrame(draw)
+    }
+    frame = requestAnimationFrame(draw)
+    return () => {
+      cancelAnimationFrame(frame)
+      ctx.clearRect(0, 0, container.clientWidth, container.clientHeight)
+    }
+  }, [idle, sport, themeKey])
+
+  const showPips = src && progress && !statusLabel
+
   return (
     <div
       ref={containerRef}
-      className="screen aspect-video w-full"
+      className="screen aspect-[4/3] w-full sm:aspect-video"
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -216,27 +272,57 @@ export function PoseStage({
 
       {overlay && !dragging && <div className="absolute inset-0 z-10">{overlay}</div>}
 
-      {!src && !stream && !overlay && !dragging && (
-        <div className="absolute inset-0 flex animate-boot flex-col justify-between p-6 font-mono text-stage-foreground md:p-10">
-          <div className="flex flex-col gap-1 text-lg leading-snug phosphor md:text-xl">
-            <p>{'VERTIQAL V-01 MOVEMENT ANALYSER  ·  ROM v3.0'}</p>
-            <BootLine index={0}>{`POSE ENGINE ........ ${ENGINE_LINE[engine]}`}</BootLine>
-            <BootLine index={1}>{`MODE .............. ${SPORTS[sport].label.toUpperCase()}`}</BootLine>
-            <BootLine index={2}>{`CHANNEL ........... ${SPORTS[sport].channel}`}</BootLine>
-            <BootLine index={3}>{'FORMA UNIT ........ ONLINE'}</BootLine>
+      {idle && !dragging && (
+        <div className="absolute inset-0 z-10 flex animate-boot flex-col justify-between p-5 font-mono text-stage-foreground md:p-10">
+          <div className="flex flex-col gap-1 text-base leading-snug phosphor md:text-xl">
+            <p>{'VERTIQAL V-01 MOVEMENT ANALYSER'}</p>
+            <div className="hidden flex-col gap-1 sm:flex">
+              <BootLine index={0}>{`POSE ENGINE ........ ${ENGINE_LINE[engine]}`}</BootLine>
+              <BootLine index={1}>{`MODE .............. ${SPORTS[sport].label.toUpperCase()}`}</BootLine>
+              <BootLine index={2}>{'FORMA UNIT ........ ONLINE'}</BootLine>
+            </div>
           </div>
-          <div className="flex flex-col gap-2">
-            <p className="text-4xl leading-none phosphor md:text-6xl">
+          <div className={cn('flex flex-col items-start gap-3', sport === 'running' ? 'w-3/5 md:w-1/2' : 'max-w-lg')}>
+            <p className="text-2xl leading-none phosphor md:text-4xl">
               NO SIGNAL
               <span className="ml-2 inline-block animate-blink" aria-hidden>
                 {'█'}
               </span>
             </p>
-            <p className="max-w-md text-pretty text-lg leading-snug opacity-80 phosphor md:text-xl">
-              {`> ${SPORTS[sport].dropHint}`}
-            </p>
+            <p className="text-pretty text-lg leading-snug phosphor md:text-2xl">{PROMISE[sport]}</p>
+            {idleAction}
+            <p className="hidden text-pretty text-base leading-snug opacity-70 sm:block">{'> OR DROP A SIDE-ON CLIP ON THIS SCREEN'}</p>
           </div>
         </div>
+      )}
+
+      {showPips && !progress.ready && (
+        <div className="absolute left-4 top-4 z-10 flex items-center gap-3 rounded border border-stage-foreground/40 bg-stage/80 px-3 py-1.5 font-mono text-lg leading-none text-stage-foreground phosphor md:left-6 md:top-6">
+          <span>{SPORTS[sport].events.toUpperCase()}</span>
+          <span className="flex gap-1" aria-hidden>
+            {Array.from({ length: progress.target }, (_, i) => (
+              <span
+                key={i}
+                className={cn(
+                  'h-4 w-2 rounded-[1px] border border-stage-foreground/60',
+                  i < progress.events && 'animate-pip bg-stage-foreground',
+                )}
+              />
+            ))}
+          </span>
+          <span className="tabular-nums">{`${Math.min(progress.events, progress.target)}/${progress.target}`}</span>
+        </div>
+      )}
+
+      {showPips && progress.ready && (
+        <>
+          <div className="pointer-events-none absolute inset-0 z-10 animate-lock-flash bg-stage-foreground opacity-0" aria-hidden />
+          <div className="pointer-events-none absolute inset-0 z-20 flex animate-lock-banner items-center justify-center motion-reduce:hidden" aria-hidden>
+            <p className="rounded border-2 border-stage-foreground bg-stage/85 px-5 py-2 font-mono text-3xl uppercase leading-none text-stage-foreground phosphor md:text-5xl">
+              {'Measurements locked'}
+            </p>
+          </div>
+        </>
       )}
 
       {src && statusLabel && (

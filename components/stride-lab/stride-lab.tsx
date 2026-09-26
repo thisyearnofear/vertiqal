@@ -1,19 +1,19 @@
 'use client'
 
 import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
-import { Camera, Pause, Pin, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
+import { Camera, ChevronDown, Pause, Pin, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
 import { savePersona } from '@/app/actions'
 import { FormaConsole, FormaTuner } from '@/components/forma/forma-console'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { EMPTY_NOTES, contextLines, type FittingNotesState } from '@/lib/agent/fitting-notes'
 import { cueFor } from '@/lib/coach'
-import { SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
-import { PHOSPHOR_COLOR, speechFor, type Mood, type Persona } from '@/lib/persona'
+import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
+import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
 import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
 import type { PoseSession } from '@/lib/pose/types'
 import { cn } from '@/lib/utils'
 import type { HeroFrame } from '@/lib/hero/frame'
-import { AgentPanel } from './agent/agent-panel'
+import { AgentPanel, type AgentPanelHandle } from './agent/agent-panel'
 import { outputsOf } from './agent/outputs'
 import { HeroCard } from './hero/hero-card'
 import { useGearAgent } from './agent/use-gear-agent'
@@ -42,7 +42,13 @@ const CAPTURE_SECONDS: Record<Sport, number> = { running: 20, climbing: 45 }
 const MAX_KEYFRAMES = 3
 const CUE_GAP_MS = 6000
 const REPEAT_CUE_GAP_MS = 14000
-const ANNOUNCED_MOODS = new Set<Mood>(['ready', 'pleased', 'asking', 'working', 'sad'])
+const ANNOUNCED_MOODS = new Set<Mood>(['pleased', 'asking', 'working', 'sad'])
+const SAMPLE_CLIP = process.env.NEXT_PUBLIC_SAMPLE_CLIP || null
+
+const scrollToSection = (id: string) => {
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  document.getElementById(id)?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' })
+}
 
 type SessionState =
   | { status: 'loading' }
@@ -74,7 +80,9 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
   const [keyframes, setKeyframes] = useState<Keyframe[]>([])
   const [hero, setHero] = useState<HeroFrame | null>(null)
   const [notes, setNotes] = useState<FittingNotesState>(EMPTY_NOTES)
+  const [lockLine, setLockLine] = useState<string | null>(null)
   const agent = useGearAgent()
+  const agentPanel = useRef<AgentPanelHandle>(null)
   const speak = useVoice(voiceOn)
 
   useEffect(() => {
@@ -156,6 +164,22 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
     [sport, heightCm, restartAnalysis, live.clear],
   )
 
+  const showSample = () => {
+    if (SAMPLE_CLIP) {
+      live.clear()
+      setClip((previous) => {
+        if (previous?.url.startsWith('blob:')) URL.revokeObjectURL(previous.url)
+        return { url: SAMPLE_CLIP, name: 'Sample run' }
+      })
+      setPlaying(true)
+      restartAnalysis(sport, heightCm)
+      return
+    }
+    agentPanel.current?.runSample()
+    // Wait a frame so the panel has expanded its settings before measuring where to scroll.
+    requestAnimationFrame(() => scrollToSection('forma-procurement'))
+  }
+
   const changeSport = (next: Sport) => {
     if (next === sport) return
     live.clear()
@@ -229,6 +253,17 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
     if (ANNOUNCED_MOODS.has(mood)) void speak(speechFor(persona.voice, mood, sport))
   }, [mood, persona.voice, sport, speak])
 
+  // Freeze the runner's own number at the moment of lock, so Forma's line doesn't churn with every frame.
+  const announceLock = useEffectEvent(() => {
+    const line = lockedLine(persona.voice, readout.metrics)
+    setLockLine(line)
+    if (line) void speak(line)
+  })
+  useEffect(() => {
+    if (readout.ready) announceLock()
+    else setLockLine(null)
+  }, [readout.ready])
+
   const proof = baseline && readout.ready
     ? readout.metrics.reduce(
         (tally, metric) => {
@@ -252,7 +287,7 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
               vertiqal
               <span className="sr-only">: your body is the search query</span>
             </h1>
-            <p className="hidden whitespace-nowrap border-l border-border pl-5 text-xs font-semibold uppercase leading-relaxed tracking-[0.2em] text-muted-foreground engraved sm:block lg:hidden xl:block">
+            <p className="hidden whitespace-nowrap border-l border-border pl-5 text-xs font-semibold uppercase leading-relaxed tracking-[0.2em] text-muted-foreground engraved sm:block lg:hidden xl:block" aria-hidden>
               Your body is
               <br />
               the search query
@@ -266,6 +301,7 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
             tuning={tuning}
             tunerId={tunerId}
             onToggleTuning={() => setTuning((t) => !t)}
+            line={mood === 'ready' ? lockLine : null}
           />
 
           <div className="flex items-center gap-5">
@@ -335,10 +371,25 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
             statusLabel={statusLabel}
             onSnapshot={setSnapshot}
             onFile={loadFile}
+            progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
+            idleAction={
+              <button
+                type="button"
+                onClick={showSample}
+                className="flex items-center gap-2 whitespace-nowrap rounded-sm border-2 border-stage-foreground bg-stage-foreground px-3 py-1.5 text-lg uppercase leading-none text-stage transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none md:text-2xl"
+              >
+                <Play className="size-4 fill-current" aria-hidden />
+                <span className="sm:hidden">Show me a sample</span>
+                <span className="hidden sm:block">{SAMPLE_CLIP ? 'Show me a sample run' : 'Show me a sample fitting'}</span>
+              </button>
+            }
           />
 
           <div className="flex flex-wrap items-center justify-between gap-4 px-1">
+            {clip || liveActive ? (
             <div className="flex flex-wrap items-center gap-3">
+              {clip && (
+              <>
               <Button
                 variant="outline"
                 size="icon-lg"
@@ -368,6 +419,8 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
                   </button>
                 ))}
               </div>
+              </>
+              )}
               <button
                 type="button"
                 role="switch"
@@ -380,6 +433,9 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
                 <span className="sr-only">{': Forma speaks coaching cues aloud'}</span>
               </button>
             </div>
+            ) : (
+              <p className="max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground">{SPORTS[sport].clipHint}</p>
+            )}
 
             <div className="flex flex-wrap items-center gap-3">
               {liveActive ? (
@@ -415,15 +471,15 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
             </p>
           )}
           <p className="px-1 text-sm leading-relaxed text-muted-foreground">
-            {SPORTS[sport].clipHint}
-            {` Go live records ${CAPTURE_SECONDS[sport]} seconds from your camera; frames never leave the browser.`}
-            <span className="hidden md:inline">{' Space plays or pauses, R restarts.'}</span>
+            {`Go live records ${CAPTURE_SECONDS[sport]} seconds from your camera. Frames never leave your browser.`}
+            {clip && <span className="hidden md:inline">{' Space plays or pauses, R restarts.'}</span>}
           </p>
         </section>
 
         <aside className="housing flex flex-col gap-6 rounded-2xl p-5">
           <GaitReadout readout={readout} baseline={baseline?.readout ?? null} />
 
+          {(readout.ready || baseline) && (
           <div className="flex flex-col gap-2 border-t border-border pt-5">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">Proof run</p>
             {baseline ? (
@@ -457,8 +513,18 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
               </>
             )}
           </div>
+          )}
 
-          <div className="flex flex-col gap-2 border-t border-border pt-5">
+          <details className="group border-t border-border pt-5">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">Calibrate</span>
+              <span className="flex min-w-0 items-center gap-2 font-mono text-lg leading-none text-muted-foreground">
+                <span className="truncate">{`${heightCm} cm · ${POSE_PROVIDERS.find((p) => p.id === providerId)?.label ?? providerId}`}</span>
+                <ChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden />
+              </span>
+            </summary>
+            <div className="mt-5 flex flex-col gap-6">
+          <div className="flex flex-col gap-2">
             <label htmlFor="mover-height" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
               Your height
             </label>
@@ -483,14 +549,18 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
             onChange={setProviderId}
             status={sessionState.status === 'error' ? sessionState.message : providerStatus}
           />
+            </div>
+          </details>
         </aside>
 
         <div className="lg:col-span-2">
           <FittingNotes sport={sport} readout={readout} keyframes={keyframes} value={notes} onChange={setNotes} />
         </div>
 
-        <div className="lg:col-span-2">
+        <div id="forma-procurement" className="scroll-mt-6 lg:col-span-2">
           <AgentPanel
+            ref={agentPanel}
+            heroReady={Boolean(hero)}
             agent={agent}
             readout={readout}
             sport={sport}
@@ -501,9 +571,11 @@ export function StrideLab({ initialPersona }: { initialPersona: Persona }) {
           />
         </div>
 
-        <div className="lg:col-span-2">
-          <HeroCard frame={hero} readout={readout} sport={sport} picks={picks} themeKey={persona.phosphor} />
-        </div>
+        {hero && (
+          <div id="hero-frame" className="scroll-mt-6 lg:col-span-2">
+            <HeroCard frame={hero} readout={readout} sport={sport} picks={picks} themeKey={persona.phosphor} />
+          </div>
+        )}
       </main>
     </div>
   )
