@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react'
 import useSWR from 'swr'
 import useSWRMutation from 'swr/mutation'
-import { Bot, Check, Copy } from 'lucide-react'
+import { Bot, Check, Copy, Plug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { FitVerdict, IssuedPassport, Passport } from '@/lib/passport/schema'
 import { cn } from '@/lib/utils'
@@ -33,17 +33,18 @@ const VERDICT_LABEL: Record<FitVerdict['verdict'], string> = {
 
 export function PassportCard({ passport }: { passport: Passport }) {
   const { data: issued, error } = usePassport(passport)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'link' | 'mcp' | null>(null)
   const [product, setProduct] = useState('')
   const check = useSWRMutation(issued ? `${issued.url}/fit` : null, (url: string, { arg }: { arg: string }) =>
     postJson<FitVerdict & { product: string }>(url, { product: arg }),
   )
 
-  const copy = async () => {
+  const copy = async (what: 'link' | 'mcp') => {
     if (!issued) return
-    await navigator.clipboard.writeText(issued.url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1600)
+    const mcpConfig = JSON.stringify({ mcpServers: { vertiqal: { url: `${new URL(issued.url).origin}/api/mcp` } } }, null, 2)
+    await navigator.clipboard.writeText(what === 'link' ? issued.url : mcpConfig)
+    setCopied(what)
+    setTimeout(() => setCopied(null), 1600)
   }
 
   const submit = (e: FormEvent) => {
@@ -59,7 +60,8 @@ export function PassportCard({ passport }: { passport: Passport }) {
       </div>
       <p className="max-w-2xl font-sans text-base leading-relaxed opacity-80">
         A signed, machine-readable record of how you move. Hand it to any retailer bot or shopping agent and it
-        can check fit against your body instead of guessing from keywords.
+        can check fit against your body instead of guessing from keywords. AI assistants can connect over MCP and
+        call <code className="font-mono text-lg">check_fit</code> with this link.
       </p>
       {error && (
         <p role="alert" className="text-lg text-primary phosphor">{`! ${error.message.toUpperCase()}`}</p>
@@ -67,9 +69,13 @@ export function PassportCard({ passport }: { passport: Passport }) {
       {issued && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Button size="lg" variant="outline" className="h-10 px-4" onClick={copy}>
-              {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
-              {copied ? 'Copied' : 'Copy passport link'}
+            <Button size="lg" variant="outline" className="h-10 px-4" onClick={() => copy('link')}>
+              {copied === 'link' ? <Check aria-hidden /> : <Copy aria-hidden />}
+              {copied === 'link' ? 'Copied' : 'Copy passport link'}
+            </Button>
+            <Button size="lg" variant="outline" className="h-10 px-4" onClick={() => copy('mcp')}>
+              {copied === 'mcp' ? <Check aria-hidden /> : <Plug aria-hidden />}
+              {copied === 'mcp' ? 'Copied' : 'Copy MCP config'}
             </Button>
             <a
               href={issued.url}

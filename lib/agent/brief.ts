@@ -19,6 +19,8 @@ export interface ShopperPrefs {
   budget: string
   heightCm: number
   voice: Voice
+  /** Intake answers and Grok vision findings from the fitting notes panel. */
+  notes?: string[]
 }
 
 export function briefFromReadout(readout: Readout): MovementBrief {
@@ -87,6 +89,7 @@ export function briefToPrompt(brief: MovementBrief, prefs: ShopperPrefs) {
     'Signals:',
     ...brief.signals.map((s) => `- ${s}`),
     '',
+    ...(prefs.notes?.length ? ['About me (weigh these alongside the measurements):', ...prefs.notes.map((n) => `- ${n}`), ''] : []),
     `My street shoe size: ${prefs.size}. Budget: ${prefs.budget}. I'm in the UK.`,
     `Voice: speak to me as ${VOICE_PROFILE[prefs.voice].prompt}.`,
     `Find me the right ${brief.sport === 'running' ? 'running shoe' : 'climbing shoe'}.`,

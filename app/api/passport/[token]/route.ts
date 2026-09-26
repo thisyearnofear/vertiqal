@@ -31,6 +31,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
           returns: 'verdict (great-fit | workable | poor-fit), score 0–100, reasons citing measurements',
         },
       },
+      mcp: {
+        transport: 'streamable-http',
+        url: `${self.origin}/api/mcp`,
+        tools: ['get_fit_passport', 'check_fit'],
+        usage: 'Pass this passport URL as the "passport" argument.',
+      },
     },
     { headers: { ...CORS, 'Cache-Control': 'public, max-age=3600' } },
   )

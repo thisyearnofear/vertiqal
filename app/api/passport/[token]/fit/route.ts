@@ -1,5 +1,5 @@
-import { Output, generateText } from 'ai'
-import { fitCheckSchema, fitVerdictSchema } from '@/lib/passport/schema'
+import { checkFit } from '@/lib/passport/fit'
+import { fitCheckSchema } from '@/lib/passport/schema'
 import { readPassport } from '@/lib/passport/token'
 
 export const maxDuration = 30
@@ -23,14 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (!parsed.success) return Response.json({ error: 'Send { "product": "<name>" }' }, { status: 400, headers: CORS })
 
   try {
-    const { output } = await generateText({
-      model: 'spacexai/grok-4.7',
-      system:
-        'You are Forma, the vertiqal fitting agent. Judge whether a named shoe suits the passport owner using only their measured passport and your knowledge of that product. Be specific and honest; if you do not know the product, say so in a reason and score conservatively. No medical claims.',
-      prompt: `Fit passport:\n${JSON.stringify(passport)}\n\nProduct to judge: ${parsed.data.product}`,
-      output: Output.object({ schema: fitVerdictSchema }),
-    })
-    return Response.json({ product: parsed.data.product, ...output }, { headers: CORS })
+    return Response.json(await checkFit(passport, parsed.data.product), { headers: CORS })
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 502, headers: CORS })
   }

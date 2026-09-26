@@ -24,7 +24,24 @@ const RETAILER_DOMAINS = [
   'on.com',
 ]
 
-export async function searchWeb(query: string): Promise<SearchHit[]> {
+/** Where runners and climbers actually talk about how shoes wear, fit and fail. */
+const COMMUNITY_DOMAINS = [
+  'reddit.com',
+  'ukclimbing.com',
+  'mountainproject.com',
+  'letsrun.com',
+  'runnersworld.com',
+  'runrepeat.com',
+  'believeintherun.com',
+  'doctorsofrunning.com',
+  'weighmyrack.com',
+  'climbing.com',
+]
+
+export const searchWeb = (query: string) => tavily(query, RETAILER_DOMAINS)
+export const searchCommunity = (query: string) => tavily(query, COMMUNITY_DOMAINS)
+
+async function tavily(query: string, domains: string[]): Promise<SearchHit[]> {
   const apiKey = process.env.TAVILY_API_KEY
   if (!apiKey) throw new Error('TAVILY_API_KEY is not configured')
 
@@ -35,7 +52,7 @@ export async function searchWeb(query: string): Promise<SearchHit[]> {
       query,
       max_results: 8,
       search_depth: 'basic',
-      include_domains: RETAILER_DOMAINS,
+      include_domains: domains,
     }),
     signal: AbortSignal.timeout(20_000),
   })

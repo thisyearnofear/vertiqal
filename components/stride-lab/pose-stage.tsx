@@ -1,15 +1,24 @@
 'use client'
 
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { SPORTS, type MovementSnapshot, type MovementTracker, type Sport } from '@/lib/metrics/readout'
 import type { PoseSession } from '@/lib/pose/types'
 import { drawOverlay, readOverlayTheme, videoContentRect, type OverlayTheme } from './draw-overlay'
 
 export type EngineState = 'loading' | 'ready' | 'error'
 
+export interface Keyframe {
+  dataUrl: string
+  label: string
+}
+
 interface PoseStageProps {
   videoRef: RefObject<HTMLVideoElement | null>
   src: string | null
+  stream?: MediaStream | null
+  /** Replaces the idle boot screen, e.g. a live-capture countdown. */
+  overlay?: ReactNode
+  onKeyframe?: (frame: Keyframe) => void
   session: PoseSession | null
   tracker: MovementTracker
   sport: Sport
@@ -36,10 +45,31 @@ function BootLine({ index, children }: { index: number; children: string }) {
 }
 
 const SNAPSHOT_INTERVAL_MS = 120
+/** Grab a still (with skeleton) on these event counts, for Grok vision review. */
+const KEYFRAME_EVENTS = new Set([3, 6, 9])
+const KEYFRAME_WIDTH = 640
+
+const eventCount = (s: MovementSnapshot) => (s.sport === 'running' ? s.totalStrikes : s.totalPlacements)
+
+function captureKeyframe(video: HTMLVideoElement, pose: ReturnType<PoseSession['poseAt']>, snapshot: MovementSnapshot, theme: OverlayTheme) {
+  const width = KEYFRAME_WIDTH
+  const height = Math.round((video.videoHeight / video.videoWidth) * width)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.drawImage(video, 0, 0, width, height)
+  drawOverlay(ctx, videoContentRect(width, height, video.videoWidth, video.videoHeight), pose, snapshot, theme)
+  return canvas.toDataURL('image/jpeg', 0.72)
+}
 
 export function PoseStage({
   videoRef,
   src,
+  stream = null,
+  overlay,
+  onKeyframe,
   session,
   tracker,
   sport,
@@ -52,6 +82,13 @@ export function PoseStage({
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.srcObject = stream
+    if (stream) void video.play().catch(() => {})
+  }, [stream, videoRef])
 
   useEffect(() => {
     const video = videoRef.current
@@ -68,6 +105,7 @@ export function PoseStage({
     let pose: ReturnType<PoseSession['poseAt']> = null
     let snapshot: MovementSnapshot | null = null
     let needsRedraw = true
+    let lastEvents = 0
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
@@ -91,6 +129,14 @@ export function PoseStage({
         pose = session.poseAt(video)
         snapshot = tracker.update(time, pose, video.videoWidth, video.videoHeight)
         needsRedraw = true
+        const events = eventCount(snapshot)
+        if (events !== lastEvents) {
+          lastEvents = events
+          if (onKeyframe && KEYFRAME_EVENTS.has(events)) {
+            const dataUrl = captureKeyframe(video, pose, snapshot, theme)
+            if (dataUrl) onKeyframe({ dataUrl, label: `${SPORTS[snapshot.sport].events} #${events}` })
+          }
+        }
         const now = performance.now()
         if (now - lastEmit > SNAPSHOT_INTERVAL_MS) {
           lastEmit = now
@@ -115,7 +161,7 @@ export function PoseStage({
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [session, tracker, videoRef, onSnapshot, themeKey])
+  }, [session, tracker, videoRef, onSnapshot, onKeyframe, themeKey])
 
   return (
     <div
@@ -146,7 +192,9 @@ export function PoseStage({
       />
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
 
-      {!src && !dragging && (
+      {overlay && !dragging && <div className="absolute inset-0 z-10">{overlay}</div>}
+
+      {!src && !stream && !overlay && !dragging && (
         <div className="absolute inset-0 flex animate-boot flex-col justify-between p-6 font-mono text-stage-foreground md:p-10">
           <div className="flex flex-col gap-1 text-lg leading-snug phosphor md:text-xl">
             <p>{'VERTIQAL V-01 MOVEMENT ANALYSER  ·  ROM v3.0'}</p>

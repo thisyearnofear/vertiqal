@@ -63,9 +63,12 @@ interface AgentPanelProps {
   sport: Sport
   heightCm: number
   voice: Voice
+  /** Autopilot waits until a live capture has finished. */
+  capturing: boolean
+  context: string[]
 }
 
-export function AgentPanel({ agent, readout, sport, heightCm, voice }: AgentPanelProps) {
+export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, context }: AgentPanelProps) {
   const [size, setSize] = useState('UK 9')
   const [budget, setBudget] = useState('£160')
   const [autopilot, setAutopilot] = useState(true)
@@ -94,7 +97,7 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice }: AgentPane
     [sentBrief, outputs, prefs, issued?.url],
   )
 
-  const run = (brief: MovementBrief) => send(brief, { size, budget, heightCm, voice })
+  const run = (brief: MovementBrief) => send(brief, { size, budget, heightCm, voice, notes: context })
 
   // Autopilot: the moment enough movement is measured, Forma hands the brief to Grok on its own.
   const firedFor = useRef<Readout['sport'] | null>(null)
@@ -104,11 +107,11 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice }: AgentPane
       if (!sentBrief) firedFor.current = null
       return
     }
-    if (!autopilot || sentBrief || busy) return
+    if (!autopilot || sentBrief || busy || capturing) return
     if (firedFor.current === readout.sport) return
     firedFor.current = readout.sport
-    send(briefFromReadout(readout), { size, budget, heightCm, voice })
-  }, [autopilot, readout, sentBrief, busy, send, size, budget, heightCm, voice])
+    send(briefFromReadout(readout), { size, budget, heightCm, voice, notes: context })
+  }, [autopilot, readout, sentBrief, busy, capturing, send, size, budget, heightCm, voice, context])
 
   const startOver = () => {
     firedFor.current = readout.ready ? readout.sport : null
