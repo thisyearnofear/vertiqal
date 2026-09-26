@@ -93,7 +93,28 @@ const sendUnified = (conversationId: string, text: string, buttons?: UnifiedButt
     json: { type: 'unified', unified: { text: text.slice(0, 1024), footer, buttons } },
   })
 
+type Choice = NonNullable<Fitting['choice']>
+
+const pickMessages = (conversationId: string, fitting: Fitting) =>
+  fitting.picks.map((p, i): Parameters<typeof sendUnified> => [
+    conversationId,
+    `*${i === 0 ? 'Best fit' : `Option ${i + 1}`}: ${p.name}*\n${p.price} at ${p.retailer}\n\n_${p.why}_`,
+    [{ type: 'url', text: `Open ${p.retailer}`.slice(0, 20), url: p.url }],
+  ])
+
+const choiceMessage = (conversationId: string, fitting: Fitting, choice: Choice): Parameters<typeof sendUnified> => {
+  const why = fitting.picks.find((p) => p.url === choice.url)?.why
+  return [
+    conversationId,
+    `*Your pick: ${choice.name}* in ${choice.size}\n${choice.price} at ${choice.retailer}\n${choice.stock}${why ? `\n\n_${why}_` : ''}`,
+    [{ type: 'url', text: `Buy at ${choice.retailer}`.slice(0, 20), url: choice.url }],
+    'Size checked live by vertiqal',
+  ]
+}
+
 export async function sendFitting(conversationId: string, fitting: Fitting) {
+  const { choice } = fitting
+  const others = choice ? fitting.picks.filter((p) => p.url !== choice.url) : []
   const requirements = fitting.requirements.map((r) => `• ${r.attribute}: *${r.target}*`).join('\n')
   const sportLabel = fitting.sport === 'running' ? 'Running' : 'Climbing'
   const messages: Parameters<typeof sendUnified>[] = [
@@ -103,21 +124,25 @@ export async function sendFitting(conversationId: string, fitting: Fitting) {
       fitting.passportUrl ? [{ type: 'url', text: 'Fit passport', url: fitting.passportUrl.slice(0, 2000) }] : undefined,
       `Measured from your ${fitting.sport} video`,
     ],
-    ...fitting.picks.map((p, i): Parameters<typeof sendUnified> => [
-      conversationId,
-      `*${i === 0 ? 'Best fit' : `Option ${i + 1}`}: ${p.name}*\n${p.price} at ${p.retailer}\n\n_${p.why}_`,
-      [{ type: 'url', text: `Open ${p.retailer}`.slice(0, 20), url: p.url }],
-    ]),
+    ...(choice ? [choiceMessage(conversationId, fitting, choice)] : pickMessages(conversationId, fitting)),
     [
       conversationId,
-      'Ask me anything about these, or tell me what to change.',
-      [
-        { type: 'quick_reply', text: 'Anything cheaper?', quickReplyId: 'cheaper' },
-        { type: 'quick_reply', text: 'Why the best fit?', quickReplyId: 'why-best' },
-        fitting.sport === 'running'
-          ? { type: 'quick_reply', text: 'Trail version?', quickReplyId: 'trail' }
-          : { type: 'quick_reply', text: 'Comfier for gym?', quickReplyId: 'comfort' },
-      ],
+      choice
+        ? `${others.length ? `_Also on your shortlist: ${others.map((p) => `${p.name} (${p.price})`).join(', ')}_\n\n` : ''}I'll remember this fitting. Tell me how they feel once you've worn them in, and your next scan on vertiqal will take it into account.`
+        : 'Ask me anything about these, or tell me what to change.',
+      choice
+        ? [
+            { type: 'quick_reply', text: 'True to size?', quickReplyId: 'sizing' },
+            { type: 'quick_reply', text: 'How to break in?', quickReplyId: 'break-in' },
+            { type: 'quick_reply', text: 'Anything cheaper?', quickReplyId: 'cheaper' },
+          ]
+        : [
+            { type: 'quick_reply', text: 'Anything cheaper?', quickReplyId: 'cheaper' },
+            { type: 'quick_reply', text: 'Why the best fit?', quickReplyId: 'why-best' },
+            fitting.sport === 'running'
+              ? { type: 'quick_reply', text: 'Trail version?', quickReplyId: 'trail' }
+              : { type: 'quick_reply', text: 'Comfier for gym?', quickReplyId: 'comfort' },
+          ],
     ],
   ]
   // Sequential so WhatsApp shows them in order.
@@ -147,6 +172,18 @@ export async function recentTranscript(phone: string, limit = 20) {
     .filter((m) => m.text)
     .map((m) => `${/user|customer|contact/i.test(m.role) ? 'SHOPPER' : 'FORMA'}: ${m.text}`)
     .join('\n')
+}
+
+/** Only what the shopper typed, newest last, so their next in-app search can build on it. */
+export async function shopperLines(phone: string, max = 4) {
+  const transcript = await recentTranscript(phone, 30)
+  return transcript
+    .split('\n')
+    .filter((line) => line.startsWith('SHOPPER: '))
+    .map((line) => line.slice('SHOPPER: '.length).trim())
+    .filter((text) => text && !text.startsWith('/connect'))
+    .slice(-max)
+    .map((text) => text.slice(0, 160))
 }
 
 export const chatUrlFor = (connectUrl: string) => connectUrl.split('?')[0]
