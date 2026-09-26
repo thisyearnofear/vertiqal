@@ -110,15 +110,15 @@ export function FittingNotes({ sport, readout, keyframes, value, onChange }: Fit
         <div className="flex flex-col gap-1.5">
           <p className={cn(LABEL, 'flex items-center gap-2')}>
             <span className="led" data-state={value.sole || value.frames ? 'on' : 'off'} aria-hidden />
-            CH-2 · Fitting notes · optional
+            Sharpen the fit · optional
           </p>
           <h2 id={`${id}-heading`} className="text-balance text-xl font-semibold text-foreground">
             {'What the camera can’t measure'}
           </h2>
           <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
             {open
-              ? 'Everything here goes to Forma with your measurements. Photos and stills are only sent to Grok when you press a button, and are not stored.'
-              : 'Old injuries, terrain, a photo of your worn soles. Skip it, or add it to sharpen the fit.'}
+              ? 'Add what you like, then press Re-shop above. Photos and stills are only sent to Grok when you press a button, and are not stored.'
+              : 'Old injuries, terrain, a photo of your worn soles. Add them, then re-shop for a sharper shortlist.'}
           </p>
         </div>
         <Button

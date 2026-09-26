@@ -27,9 +27,21 @@ export const fittingSchema = z.object({
     )
     .min(1)
     .max(3),
+  /** The shoe the shopper settled on in the app, with the live stock result for their size. */
+  choice: z
+    .object({
+      name: z.string().max(120),
+      retailer: z.string().max(80),
+      url: z.string().url().max(500),
+      price: z.string().max(40),
+      size: z.string().max(20),
+      stock: z.string().max(160),
+    })
+    .optional(),
 })
 
-export const handoffSchema = z.object({ phone: phoneSchema, fitting: fittingSchema })
+/** Phone is optional for returning shoppers; the server falls back to the linked number. */
+export const handoffSchema = z.object({ phone: phoneSchema.optional(), fitting: fittingSchema })
 
 export type Fitting = z.infer<typeof fittingSchema>
 
