@@ -1,15 +1,11 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { ArrowUpRight, X } from 'lucide-react'
 import { findingById } from '@/lib/agent/evidence'
 import type { GearAgentUIMessage } from '@/lib/agent/gear-agent'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { BasketRun } from './basket-run'
 
 type Part = GearAgentUIMessage['parts'][number]
-type ApprovalHandler = (response: { id: string; approved: boolean }) => void
 
 const hostOf = (url: string) => {
   try {
@@ -63,7 +59,7 @@ function Step({
 
 const isPending = (state: string) => state === 'input-streaming' || state === 'input-available'
 
-function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
+function renderPart(part: Part, key: string) {
   switch (part.type) {
     case 'text':
       return part.text.trim() ? (
@@ -277,101 +273,16 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
           state={isPending(part.state) ? 'pending' : 'done'}
         >
           {picks && (
-            <ol className="grid gap-3 md:grid-cols-3">
-              {picks.map((p, i) => (
-                <li
-                  key={p.url}
-                  className={cn(
-                    'flex flex-col gap-2 rounded-md border p-4',
-                    i === 0
-                      ? 'border-primary shadow-[0_0_24px_-6px_var(--primary)]'
-                      : 'border-stage-foreground/30',
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2 text-lg leading-none">
-                    <span className="uppercase opacity-60">{`${String(i + 1).padStart(2, '0')} · ${p.retailer}`}</span>
-                    {i === 0 && (
-                      <span className="rounded-sm bg-primary px-1.5 py-0.5 text-primary-foreground">BEST FIT</span>
-                    )}
-                  </div>
-                  <p className="text-pretty text-2xl leading-tight phosphor">{p.name}</p>
-                  <p className="text-xl leading-none tabular-nums opacity-90">{p.price}</p>
-                  <p className="text-pretty font-sans text-sm leading-relaxed opacity-80">{p.why}</p>
-                  {[
-                    ['Riders say', p.community],
-                    ['Research', p.research],
-                    ['Worn by', p.wornBy],
-                  ].map(([label, text]) =>
-                    text?.trim() ? (
-                      <p
-                        key={label}
-                        className="border-t border-dashed border-stage-foreground/25 pt-2 text-pretty font-sans text-sm leading-relaxed opacity-70"
-                      >
-                        <span className="font-mono text-base uppercase opacity-80">{`${label}: `}</span>
-                        {text}
-                      </p>
-                    ) : null,
-                  )}
-                  <a
-                    href={p.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-auto inline-flex items-center gap-1 pt-1 text-lg leading-none underline decoration-dotted underline-offset-4 hover:text-primary"
-                  >
-                    {`OPEN ${hostOf(p.url).toUpperCase()}`}
-                    <ArrowUpRight className="size-4" aria-hidden />
-                  </a>
+            <ul className="flex flex-col gap-1" aria-label="Shortlist sources">
+              {picks.map((p) => (
+                <li key={p.url} className="text-lg leading-tight opacity-80">
+                  {`↳ ${p.name} · ${hostOf(p.url)} · ${p.price}`}
                 </li>
               ))}
-            </ol>
+            </ul>
           )}
         </Step>
       )
-    }
-
-    case 'tool-addToBasket': {
-      const input = part.state === 'input-streaming' ? null : part.input
-      if (part.state === 'approval-requested' && !part.approval.isAutomatic && input) {
-        return (
-          <Step key={key} title="Awaiting your authorisation" state="wait">
-            <div className="flex flex-col gap-4 rounded-md border-2 border-dashed border-primary p-4 md:p-5">
-              <p className="text-pretty font-sans text-base leading-relaxed">
-                {`Send a browser agent to ${hostOf(input.productUrl)} to add `}
-                <span className="font-semibold text-primary">{input.productName}</span>
-                {` in ${input.size} to your basket? It stops before checkout.`}
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button size="lg" className="h-10 px-5" onClick={() => onApproval({ id: part.approval.id, approved: true })}>
-                  Authorise
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="h-10 px-4"
-                  onClick={() => onApproval({ id: part.approval.id, approved: false })}
-                >
-                  <X aria-hidden />
-                  Not now
-                </Button>
-              </div>
-            </div>
-          </Step>
-        )
-      }
-      if (part.state === 'output-denied') {
-        return <Step key={key} title="Basket run declined" state="halt" />
-      }
-      if (part.state === 'output-error') {
-        return <Step key={key} title="Browser agent could not start" detail={part.errorText} state="halt" />
-      }
-      if (part.state === 'output-available') {
-        return (
-          <Step key={key} title="Browser agent at the retailer" detail={hostOf(part.output.productUrl)} state="done">
-            <BasketRun runId={part.output.runId} productName={part.output.productName} size={part.output.size} />
-          </Step>
-        )
-      }
-      return <Step key={key} title="Preparing basket run" state="pending" />
     }
 
     default:
@@ -379,20 +290,33 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
   }
 }
 
-export function AgentSteps({
-  messages,
-  onApproval,
-}: {
-  messages: GearAgentUIMessage[]
-  onApproval: ApprovalHandler
-}) {
+const ACTIVITY: Record<string, string> = {
+  'tool-checkEvidence': 'Checking the research',
+  'tool-buildGearProfile': 'Reading your movement',
+  'tool-searchProducts': 'Searching live stock',
+  'tool-checkCommunity': 'Reading what riders say',
+  'tool-checkAthletes': 'Looking for who wears them',
+  'tool-recommendProducts': 'Comparing the finalists',
+}
+
+/** One line for what Forma is doing right now, so the full trail can stay folded away. */
+export function activityOf(messages: GearAgentUIMessage[]) {
+  const steps = messages
+    .filter((m) => m.role === 'assistant')
+    .flatMap((m) => m.parts)
+    .filter((p) => p.type in ACTIVITY)
+  const last = steps.at(-1)
+  return { label: last ? ACTIVITY[last.type] : 'Reading your measurements', steps: steps.length }
+}
+
+export function AgentSteps({ messages }: { messages: GearAgentUIMessage[] }) {
   const parts = messages
     .filter((m) => m.role === 'assistant')
     .flatMap((m) => m.parts.map((part, i) => ({ part, key: `${m.id}-${i}` })))
 
   return (
     <ol className="flex flex-col gap-6" aria-label="Agent activity">
-      {parts.map(({ part, key }) => renderPart(part, key, onApproval))}
+      {parts.map(({ part, key }) => renderPart(part, key))}
     </ol>
   )
 }

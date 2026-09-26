@@ -18,6 +18,8 @@ const nextConfig = {
     unoptimized: true,
   },
   allowedDevOrigins: ['*.vercel.run'],
+  // Solari's client wraps patchright (a Playwright fork) whose optional requires can't be bundled.
+  serverExternalPackages: ['@solarisdk/browser', 'patchright-core'],
   async headers() {
     return [
       {

@@ -20,6 +20,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: ^2.1.0
         version: 2.1.0
+      '@solarisdk/browser':
+        specifier: ^0.1.5
+        version: 0.1.5
       '@vercel/analytics':
         specifier: 1.6.1
         version: 1.6.1(next@16.3.3(@babel/core@7.29.7)(@types/node@24.10.4)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
@@ -606,6 +609,10 @@ packages:
   '@sindresorhus/merge-streams@4.0.0':
     resolution: {integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==}
     engines: {node: '>=18'}
+
+  '@solarisdk/browser@0.1.5':
+    resolution: {integrity: sha512-TGBSRJlzhQ6cHnxrxCeOwmTXWF0QiMz4YCUxNxSqBkWoH773oDvHYXgd7H2WfCT6LnAKDDH6iBt2MoI158rLjA==}
+    engines: {node: '>=20'}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -1607,6 +1614,11 @@ packages:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
 
+  patchright-core@1.62.2:
+    resolution: {integrity: sha512-XDl3HB/Kjm9ZBFn4ygD5mxdsqK4aIWNGXdea46XAGd0hvHuJJ84w1M83JqofpXIbD2aJfQ2Rtz4YcqPVrxjSzw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   path-browserify@1.0.1:
     resolution: {integrity: sha512-b7uo2UCUOYZcnF/3ID0lulOJi/bafxa1xPe7ZPsammBSpjSWQkjNxlt635YGS2MiR9GjvuXCtz2emr3jbsz98g==}
 
@@ -2520,6 +2532,10 @@ snapshots:
 
   '@sindresorhus/merge-streams@4.0.0': {}
 
+  '@solarisdk/browser@0.1.5':
+    dependencies:
+      patchright-core: 1.62.2
+
   '@standard-schema/spec@1.1.0': {}
 
   '@swc/helpers@0.5.23':
@@ -3361,6 +3377,8 @@ snapshots:
   parse-ms@4.0.0: {}
 
   parseurl@1.3.3: {}
+
+  patchright-core@1.62.2: {}
 
   path-browserify@1.0.1: {}
 

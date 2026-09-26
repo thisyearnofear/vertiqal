@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
+import { DefaultChatTransport } from 'ai'
 import type { GearAgentUIMessage } from '@/lib/agent/gear-agent'
 import { briefToPrompt, type MovementBrief, type ShopperPrefs } from '@/lib/agent/brief'
 import type { Mood } from '@/lib/persona'
@@ -13,14 +13,9 @@ const transport = new DefaultChatTransport<GearAgentUIMessage>({ api: '/api/agen
 function moodOf(messages: GearAgentUIMessage[], status: string, hasError: boolean): Mood | null {
   if (hasError) return 'sad'
   const parts = messages.flatMap((m) => (m.role === 'assistant' ? m.parts : []))
-  const basket = parts.findLast((p) => p.type === 'tool-addToBasket')
-  if (basket?.type === 'tool-addToBasket') {
-    if (basket.state === 'approval-requested') return 'asking'
-    if (basket.state === 'output-error') return 'sad'
-    if (basket.state === 'output-available') return status === 'ready' ? 'pleased' : 'working'
-    if (basket.state === 'output-denied') return 'pleased'
+  if (parts.some((p) => p.type === 'tool-recommendProducts' && p.state === 'output-available')) {
+    return status === 'ready' ? 'asking' : 'pleased'
   }
-  if (parts.some((p) => p.type === 'tool-recommendProducts' && p.state === 'output-available')) return 'pleased'
   if (
     parts.some((p) =>
       ['tool-checkEvidence', 'tool-searchProducts', 'tool-checkCommunity', 'tool-checkAthletes'].includes(p.type),
@@ -34,10 +29,7 @@ function moodOf(messages: GearAgentUIMessage[], status: string, hasError: boolea
 export function useGearAgent() {
   const [sentBrief, setSentBrief] = useState<MovementBrief | null>(null)
   const [prefs, setPrefs] = useState<ShopperPrefs | null>(null)
-  const chat = useChat<GearAgentUIMessage>({
-    transport,
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-  })
+  const chat = useChat<GearAgentUIMessage>({ transport })
   const { sendMessage, setMessages, stop } = chat
 
   const send = useCallback(
