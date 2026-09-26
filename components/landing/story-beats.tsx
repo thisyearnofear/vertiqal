@@ -83,8 +83,8 @@ export function IntroCopy({ entrance, onHowItWorks }: { entrance: boolean; onHow
       </h1>
       <Rise delay={0.5} entrance={entrance}>
         <p className={BODY}>
-          Stop choosing running shoes by colourway. Film ten seconds of yourself and Forma, the vertiqal fitting agent,
-          finds the pair built for how you actually move.
+          Stop choosing running or climbing shoes by colourway. Film yourself on the road or on the wall and Forma,
+          the vertiqal fitting agent, finds the pair built for how you actually move.
         </p>
       </Rise>
       <Rise delay={0.62} entrance={entrance} className="flex flex-wrap items-center gap-4">
@@ -105,8 +105,8 @@ export function IntroCopy({ entrance, onHowItWorks }: { entrance: boolean; onHow
 
 const PAINS = [
   'A twenty-second jog on a shop treadmill decides your next thousand kilometres.',
-  "Reviews describe someone else's stride, not yours.",
-  'The wrong fit shows up weeks later as sore shins or a rubbing heel, long after the return window.',
+  'Climbing shoes get sized down by guesswork, so you find out halfway up a route whether the downturn suits you.',
+  'The wrong fit shows up weeks later as sore shins or crushed toes, long after the return window.',
 ]
 
 export function ProblemCopy() {
@@ -146,7 +146,7 @@ export function ScanCopy({ progress, phaseRef }: { progress: MotionValue<number>
 
   return (
     <>
-      <p className={EYEBROW}>The scan</p>
+      <p className={EYEBROW}>On the road</p>
       <h2 className={HEADLINE}>Ten seconds of you says more than any review.</h2>
       <p className={BODY}>
         Forma tracks 33 points on your body, entirely in your browser, and reads how you land, load and push off.
@@ -162,6 +162,37 @@ export function ScanCopy({ progress, phaseRef }: { progress: MotionValue<number>
           Landing
         </span>
         <span className="sr-only">{'. Example readout from a sample stride.'}</span>
+      </p>
+    </>
+  )
+}
+
+export function ClimbCopy({ progress, phaseRef }: { progress: MotionValue<number>; phaseRef: RefObject<HTMLSpanElement | null> }) {
+  const range = [BEATS.climb[0] + 0.02, BEATS.climb[0] + 0.16]
+  const quiet = useTransform(progress, range, [0, 92], { clamp: true })
+  const hips = useTransform(progress, range, [0, 34], { clamp: true })
+  const edge = useTransform(progress, range, [0, 13], { clamp: true })
+  const round = (v: number) => Math.round(v)
+
+  return (
+    <>
+      <p className={EYEBROW}>On the wall</p>
+      <h2 className={HEADLINE}>Every foot placement tells Forma how hard you push your shoes.</h2>
+      <p className={BODY}>
+        Film one short climb. Forma counts clean placements against readjusts, watches how close your hips stay to the
+        wall and how you stand on edges, then picks the downturn, stiffness and size to match.
+      </p>
+      <dl className="grid max-w-lg grid-cols-3 gap-4 border-t border-stage-ink/15 pt-5">
+        <Metric label="Quiet feet" value={useTransform(quiet, round)} unit="%" />
+        <Metric label="Hips to wall" value={useTransform(hips, round)} unit="cm" />
+        <Metric label="Edging" value={useTransform(edge, round)} unit="°" />
+      </dl>
+      <p className="font-mono text-xl uppercase leading-none tracking-[0.14em] text-stage-muted">
+        {'Move · '}
+        <span ref={phaseRef} className="text-stage-foreground">
+          Reaching
+        </span>
+        <span className="sr-only">{'. Example readout from a sample climb.'}</span>
       </p>
     </>
   )

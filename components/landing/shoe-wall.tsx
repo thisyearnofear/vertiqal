@@ -20,6 +20,7 @@ const WALL: Record<BeatName, { opacity: number; z: number; speed: number; focus:
   intro: { opacity: 0.42, z: -1.4, speed: 0.16, focus: 0 },
   problem: { opacity: 0.95, z: 0.5, speed: 0.5, focus: 0 },
   scan: { opacity: 0.05, z: -9, speed: 0.12, focus: 0 },
+  climb: { opacity: 0.05, z: -9, speed: 0.12, focus: 0 },
   match: { opacity: 0.1, z: -2.5, speed: 0, focus: 1 },
 }
 
