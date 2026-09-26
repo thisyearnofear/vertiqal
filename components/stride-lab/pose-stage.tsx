@@ -5,7 +5,10 @@ import { SPORTS, type MovementSnapshot, type MovementTracker, type Sport } from 
 import { captureHero, heroScore, type HeroFrame } from '@/lib/hero/frame'
 import type { Pose, PoseSession } from '@/lib/pose/types'
 import { cn } from '@/lib/utils'
+import { attractClimb } from './attract-climber'
 import { attractPose } from './attract-runner'
+
+const CLIMB_MOVE_SEC = 0.9
 import { drawOverlay, readOverlayTheme, videoContentRect, type OverlayTheme } from './draw-overlay'
 
 export type EngineState = 'loading' | 'ready' | 'error'
@@ -201,7 +204,7 @@ export function PoseStage({
 
   // Attract mode: like an arcade cabinet, the idle monitor demonstrates what it watches for.
   useEffect(() => {
-    if (!idle || sport !== 'running') return
+    if (!idle) return
     const canvas = canvasRef.current
     const container = containerRef.current
     const ctx = canvas?.getContext('2d')
@@ -217,6 +220,35 @@ export function PoseStage({
       const t = still ? 0.2 : (now - start) / 1000
       const groundY = 0.86
       ctx.clearRect(0, 0, w, h)
+      if (sport === 'climbing') {
+        const climb = attractClimb(t / CLIMB_MOVE_SEC, {
+          centerX: w < 640 ? 0.74 : 0.7,
+          height: w < 640 ? 0.5 : 0.62,
+          anchorY: 0.52,
+          aspect: h / w,
+        })
+        ctx.save()
+        ctx.strokeStyle = theme.bone
+        ctx.globalAlpha = 0.35
+        ctx.lineWidth = 2
+        ctx.setLineDash([10, 14])
+        ctx.beginPath()
+        ctx.moveTo(climb.wallX * w, 0)
+        ctx.lineTo(climb.wallX * w, h)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.fillStyle = theme.bone
+        for (const hold of climb.holds) {
+          ctx.globalAlpha = hold.held ? 0.8 : 0.3
+          ctx.beginPath()
+          ctx.arc(hold.x * w - 4, hold.y * h, hold.kind === 'hand' ? 6 : 5, Math.PI / 2, (Math.PI * 3) / 2)
+          ctx.fill()
+        }
+        ctx.restore()
+        drawOverlay(ctx, { x: 0, y: 0, w, h }, climb.pose, null, theme)
+        if (!still) frame = requestAnimationFrame(draw)
+        return
+      }
       ctx.save()
       ctx.strokeStyle = theme.bone
       ctx.globalAlpha = 0.35
@@ -282,7 +314,7 @@ export function PoseStage({
               <BootLine index={2}>{'FORMA UNIT ........ ONLINE'}</BootLine>
             </div>
           </div>
-          <div className={cn('flex flex-col items-start gap-3', sport === 'running' ? 'w-3/5 md:w-1/2' : 'max-w-lg')}>
+          <div className={'flex w-3/5 flex-col items-start gap-3 md:w-1/2'}>
             <p className="text-2xl leading-none phosphor md:text-4xl">
               NO SIGNAL
               <span className="ml-2 inline-block animate-blink" aria-hidden>

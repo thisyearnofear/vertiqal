@@ -14,7 +14,8 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { BEATS, HERO_SHOE, beatAt, type BeatName } from './story'
-import { IntroCopy, MatchCopy, ProblemCopy, ScanCopy, TopBar } from './story-beats'
+import { ClimbScan } from './climb-scan'
+import { ClimbCopy, IntroCopy, MatchCopy, ProblemCopy, ScanCopy, TopBar } from './story-beats'
 import { StrideScan } from './stride-scan'
 
 const ShoeWall = dynamic(() => import('./shoe-wall').then((m) => m.ShoeWall), { ssr: false })
@@ -22,7 +23,8 @@ const ShoeWall = dynamic(() => import('./shoe-wall').then((m) => m.ShoeWall), { 
 const EASE = [0.2, 0.8, 0.2, 1] as const
 const RAIL: { beat: Exclude<BeatName, 'intro'>; label: string }[] = [
   { beat: 'problem', label: 'Problem' },
-  { beat: 'scan', label: 'Scan' },
+  { beat: 'scan', label: 'Run' },
+  { beat: 'climb', label: 'Climb' },
   { beat: 'match', label: 'Match' },
 ]
 
@@ -66,6 +68,7 @@ function PinnedStory() {
   const sectionRef = useRef<HTMLElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const phaseRef = useRef<HTMLSpanElement>(null)
+  const climbPhaseRef = useRef<HTMLSpanElement>(null)
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start start', 'end end'] })
   const [beat, setBeat] = useState<BeatName>('intro')
   const [onScreen, setOnScreen] = useState(true)
@@ -88,6 +91,12 @@ function PinnedStory() {
 
   const [scanStart, scanEnd] = BEATS.scan
   const scanOpacity = useTransform(scrollYProgress, [scanStart - 0.03, scanStart + 0.02, scanEnd - 0.03, scanEnd + 0.01], [0, 1, 1, 0])
+  const [climbStart, climbEnd] = BEATS.climb
+  const climbOpacity = useTransform(
+    scrollYProgress,
+    [climbStart - 0.01, climbStart + 0.03, climbEnd - 0.03, climbEnd + 0.01],
+    [0, 1, 1, 0],
+  )
 
   const goTo = (target: BeatName) => {
     const section = sectionRef.current
@@ -101,17 +110,21 @@ function PinnedStory() {
     intro: <IntroCopy entrance={!introPlayed} onHowItWorks={() => goTo('problem')} />,
     problem: <ProblemCopy />,
     scan: <ScanCopy progress={scrollYProgress} phaseRef={phaseRef} />,
+    climb: <ClimbCopy progress={scrollYProgress} phaseRef={climbPhaseRef} />,
     match: <MatchCopy />,
   }
 
   return (
-    <section ref={sectionRef} aria-label="How vertiqal works" className="relative h-[520svh] bg-stage">
+    <section ref={sectionRef} aria-label="How vertiqal works" className="relative h-[620svh] bg-stage">
       <div ref={stageRef} className="sticky top-0 h-svh overflow-hidden">
         <div className="absolute inset-0" aria-hidden>
           <ShoeWall progress={scrollYProgress} active={onScreen} eventSource={stageRef} />
         </div>
         <motion.div className="absolute inset-0" style={{ opacity: scanOpacity }} aria-hidden>
           <StrideScan progress={scrollYProgress} phaseRef={phaseRef} />
+        </motion.div>
+        <motion.div className="absolute inset-0" style={{ opacity: climbOpacity }} aria-hidden>
+          <ClimbScan progress={scrollYProgress} phaseRef={climbPhaseRef} />
         </motion.div>
         <div
           className="pointer-events-none absolute inset-0 bg-linear-to-t from-stage from-35% via-stage/80 to-transparent md:bg-linear-to-r md:from-25% md:via-stage/80 md:via-50% md:to-75%"
@@ -159,6 +172,8 @@ function PinnedStory() {
 function StaticStory() {
   const progress = useMotionValue(BEATS.scan[0] + 0.2)
   const phaseRef = useRef<HTMLSpanElement>(null)
+  const climbProgress = useMotionValue(BEATS.climb[0] + 0.19)
+  const climbPhaseRef = useRef<HTMLSpanElement>(null)
   const block = 'mx-auto flex max-w-6xl flex-col gap-10 px-6 py-20 md:flex-row md:items-center md:px-10'
 
   return (
@@ -180,6 +195,14 @@ function StaticStory() {
         </div>
         <div className="aspect-square w-full max-w-md" aria-hidden>
           <StrideScan progress={progress} phaseRef={phaseRef} framing="box" />
+        </div>
+      </div>
+      <div className={block}>
+        <div className="flex max-w-xl flex-col gap-6">
+          <ClimbCopy progress={climbProgress} phaseRef={climbPhaseRef} />
+        </div>
+        <div className="aspect-square w-full max-w-md" aria-hidden>
+          <ClimbScan progress={climbProgress} phaseRef={climbPhaseRef} framing="box" />
         </div>
       </div>
       <div className={cn(block, 'pb-28')}>
