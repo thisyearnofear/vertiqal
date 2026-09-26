@@ -115,6 +115,7 @@ export function FormaConsole({
   tuning,
   tunerId,
   onToggleTuning,
+  line,
 }: {
   persona: Persona
   mood: Mood
@@ -122,8 +123,10 @@ export function FormaConsole({
   tuning: boolean
   tunerId: string
   onToggleTuning: () => void
+  /** Overrides the mood line, e.g. with the runner's own number when measurements lock. */
+  line?: string | null
 }) {
-  const speech = speechFor(persona.voice, mood, sport)
+  const speech = line ?? speechFor(persona.voice, mood, sport)
 
   return (
     <div className="flex items-center gap-4">

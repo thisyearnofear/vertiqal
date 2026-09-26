@@ -4,13 +4,19 @@ import { MIN_EVENTS, SPORTS, compareMetric, type MetricReading, type Readout } f
 const fmt = (value: number | null | undefined, digits = 0) =>
   value === null || value === undefined ? '--' : value.toFixed(digits)
 
-function Metric({ metric, baseline }: { metric: MetricReading; baseline?: MetricReading }) {
+function Metric({ metric, baseline, locked, index }: { metric: MetricReading; baseline?: MetricReading; locked: boolean; index: number }) {
   const comparison = compareMetric(metric, baseline)
   return (
     <div className="flex flex-col gap-1.5">
       <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground engraved">{metric.label}</dt>
       <dd className="screen flex items-baseline justify-between gap-1.5 rounded-lg px-3 py-1.5">
-        <span className="font-mono text-4xl leading-none tabular-nums phosphor">{fmt(metric.value)}</span>
+        <span
+          key={locked ? 'locked' : 'live'}
+          className={cn('inline-block font-mono text-4xl leading-none tabular-nums phosphor', locked && 'animate-roll-in')}
+          style={locked ? { animationDelay: `${index * 90}ms` } : undefined}
+        >
+          {fmt(metric.value)}
+        </span>
         <span className="font-mono text-lg leading-none opacity-70">{metric.unit}</span>
       </dd>
       {comparison ? (
@@ -47,8 +53,8 @@ export function GaitReadout({ readout, baseline }: { readout: Readout; baseline:
           </span>
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
-          {readout.metrics.map((metric) => (
-            <Metric key={metric.id} metric={metric} baseline={baseMetrics.get(metric.id)} />
+          {readout.metrics.map((metric, index) => (
+            <Metric key={metric.id} metric={metric} baseline={baseMetrics.get(metric.id)} locked={readout.ready} index={index} />
           ))}
         </dl>
       </section>
