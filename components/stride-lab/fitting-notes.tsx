@@ -1,8 +1,8 @@
 'use client'
 
-import { useId, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import useSWRMutation from 'swr/mutation'
-import { Eye, ImageUp } from 'lucide-react'
+import { ChevronDown, Eye, ImageUp } from 'lucide-react'
 import { briefFromReadout, briefLine } from '@/lib/agent/brief'
 import {
   FOOT_WIDTHS,
@@ -88,6 +88,7 @@ export function FittingNotes({ sport, readout, keyframes, value, onChange }: Fit
   const sole = useSWRMutation('/api/vision', analyse)
   const frames = useSWRMutation('/api/vision#frames', (_key: string, arg: { arg: VisionRequest }) => analyse('/api/vision', arg))
   const set = (patch: Partial<FittingNotesState>) => onChange({ ...value, ...patch })
+  const [open, setOpen] = useState(false)
 
   const uploadSole = async (file: File) => {
     const image = await downscale(file)
@@ -105,21 +106,35 @@ export function FittingNotes({ sport, readout, keyframes, value, onChange }: Fit
 
   return (
     <section aria-labelledby={`${id}-heading`} className="housing flex flex-col gap-6 rounded-2xl p-4 md:p-6">
-      <div className="flex flex-col gap-1.5 px-1">
-        <p className={cn(LABEL, 'flex items-center gap-2')}>
-          <span className="led" data-state={value.sole || value.frames ? 'on' : 'off'} aria-hidden />
-          CH-3 · Fitting notes
-        </p>
-        <h2 id={`${id}-heading`} className="text-balance text-xl font-semibold text-foreground">
-          {'What the camera can’t measure'}
-        </h2>
-        <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
-          Everything here is optional and goes to Forma with your measurements. Photos and stills are only sent to Grok
-          when you press a button, and are not stored.
-        </p>
+      <div className="flex flex-col gap-4 px-1 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-1.5">
+          <p className={cn(LABEL, 'flex items-center gap-2')}>
+            <span className="led" data-state={value.sole || value.frames ? 'on' : 'off'} aria-hidden />
+            CH-2 · Fitting notes · optional
+          </p>
+          <h2 id={`${id}-heading`} className="text-balance text-xl font-semibold text-foreground">
+            {'What the camera can’t measure'}
+          </h2>
+          <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
+            {open
+              ? 'Everything here goes to Forma with your measurements. Photos and stills are only sent to Grok when you press a button, and are not stored.'
+              : 'Old injuries, terrain, a photo of your worn soles. Skip it, or add it to sharpen the fit.'}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="lg"
+          className="h-10 w-fit px-4"
+          aria-expanded={open}
+          aria-controls={`${id}-body`}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? 'Hide notes' : 'Add notes'}
+          <ChevronDown aria-hidden className={cn('transition-transform', open && 'rotate-180')} />
+        </Button>
       </div>
 
-      <div className="grid gap-8 px-1 md:grid-cols-3">
+      <div id={`${id}-body`} hidden={!open} className="grid gap-8 px-1 md:grid-cols-3">
         <Column title="About you">
           <div className="flex flex-col gap-1.5">
             <label htmlFor={`${id}-goal`} className={LABEL}>

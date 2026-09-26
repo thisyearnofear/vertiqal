@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import { RotateCcw, ScanLine } from 'lucide-react'
 import { SAMPLE_BRIEFS, briefFromReadout, briefLine, type MovementBrief, type ShopperPrefs } from '@/lib/agent/brief'
 import { MIN_EVENTS, SPORTS, type Readout, type Sport } from '@/lib/metrics/readout'
@@ -59,9 +59,19 @@ interface AgentPanelProps {
   /** Autopilot waits until a live capture has finished. */
   capturing: boolean
   context: string[]
+  /** A hero frame exists, so the results can point to it as the finale. */
+  heroReady: boolean
+  ref?: Ref<AgentPanelHandle>
 }
 
-export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, context }: AgentPanelProps) {
+export interface AgentPanelHandle {
+  runSample: () => void
+}
+
+/** Lets "measurements locked" land before Forma starts talking about shopping. */
+const LOCK_BEAT_MS = 1600
+
+export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, context, heroReady, ref }: AgentPanelProps) {
   const [size, setSize] = useState('UK 9')
   const [budget, setBudget] = useState('£160')
   const [autopilot, setAutopilot] = useState(true)
@@ -102,8 +112,19 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
     run(sentBrief, deeper)
   }
 
-  // Autopilot: the moment enough movement is measured, Forma hands the brief to Grok on its own.
+  useImperativeHandle(ref, () => ({
+    runSample: () => {
+      if (!busy) run(SAMPLE_BRIEFS[sport])
+    },
+  }))
+
+  // Autopilot: once enough movement is measured (and the lock has had a beat), Forma hands the brief to Grok.
   const firedFor = useRef<Readout['sport'] | null>(null)
+  const fireAutopilot = useEffectEvent(() => {
+    if (firedFor.current === readout.sport) return
+    firedFor.current = readout.sport
+    run(briefFromReadout(readout))
+  })
   useEffect(() => {
     if (!readout.ready) {
       // A fresh clip re-arms autopilot, unless results are already on screen (a proof run).
@@ -111,10 +132,11 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
       return
     }
     if (!autopilot || sentBrief || busy || capturing) return
-    if (firedFor.current === readout.sport) return
-    firedFor.current = readout.sport
-    send(briefFromReadout(readout), { size, budget, heightCm, voice, depth, notes: context })
-  }, [autopilot, readout, sentBrief, busy, capturing, send, size, budget, heightCm, voice, depth, context])
+    const timer = setTimeout(fireAutopilot, LOCK_BEAT_MS)
+    return () => clearTimeout(timer)
+  }, [autopilot, readout.ready, sentBrief, busy, capturing])
+
+  const engaged = readout.events > 0 || Boolean(sentBrief)
 
   const startOver = () => {
     firedFor.current = readout.ready ? readout.sport : null
@@ -129,7 +151,7 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
         <div className="flex flex-col gap-1.5">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
             <span className="led" data-state={busy ? 'busy' : sentBrief ? 'on' : 'off'} aria-hidden />
-            CH-2 · Forma procurement
+            CH-3 · Forma procurement
           </p>
           <h2 id="agent-heading" className="text-balance text-xl font-semibold text-foreground">
             {sport === 'running' ? 'From stride to shopping basket' : 'From wall to shopping basket'}
@@ -140,6 +162,7 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
           </p>
         </div>
 
+        {engaged && (
         <div className="flex flex-wrap items-end gap-4">
           <Field id="shoe-size" label="Street size" value={size} onChange={setSize} />
           <Field id="budget" label="Budget" value={budget} onChange={setBudget} />
@@ -171,9 +194,10 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
             </Button>
           )}
         </div>
+        )}
       </div>
 
-      <DepthDial value={depth} onChange={setDepth} disabled={busy} />
+      {engaged && <DepthDial value={depth} onChange={setDepth} disabled={busy} />}
 
       <div className="screen min-h-56 p-5 font-mono md:p-8" aria-live="polite">
         {!sentBrief ? (
@@ -222,6 +246,14 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
                 <PassportCard passport={passport} />
                 <WhatsAppHandoff fitting={fitting} />
               </div>
+            )}
+            {outputs && heroReady && !busy && (
+              <a
+                href="#hero-frame"
+                className="w-fit rounded-sm px-1 text-xl underline decoration-dotted underline-offset-4 phosphor hover:bg-stage-foreground hover:text-stage focus-visible:bg-stage-foreground focus-visible:text-stage focus-visible:outline-none"
+              >
+                {'[ NOW SEE YOURSELF IN THEM ↓ ]'}
+              </a>
             )}
             {status === 'submitted' && (
               <p className="text-lg opacity-80">
