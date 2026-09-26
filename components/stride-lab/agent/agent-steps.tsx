@@ -122,6 +122,36 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
       )
     }
 
+    case 'tool-checkCommunity': {
+      const output = part.state === 'output-available' ? part.output : null
+      const models = part.input?.models?.filter((m): m is string => Boolean(m))
+      return (
+        <Step
+          key={key}
+          title={output ? `Community check · ${output.results.length} threads` : 'Reading what riders say'}
+          detail={models?.length ? models.join(' · ') : undefined}
+          state={isPending(part.state) ? 'pending' : part.state === 'output-error' ? 'halt' : 'done'}
+        >
+          {output && output.results.length > 0 && (
+            <ul className="flex flex-col gap-2" aria-label="Community sources">
+              {output.results.slice(0, 3).map((r) => (
+                <li key={r.url} className="flex flex-col gap-0.5">
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-fit text-lg leading-tight underline decoration-dotted underline-offset-4 opacity-80 hover:text-primary"
+                  >
+                    {`↳ ${hostOf(r.url)} · ${r.title}`}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Step>
+      )
+    }
+
     case 'tool-recommendProducts': {
       const picks = part.state === 'output-available' ? part.output.picks : null
       return (
@@ -151,6 +181,12 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
                   <p className="text-pretty text-2xl leading-tight phosphor">{p.name}</p>
                   <p className="text-xl leading-none tabular-nums opacity-90">{p.price}</p>
                   <p className="text-pretty font-sans text-sm leading-relaxed opacity-80">{p.why}</p>
+                  {p.community && (
+                    <p className="border-t border-dashed border-stage-foreground/25 pt-2 text-pretty font-sans text-sm leading-relaxed opacity-70">
+                      <span className="font-mono text-base uppercase opacity-80">{'Riders say: '}</span>
+                      {p.community}
+                    </p>
+                  )}
                   <a
                     href={p.url}
                     target="_blank"

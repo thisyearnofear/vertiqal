@@ -21,7 +21,7 @@ function moodOf(messages: GearAgentUIMessage[], status: string, hasError: boolea
     if (basket.state === 'output-denied') return 'pleased'
   }
   if (parts.some((p) => p.type === 'tool-recommendProducts' && p.state === 'output-available')) return 'pleased'
-  if (parts.some((p) => p.type === 'tool-searchProducts')) return 'searching'
+  if (parts.some((p) => p.type === 'tool-searchProducts' || p.type === 'tool-checkCommunity')) return 'searching'
   if (status === 'submitted' || status === 'streaming') return 'thinking'
   return null
 }

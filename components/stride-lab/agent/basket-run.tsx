@@ -54,9 +54,20 @@ export function BasketRun({ runId, productName, size }: { runId: string; product
 
       {data?.liveUrl && !done && (
         <div className="overflow-hidden rounded-md border border-stage-foreground/30">
-          <p className="border-b border-stage-foreground/30 px-3 py-1 text-lg leading-none opacity-70">
-            {'LIVE FEED · REMOTE BROWSER'}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stage-foreground/30 px-3 py-1.5 text-lg leading-none">
+            <p className="flex items-center gap-2 phosphor">
+              <span className="led" data-state="busy" aria-hidden />
+              {'LIVE FEED · CLEAN UK BROWSER · NO ACCOUNT, NO CARD'}
+            </p>
+            <a
+              href={data.liveUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-dotted underline-offset-4 opacity-80 hover:text-primary"
+            >
+              {'OPEN FULL SCREEN'}
+            </a>
+          </div>
           <iframe
             src={data.liveUrl}
             title="Live view of the browser agent"
