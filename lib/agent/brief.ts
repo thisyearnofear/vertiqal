@@ -1,5 +1,6 @@
 import type { Readout, Sport } from '@/lib/metrics/readout'
 import { VOICE_PROFILE, type Voice } from '@/lib/persona'
+import type { Depth } from './depth'
 
 export interface BriefMetric {
   label: string
@@ -19,6 +20,7 @@ export interface ShopperPrefs {
   budget: string
   heightCm: number
   voice: Voice
+  depth: Depth
   /** Intake answers and Grok vision findings from the fitting notes panel. */
   notes?: string[]
 }
@@ -92,6 +94,7 @@ export function briefToPrompt(brief: MovementBrief, prefs: ShopperPrefs) {
     ...(prefs.notes?.length ? ['About me (weigh these alongside the measurements):', ...prefs.notes.map((n) => `- ${n}`), ''] : []),
     `My street shoe size: ${prefs.size}. Budget: ${prefs.budget}. I'm in the UK.`,
     `Voice: speak to me as ${VOICE_PROFILE[prefs.voice].prompt}.`,
+    `Depth: ${prefs.depth}`,
     `Find me the right ${brief.sport === 'running' ? 'running shoe' : 'climbing shoe'}.`,
   ].join('\n')
 }

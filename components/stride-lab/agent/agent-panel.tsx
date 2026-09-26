@@ -9,7 +9,9 @@ import type { Passport } from '@/lib/passport/schema'
 import type { Voice } from '@/lib/persona'
 import { Button } from '@/components/ui/button'
 import type { Fitting } from '@/lib/wassist/fitting'
+import { DEPTHS, addedLayers, nextDepth, type Depth } from '@/lib/agent/depth'
 import { AgentSteps } from './agent-steps'
+import { DepthDial } from './depth-dial'
 import { PassportCard, usePassport } from './passport-card'
 import type { GearAgent } from './use-gear-agent'
 import { WhatsAppHandoff } from './whatsapp-handoff'
@@ -72,6 +74,7 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
   const [size, setSize] = useState('UK 9')
   const [budget, setBudget] = useState('£160')
   const [autopilot, setAutopilot] = useState(true)
+  const [depth, setDepth] = useState<Depth>('considered')
   const { messages, addToolApprovalResponse, status, error, sentBrief, prefs, send, reset, busy } = agent
 
   const outputs = useMemo(() => outputsOf(messages), [messages])
@@ -97,7 +100,16 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
     [sentBrief, outputs, prefs, issued?.url],
   )
 
-  const run = (brief: MovementBrief) => send(brief, { size, budget, heightCm, voice, notes: context })
+  const run = (brief: MovementBrief, runDepth: Depth = depth) =>
+    send(brief, { size, budget, heightCm, voice, depth: runDepth, notes: context })
+
+  const ranDepth = prefs?.depth ?? depth
+  const deeper = nextDepth(ranDepth)
+  const goDeeper = () => {
+    if (!sentBrief || !deeper) return
+    setDepth(deeper)
+    run(sentBrief, deeper)
+  }
 
   // Autopilot: the moment enough movement is measured, Forma hands the brief to Grok on its own.
   const firedFor = useRef<Readout['sport'] | null>(null)
@@ -110,8 +122,8 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
     if (!autopilot || sentBrief || busy || capturing) return
     if (firedFor.current === readout.sport) return
     firedFor.current = readout.sport
-    send(briefFromReadout(readout), { size, budget, heightCm, voice, notes: context })
-  }, [autopilot, readout, sentBrief, busy, capturing, send, size, budget, heightCm, voice, context])
+    send(briefFromReadout(readout), { size, budget, heightCm, voice, depth, notes: context })
+  }, [autopilot, readout, sentBrief, busy, capturing, send, size, budget, heightCm, voice, depth, context])
 
   const startOver = () => {
     firedFor.current = readout.ready ? readout.sport : null
@@ -170,6 +182,8 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
         </div>
       </div>
 
+      <DepthDial value={depth} onChange={setDepth} disabled={busy} />
+
       <div className="screen min-h-56 p-5 font-mono md:p-8" aria-live="polite">
         {!sentBrief ? (
           <div className="flex flex-col gap-3 text-xl leading-snug">
@@ -196,10 +210,22 @@ export function AgentPanel({ agent, readout, sport, heightCm, voice, capturing, 
         ) : (
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-1 border-b border-dashed border-stage-foreground/30 pb-4 text-lg leading-snug">
-              <p className="phosphor">{`> ${sentBrief.sport.toUpperCase()} BRIEF TRANSMITTED`}</p>
+              <p className="phosphor">{`> ${sentBrief.sport.toUpperCase()} BRIEF TRANSMITTED · DEPTH ${DEPTHS[ranDepth].label.toUpperCase()}`}</p>
               <p className="opacity-70">{`  ${briefLine(sentBrief)}`}</p>
             </div>
             <AgentSteps messages={messages} onApproval={addToolApprovalResponse} />
+            {outputs && deeper && !busy && (
+              <div className="flex flex-col gap-2 border-y border-dashed border-stage-foreground/30 py-4 text-lg leading-snug">
+                <p className="opacity-70">{`  WANT MORE CONTEXT? ${DEPTHS[deeper].label.toUpperCase()} ADDS ${addedLayers(ranDepth, deeper).join(' + ').toUpperCase()} (~${DEPTHS[deeper].seconds}S).`}</p>
+                <button
+                  type="button"
+                  onClick={goDeeper}
+                  className="w-fit rounded-sm px-1 underline decoration-dotted underline-offset-4 phosphor hover:bg-stage-foreground hover:text-stage focus-visible:bg-stage-foreground focus-visible:text-stage focus-visible:outline-none"
+                >
+                  {`[ GO DEEPER: RE-RUN AS ${DEPTHS[deeper].label.toUpperCase()} ]`}
+                </button>
+              </div>
+            )}
             {passport && fitting && (
               <div className="grid gap-4 xl:grid-cols-2">
                 <PassportCard passport={passport} />
