@@ -1,3 +1,4 @@
+import { readMember, writeMember } from '@/lib/member/cookie'
 import { chatUrlFor, ensureAgent, findConversation, sendFitting } from '@/lib/wassist/client'
 import { handoffSchema, type HandoffResult } from '@/lib/wassist/fitting'
 
@@ -24,13 +25,33 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Open Forma on its public URL so WhatsApp can reach it.' }, { status: 400 })
   }
 
+  // A returning shopper can send without retyping their number; it never leaves the server.
+  const member = await readMember()
+  const phone = parsed.data.phone ?? member?.phone
+  if (!phone) return Response.json({ error: 'Enter your WhatsApp number' }, { status: 400 })
+
   try {
     const agent = await ensureAgent(origin)
-    const conversation = await findConversation(parsed.data.phone)
+    const conversation = await findConversation(phone)
     if (!conversation) {
       return Response.json({ status: 'awaiting-link', connectUrl: agent.connectUrl } satisfies HandoffResult)
     }
-    const messages = await sendFitting(conversation.id, parsed.data.fitting)
+    const { fitting } = parsed.data
+    const messages = await sendFitting(conversation.id, fitting)
+    const previous = member?.phone === phone ? member.last : null
+    await writeMember({
+      phone,
+      last: fitting.choice
+        ? {
+            sport: fitting.sport,
+            name: fitting.choice.name,
+            retailer: fitting.choice.retailer,
+            price: fitting.choice.price,
+            size: fitting.choice.size,
+            at: new Date().toISOString(),
+          }
+        : previous,
+    })
     return Response.json({ status: 'sent', chatUrl: chatUrlFor(agent.connectUrl), messages } satisfies HandoffResult)
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 502 })

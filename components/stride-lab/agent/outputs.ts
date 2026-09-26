@@ -10,3 +10,11 @@ export function outputsOf(messages: GearAgentUIMessage[]) {
 }
 
 export type AgentOutputs = NonNullable<ReturnType<typeof outputsOf>>
+export type ShoePick = AgentOutputs['picks'][number]
+
+/** Forma's closing line after the shortlist, in the shopper's chosen voice. */
+export function closingLineOf(messages: GearAgentUIMessage[]) {
+  const last = messages.findLast((m) => m.role === 'assistant')
+  const text = last?.parts.findLast((p) => p.type === 'text')
+  return text?.type === 'text' ? text.text.trim() : ''
+}

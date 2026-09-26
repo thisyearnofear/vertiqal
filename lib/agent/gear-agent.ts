@@ -1,7 +1,6 @@
 import 'server-only'
 import { ToolLoopAgent, tool, type InferAgentUIMessage, type ModelMessage } from 'ai'
 import { z } from 'zod'
-import { startBasketRun } from './browser-use'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'
 import { searchCommunity, searchOpen, searchResearch, searchWeb } from './tavily'
@@ -45,8 +44,9 @@ Keep any text between tool calls to one short sentence, in the requested voice.
 - checkCommunity (considered and deep): name the 3–5 strongest candidates. Drop or demote a candidate if riders consistently report a problem relevant to this shopper.
 - checkAthletes (deep): the same top 3 candidates. Call it in the same step as checkCommunity when both are offered.
 - recommendProducts: exactly 3 picks, each a different model, best fit first. Only use URLs from searchProducts results; never invent or edit URLs. Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
-- addToBasket: the single best pick, in the right size for that sport. This asks the shopper for approval first.
-- Finish with one or two sentences. If addToBasket returned a runId, say a browser agent is now checking stock and filling the basket. If it was denied, acknowledge it and do not retry.
+- Finish with one short sentence, in the requested voice, inviting the shopper to choose one. Forma checks their size is in stock once they choose, so never send them off to a retailer yourself.
+
+If the brief mentions a previous fitting or things they told Forma on WhatsApp, treat this as a returning customer: build on what they chose last time and what they said since (e.g. if they reported a problem with that shoe, steer away from it and say why).
 
 If the brief includes an "About me" section (goal, surface, width, niggles, Grok vision findings from sole photos or video stills), let it shape the profile and cite it as evidence where relevant.
 
@@ -59,7 +59,6 @@ type ToolName =
   | 'checkCommunity'
   | 'checkAthletes'
   | 'recommendProducts'
-  | 'addToBasket'
 
 function promptTextOf(messages: ModelMessage[]) {
   const first = messages.find((m) => m.role === 'user')
@@ -140,18 +139,7 @@ export const gearAgent = new ToolLoopAgent({
       inputSchema: z.object({ picks: z.array(pick).length(3) }),
       execute: async ({ picks }) => ({ picks }),
     }),
-    addToBasket: tool({
-      description:
-        'Send a browser agent to the retailer to check the size is in stock and add one to the basket. Requires shopper approval. Never checks out.',
-      inputSchema: z.object({
-        productName: z.string(),
-        productUrl: z.string().url(),
-        size: z.string().describe('Size label as the retailer shows it, e.g. "UK 9"'),
-      }),
-      execute: async (input) => ({ ...input, ...(await startBasketRun(input)) }),
-    }),
   },
-  toolApproval: { addToBasket: 'user-approval' },
   // Derive the phase from the conversation (not stepNumber) so it survives the approval round-trip.
   prepareStep: ({ messages }) => {
     const depth = depthFromPrompt(promptTextOf(messages))
@@ -177,7 +165,6 @@ export const gearAgent = new ToolLoopAgent({
       if (context.length > 1) return { activeTools: context, toolChoice: 'required' as const }
       return only('recommendProducts')
     }
-    if (!count('addToBasket')) return only('addToBasket')
     return { activeTools: [], toolChoice: 'none' as const }
   },
 })
