@@ -13,9 +13,9 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 1. **Measures on-device.** MediaPipe pose tracking runs in the browser on a phone clip or live camera: cadence, foot strike and overstride for running; reach, hip position and precision for climbing. Video never leaves the device unless you opt in.
 2. **Turns movement into fit requirements.** A gear agent (Grok via Vercel AI Gateway) builds a movement profile, then works through visible steps: research, live retailer stock, rider reports and athletes who wear the shoe. Each claim carries a citation checked against the publisher.
 3. **You choose speed versus depth.** A Depth dial (Quick, Considered, Deep) decides how much research the agent does before it commits.
-4. **Asks before acting.** Basket checks on real product pages (Browser Use) run only after you approve, and always stop before checkout.
+4. **Asks before acting.** Nothing touches a retailer until you ask. **Check my size** opens the product page in a stealth UK browser (Solari), and Grok reads the size controls, structured offers and a screenshot to decide whether your size is in stock. Each verdict comes with the screenshot and a session replay as proof. The older Browser Use basket check still exists as an agent tool. Both stop before checkout.
 5. **Carries your fit elsewhere.** A signed **Fit Passport** lets any other shopping agent check a shoe against your profile, over REST or MCP.
-6. **Hands off to WhatsApp.** Continue the fitting with a human-style assistant via Wassist.
+6. **Hands off to WhatsApp and remembers you.** Your fitting and chosen pick land in WhatsApp through Wassist. A Grok reply agent answers follow-ups in your chosen Forma voice and can run live product searches. Once you've linked WhatsApp, a signed cookie remembers your number and last pick. The app then reads what you've said on WhatsApp since, so your next scan builds on it.
 7. **Lets you see yourself.** A **hero frame** card grades your best stride or reach into a shareable image, and the opt-in **See yourself in them** shows you wearing the top pick (FLUX Kontext), clearly labelled as an AI impression, not a fit check.
 
 ## Built with
@@ -26,8 +26,9 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 | MediaPipe Pose | On-device keypoints, every frame. |
 | VLM Run (Orion) | Optional hosted keypoint refinement on sampled frames of uploaded clips. |
 | Tavily | Live retailer, research, community and athlete search. |
-| Browser Use | User-approved basket availability checks. |
-| Wassist | WhatsApp handoff and webhook. |
+| Solari | Stealth browser with UK residential egress for size and stock checks, with screenshot and session replay receipts. |
+| Browser Use | User-approved basket availability checks (agent tool). |
+| Wassist | WhatsApp handoff (Bring Your Own Agent), reply webhook and the conversation transcript that serves as shopper memory. |
 | Next.js 16 + AI SDK | App, route handlers, tool-calling agent. |
 
 ## Run locally
@@ -51,10 +52,11 @@ pnpm build
 | `components/forma/` | Forma avatar and console personalisation. |
 | `lib/pose/` | Pose provider contract; MediaPipe and VLM Run providers. |
 | `lib/metrics/` | Sport-specific measurements and readouts. |
-| `lib/agent/` | Gear agent, tools, evidence checks, Tavily and Browser Use clients. |
+| `lib/agent/` | Gear agent, tools, evidence checks, and the Tavily, Browser Use and Solari clients. |
 | `lib/hero/` | Hero frame scoring and capture. |
 | `lib/passport/` | Passport schema, signing and fit checks. |
-| `lib/wassist/` | WhatsApp client and fitting handoff. |
+| `lib/member/` | Signed member cookie: linked WhatsApp number and last pick. |
+| `lib/wassist/` | WhatsApp client, fitting messages, and the reply agent. |
 
 Business rules live in `lib/`; components and routes stay thin. See [docs/architecture.md](docs/architecture.md) for the request flow and extension points.
 
@@ -66,8 +68,10 @@ Server-side only (Vercel **Vars** or an uncommitted `.env.local`). Never expose 
 | --- | --- | --- |
 | `TAVILY_API_KEY` | Live search tools | Agent skips live research and stock |
 | `BROWSER_USE_API_KEY` | Basket checks | Basket check unavailable |
-| `WASSIST_API_KEY` | WhatsApp handoff, webhook auth, passport signing fallback | Handoff hidden |
-| `PASSPORT_SECRET` | Dedicated passport signing secret (optional) | Falls back to `WASSIST_API_KEY` |
+| `SOLARI_API_KEY` | Stock checks and session replays | Check my size returns an error |
+| `WASSIST_API_KEY` | WhatsApp handoff, webhook auth, passport and member cookie signing fallback | Handoff hidden |
+| `PASSPORT_SECRET` | Dedicated signing secret for passports and the member cookie (optional) | Falls back to `WASSIST_API_KEY` |
+| `NEXT_PUBLIC_SAMPLE_CLIP` | URL of the one-click sample clip (optional, public) | Sample button hidden |
 | `VLMRUN_API_KEY` | VLM Run pose refinement | Provider falls back to MediaPipe only |
 
 AI Gateway authenticates automatically on Vercel; no key is needed.
