@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai'
 import { RotateCcw, ScanLine } from 'lucide-react'
@@ -8,9 +8,26 @@ import type { GearAgentUIMessage } from '@/lib/agent/gear-agent'
 import { SAMPLE_BRIEF, briefFromSnapshot, briefToPrompt, type GaitBrief } from '@/lib/agent/brief'
 import { MIN_STRIKES_FOR_SIGNALS, type GaitSnapshot } from '@/lib/metrics/gait'
 import { Button } from '@/components/ui/button'
+import type { Fitting } from '@/lib/wassist/fitting'
 import { AgentSteps } from './agent-steps'
+import { WhatsAppHandoff } from './whatsapp-handoff'
 
 const transport = new DefaultChatTransport<GearAgentUIMessage>({ api: '/api/agent' })
+
+function fittingFrom(messages: GearAgentUIMessage[], brief: GaitBrief): Fitting | null {
+  const parts = messages.flatMap((m) => (m.role === 'assistant' ? m.parts : []))
+  const profile = parts.find((p) => p.type === 'tool-buildGearProfile' && p.state === 'output-available')
+  const shortlist = parts.find((p) => p.type === 'tool-recommendProducts' && p.state === 'output-available')
+  if (profile?.type !== 'tool-buildGearProfile' || profile.state !== 'output-available') return null
+  if (shortlist?.type !== 'tool-recommendProducts' || shortlist.state !== 'output-available') return null
+  return {
+    measurements: briefLine(brief).toLowerCase(),
+    summary: profile.output.summary,
+    category: profile.output.category,
+    requirements: profile.output.requirements.map(({ attribute, target }) => ({ attribute, target })),
+    picks: shortlist.output.picks,
+  }
+}
 
 function briefLine(brief: GaitBrief) {
   return [
@@ -62,6 +79,7 @@ export function AgentPanel({ snapshot, heightCm }: { snapshot: GaitSnapshot | nu
 
   const ready = (snapshot?.totalStrikes ?? 0) >= MIN_STRIKES_FOR_SIGNALS
   const busy = status === 'submitted' || status === 'streaming'
+  const fitting = useMemo(() => (sentBrief ? fittingFrom(messages, sentBrief) : null), [messages, sentBrief])
 
   const send = (brief: GaitBrief) => {
     setSentBrief(brief)
@@ -144,6 +162,7 @@ export function AgentPanel({ snapshot, heightCm }: { snapshot: GaitSnapshot | nu
               <p className="opacity-70">{`  ${briefLine(sentBrief)}`}</p>
             </div>
             <AgentSteps messages={messages} onApproval={addToolApprovalResponse} />
+            {fitting && <WhatsAppHandoff fitting={fitting} />}
             {status === 'submitted' && (
               <p className="text-lg opacity-80">
                 {'> GROK IS THINKING '}
