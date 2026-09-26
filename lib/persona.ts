@@ -109,3 +109,17 @@ export const VOICE_PROFILE: Record<Voice, { label: string; tagline: string; prom
 export function speechFor(voice: Voice, mood: Mood, sport: Sport) {
   return VOICE_PROFILE[voice].lines[mood]({ events: SPORTS[sport].events, gear: SPORTS[sport].gear })
 }
+
+/** What Forma says the moment measurements lock: the runner's own number, not a generic line. */
+export function lockedLine(voice: Voice, metrics: { id: string; label: string; unit: string; value: number | null }[]) {
+  const lead = metrics.find((m) => m.value !== null)
+  if (!lead || lead.value === null) return null
+  const value = Math.round(lead.value)
+  const fact = lead.id === 'cadence' ? `${value} steps a minute` : `${lead.label.toLowerCase()} ${value} ${lead.unit}`
+  const lines: Record<Voice, string> = {
+    coach: `Got you. ${fact}.`,
+    lab: `Locked. ${fact.charAt(0).toUpperCase()}${fact.slice(1)}.`,
+    hype: `Got you! ${fact}!`,
+  }
+  return lines[voice]
+}

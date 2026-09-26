@@ -37,6 +37,10 @@
   --animate-blink: blink 1.1s steps(1) infinite;
   --animate-boot: boot 0.9s ease-out both;
   --animate-type-in: type-in 0.5s steps(24, end) both;
+  --animate-lock-banner: lock-banner 2.6s ease-out both;
+  --animate-lock-flash: lock-flash 0.8s ease-out both;
+  --animate-roll-in: roll-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pip: pip 0.35s ease-out both;
 }
 
 /*
@@ -202,12 +206,69 @@
   }
 }
 
+/* "Measurements locked": stamps in bright, holds, then gets out of the way. */
+@keyframes lock-banner {
+  0% {
+    opacity: 0;
+    transform: scale(1.14);
+    filter: brightness(2.2);
+  }
+  12% {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes lock-flash {
+  from {
+    opacity: 0.24;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Odometer-style settle for readout digits when measurements lock. */
+@keyframes roll-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6em);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes pip {
+  from {
+    transform: scaleY(0.2);
+    filter: brightness(2.5);
+  }
+  to {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .led[data-state='busy'] {
     animation: none;
   }
   .animate-boot,
-  .animate-type-in {
+  .animate-type-in,
+  .animate-lock-flash,
+  .animate-roll-in,
+  .animate-pip {
     animation: none;
   }
 }
