@@ -7,9 +7,9 @@ const plex = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '
 const vt323 = VT323({ subsets: ['latin'], weight: '400', variable: '--font-vt323' })
 
 export const metadata: Metadata = {
-  title: 'Forma · Your body is the search query',
+  title: 'vertiqal · Your body is the search query',
   description:
-    'Film yourself running or climbing. Forma measures how you move and shops for gear that fits your body, not your keywords.',
+    'Film yourself running or climbing. Forma, the vertiqal agent, measures how you move and shops for gear that fits your body, not your keywords.',
   generator: 'v0.app',
   icons: {
     icon: [

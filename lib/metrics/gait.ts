@@ -18,6 +18,7 @@ export interface Strike {
 }
 
 export interface GaitSnapshot {
+  sport: 'running'
   timeSec: number
   direction: 1 | -1
   kneeAngle: Partial<Record<Side, number>>
@@ -116,6 +117,7 @@ export class GaitTracker {
     this.windowStrikes = this.windowStrikes.filter((s) => timeSec - s.timeSec <= CADENCE_WINDOW_SEC)
 
     return {
+      sport: 'running',
       timeSec,
       direction: this.direction,
       kneeAngle,

@@ -1,18 +1,38 @@
 'use client'
 
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import type { GaitSnapshot, GaitTracker } from '@/lib/metrics/gait'
+import { SPORTS, type MovementSnapshot, type MovementTracker, type Sport } from '@/lib/metrics/readout'
 import type { PoseSession } from '@/lib/pose/types'
 import { drawOverlay, readOverlayTheme, videoContentRect, type OverlayTheme } from './draw-overlay'
+
+export type EngineState = 'loading' | 'ready' | 'error'
 
 interface PoseStageProps {
   videoRef: RefObject<HTMLVideoElement | null>
   src: string | null
   session: PoseSession | null
-  tracker: GaitTracker
+  tracker: MovementTracker
+  sport: Sport
+  engine: EngineState
+  /** Changes when the screen tint changes, so the canvas re-reads its colours. */
+  themeKey: string
   statusLabel: string | null
-  onSnapshot: (snapshot: GaitSnapshot) => void
+  onSnapshot: (snapshot: MovementSnapshot) => void
   onFile: (file: File) => void
+}
+
+const ENGINE_LINE: Record<EngineState, string> = {
+  loading: 'WARMING UP',
+  ready: '33 KEYPOINTS · OK',
+  error: 'OFFLINE',
+}
+
+function BootLine({ index, children }: { index: number; children: string }) {
+  return (
+    <p className="animate-type-in opacity-70" style={{ animationDelay: `${0.35 + index * 0.22}s` }}>
+      {children}
+    </p>
+  )
 }
 
 const SNAPSHOT_INTERVAL_MS = 120
@@ -22,6 +42,9 @@ export function PoseStage({
   src,
   session,
   tracker,
+  sport,
+  engine,
+  themeKey,
   statusLabel,
   onSnapshot,
   onFile,
@@ -43,7 +66,7 @@ export function PoseStage({
     let lastVideoTime = -1
     let lastEmit = 0
     let pose: ReturnType<PoseSession['poseAt']> = null
-    let snapshot: GaitSnapshot | null = null
+    let snapshot: MovementSnapshot | null = null
     let needsRedraw = true
 
     const resize = () => {
@@ -92,7 +115,7 @@ export function PoseStage({
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [session, tracker, videoRef, onSnapshot])
+  }, [session, tracker, videoRef, onSnapshot, themeKey])
 
   return (
     <div
@@ -126,10 +149,11 @@ export function PoseStage({
       {!src && !dragging && (
         <div className="absolute inset-0 flex animate-boot flex-col justify-between p-6 font-mono text-stage-foreground md:p-10">
           <div className="flex flex-col gap-1 text-lg leading-snug phosphor md:text-xl">
-            <p>{'FORMA F-01 GAIT ANALYSER  ·  ROM v2.6'}</p>
-            <p className="opacity-70">{'POSE ENGINE ........ 33 KEYPOINTS'}</p>
-            <p className="opacity-70">{'SCALE ............. RUNNER HEIGHT'}</p>
-            <p className="opacity-70">{'CHANNEL ........... SAGITTAL / SIDE-ON'}</p>
+            <p>{'VERTIQAL V-01 MOVEMENT ANALYSER  ·  ROM v3.0'}</p>
+            <BootLine index={0}>{`POSE ENGINE ........ ${ENGINE_LINE[engine]}`}</BootLine>
+            <BootLine index={1}>{`MODE .............. ${SPORTS[sport].label.toUpperCase()}`}</BootLine>
+            <BootLine index={2}>{`CHANNEL ........... ${SPORTS[sport].channel}`}</BootLine>
+            <BootLine index={3}>{'FORMA UNIT ........ ONLINE'}</BootLine>
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-4xl leading-none phosphor md:text-6xl">
@@ -139,7 +163,7 @@ export function PoseStage({
               </span>
             </p>
             <p className="max-w-md text-pretty text-lg leading-snug opacity-80 phosphor md:text-xl">
-              {'> DROP A RUNNING CLIP ON THE SCREEN, OR PRESS LOAD CLIP.'}
+              {`> ${SPORTS[sport].dropHint}`}
             </p>
           </div>
         </div>
