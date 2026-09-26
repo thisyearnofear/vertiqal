@@ -1,68 +1,73 @@
-# vertiqal
+# Forma (vertiqal)
 
-Forma is a video-based running and climbing shoe fitter. It reads movement on-device, turns the measurements into fit requirements, then checks live stock and optional research/community context before presenting a short list. Fit Passports let another shopping agent check a shoe against the same profile.
+**Film yourself for 10 seconds. An agent measures how you move, checks the research and real stock, and hands you the right running or climbing shoe, with receipts.**
+
+Live: [vertiqal.vercel.app](https://vertiqal.vercel.app)
+
+## The problem
+
+Footwear is bought on keywords and shop-floor rules of thumb, and it is one of the most-returned categories in commerce. The information that actually matters, how *you* move, never reaches the checkout.
+
+## What Forma does
+
+1. **Measures on-device.** MediaPipe pose tracking runs in the browser on a phone clip or live camera: cadence, foot strike and overstride for running; reach, hip position and precision for climbing. Video never leaves the device unless you opt in.
+2. **Turns movement into fit requirements.** A gear agent (Grok via Vercel AI Gateway) builds a movement profile, then works through visible steps: research, live retailer stock, rider reports and athletes who wear the shoe. Each claim carries a citation checked against the publisher.
+3. **You choose speed versus depth.** A Depth dial (Quick, Considered, Deep) decides how much research the agent does before it commits.
+4. **Asks before acting.** Basket checks on real product pages (Browser Use) run only after you approve, and always stop before checkout.
+5. **Carries your fit elsewhere.** A signed **Fit Passport** lets any other shopping agent check a shoe against your profile, over REST or MCP.
+6. **Hands off to WhatsApp.** Continue the fitting with a human-style assistant via Wassist.
+7. **Lets you see yourself.** A **hero frame** card grades your best stride or reach into a shareable image, and the opt-in **See yourself in them** shows you wearing the top pick (FLUX Kontext), clearly labelled as an AI impression, not a fit check.
+
+## Built with
+
+| Service | Role |
+| --- | --- |
+| Vercel AI Gateway | Grok 4.7 (agent + vision), Grok TTS (voice), FLUX Kontext (try-on). No per-provider keys. |
+| MediaPipe Pose | On-device keypoints, every frame. |
+| VLM Run (Orion) | Optional hosted keypoint refinement on sampled frames of uploaded clips. |
+| Tavily | Live retailer, research, community and athlete search. |
+| Browser Use | User-approved basket availability checks. |
+| Wassist | WhatsApp handoff and webhook. |
+| Next.js 16 + AI SDK | App, route handlers, tool-calling agent. |
 
 ## Run locally
 
-Use the repository's pinned package manager, pnpm 12.3.4:
-
 ```bash
 pnpm install
-pnpm dev
-```
-
-Open [http://localhost:3000](http://localhost:3000). Before opening a pull request or publishing, run the explicit TypeScript check and production build:
-
-```bash
-pnpm typecheck
+pnpm dev        # http://localhost:3000
+pnpm typecheck  # the real type gate: next.config ignores TS errors during build
 pnpm build
 ```
 
-The Next.js config currently allows builds to ignore TypeScript errors, so `pnpm typecheck` is the reliable type gate.
+## Where things live
 
-## Where to work
-
-- `app/` — App Router entry points and HTTP route handlers. Keep handlers focused on parsing requests, invoking domain code, and shaping responses.
-- `components/stride-lab/` — camera/video, pose display, and fitting workflow UI.
-- `components/stride-lab/agent/` — gear-agent conversation, depth controls, product picks, basket checks, and Fit Passport UI.
-- `components/forma/` — Forma avatar and console/personalization UI.
-- `lib/metrics/` — sport-specific measurements and readouts.
-- `lib/pose/` — provider contract and pose implementations.
-- `lib/agent/` — fitting brief, recommendation tools, evidence, search, and optional browser automation.
-- `lib/passport/` — passport schema, signing, and fit checks.
-- `lib/wassist/` — WhatsApp integration and fitting handoff.
-- `public/` — static assets and the local MediaPipe model/WASM files.
-- `docs/architecture.md` — request flow, API route map, integrations, and extension points.
-
-Start at `app/page.tsx` for the page entry point. Follow the imported feature component into its folder; keep business rules in the matching `lib/` domain rather than adding them to the page or route handler.
-
-## Runtime configuration
-
-Set server-side credentials in Vercel project **Vars** or in a local, uncommitted `.env.local` file. Never expose these as `NEXT_PUBLIC_*` variables.
-
-| Variable | Used for |
+| Path | What it is |
 | --- | --- |
-| `TAVILY_API_KEY` | Live retailer, community, research, and athlete searches. |
-| `BROWSER_USE_API_KEY` | User-approved product-page basket availability checks. The automation stops before checkout. |
-| `WASSIST_API_KEY` | WhatsApp handoff, webhook authentication, and passport signing fallback. |
-| `PASSPORT_SECRET` | Optional dedicated Fit Passport signing secret; falls back to `WASSIST_API_KEY`. |
-| `VLMRUN_API_KEY` | **Not currently consumed.** The VLM Run pose provider is a disabled scaffold; adding this variable alone does not enable it. |
+| `app/page.tsx` | Entry point; renders the Stride Lab. |
+| `app/api/` | Route handlers (see [architecture](docs/architecture.md#api-routes)). Thin: parse, call `lib/`, respond. |
+| `components/stride-lab/` | Camera/video stage, pose overlay, readouts, fitting notes. |
+| `components/stride-lab/agent/` | Agent conversation, depth dial, picks, basket checks, Fit Passport UI. |
+| `components/stride-lab/hero/` | Hero frame card and try-on UI. |
+| `components/forma/` | Forma avatar and console personalisation. |
+| `lib/pose/` | Pose provider contract; MediaPipe and VLM Run providers. |
+| `lib/metrics/` | Sport-specific measurements and readouts. |
+| `lib/agent/` | Gear agent, tools, evidence checks, Tavily and Browser Use clients. |
+| `lib/hero/` | Hero frame scoring and capture. |
+| `lib/passport/` | Passport schema, signing and fit checks. |
+| `lib/wassist/` | WhatsApp client and fitting handoff. |
 
-AI Gateway is used for the vision and speech models and is available in Vercel without a project API key. MediaPipe pose tracking runs in the browser using the checked-in model/WASM assets.
+Business rules live in `lib/`; components and routes stay thin. See [docs/architecture.md](docs/architecture.md) for the request flow and extension points.
 
-## Product and v0 workflow
+## Configuration
 
-This repository is connected to the [vertiqal v0 project](https://v0.app/chat/projects/prj_NGuSzfx1fUR11tMuWaGpUmLYGA38). Continue editing through v0 or the connected GitHub repository. Merges to `main` deploy through the project configuration.
+Server-side only (Vercel **Vars** or an uncommitted `.env.local`). Never expose these as `NEXT_PUBLIC_*`.
 
-For deeper implementation context, see [the architecture guide](docs/architecture.md).
+| Variable | Used for | Without it |
+| --- | --- | --- |
+| `TAVILY_API_KEY` | Live search tools | Agent skips live research and stock |
+| `BROWSER_USE_API_KEY` | Basket checks | Basket check unavailable |
+| `WASSIST_API_KEY` | WhatsApp handoff, webhook auth, passport signing fallback | Handoff hidden |
+| `PASSPORT_SECRET` | Dedicated passport signing secret (optional) | Falls back to `WASSIST_API_KEY` |
+| `VLMRUN_API_KEY` | VLM Run pose refinement | Provider falls back to MediaPipe only |
 
-## Useful references
-
-- [Next.js documentation](https://nextjs.org/docs)
-- [Vercel AI SDK documentation](https://ai-sdk.dev/docs)
-- [v0 documentation](https://v0.app/docs)
-- [Tavily search API](https://docs.tavily.com/)
-- [Wassist API](https://wassist.app/)
-- [Browser Use API](https://docs.browser-use.com/)
-
-> **Documentation maintenance:** Update the architecture guide when routes, external services, data storage, or module boundaries change. Keep the environment-variable table aligned with actual `process.env` references; configured-but-unused credentials should be labeled as such.
+AI Gateway authenticates automatically on Vercel; no key is needed.
