@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { ArrowUpRight, X } from 'lucide-react'
+import { findingById } from '@/lib/agent/evidence'
 import type { GearAgentUIMessage } from '@/lib/agent/gear-agent'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -74,6 +75,104 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
         </li>
       ) : null
 
+    case 'tool-checkEvidence': {
+      const output = part.state === 'output-available' ? part.output : null
+      return (
+        <Step
+          key={key}
+          title={
+            output
+              ? `Research check · ${output.findings.length} findings · ${output.papers.length} papers`
+              : 'Checking the research'
+          }
+          detail={part.input?.question ? `"${part.input.question}"` : undefined}
+          state={isPending(part.state) ? 'pending' : part.state === 'output-error' ? 'halt' : 'done'}
+        >
+          {output && (
+            <>
+              <ul className="flex flex-col gap-3" aria-label="Research findings">
+                {output.findings.map((f) => (
+                  <li key={f.id} className="flex flex-col gap-1">
+                    <p className="font-sans text-sm leading-relaxed">
+                      <span className="font-mono text-lg phosphor">{`${f.id} `}</span>
+                      {f.finding}
+                    </p>
+                    <a
+                      href={`https://doi.org/${f.doi}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-fit text-lg leading-tight underline decoration-dotted underline-offset-4 opacity-70 hover:text-primary"
+                    >
+                      {`↳ ${f.kind}${f.sample ? ` ${f.sample}` : ''} · ${f.citation}`}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              {output.unsupported.length > 0 && (
+                <p className="text-lg leading-snug opacity-70">
+                  {`NO DIRECT RESEARCH FOR ${output.unsupported.join(', ').toUpperCase()}: TREATED AS RULE OF THUMB`}
+                </p>
+              )}
+              {output.papers.length > 0 && (
+                <details className="text-lg leading-snug">
+                  <summary className="w-fit cursor-pointer opacity-80 hover:text-primary">
+                    {`+ ${output.papers.length} papers from live literature search`}
+                  </summary>
+                  <ul className="mt-2 flex flex-col gap-1">
+                    {output.papers.map((p) => (
+                      <li key={p.url}>
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline decoration-dotted underline-offset-4 opacity-70 hover:text-primary"
+                        >
+                          {`↳ ${hostOf(p.url)} · ${p.title}`}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
+          )}
+        </Step>
+      )
+    }
+
+    case 'tool-checkAthletes': {
+      const output = part.state === 'output-available' ? part.output : null
+      return (
+        <Step
+          key={key}
+          title={output ? 'Athlete check' : 'Looking for who wears them'}
+          detail={part.input?.models?.filter(Boolean).join(' · ')}
+          state={isPending(part.state) ? 'pending' : part.state === 'output-error' ? 'halt' : 'done'}
+        >
+          {output && (
+            <ul className="flex flex-col gap-1" aria-label="Athlete sources">
+              {output.athletes.map(({ model, results }) => (
+                <li key={model} className="text-lg leading-tight">
+                  {results[0] ? (
+                    <a
+                      href={results[0].url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline decoration-dotted underline-offset-4 opacity-80 hover:text-primary"
+                    >
+                      {`↳ ${model} · ${hostOf(results[0].url)}`}
+                    </a>
+                  ) : (
+                    <span className="opacity-60">{`↳ ${model} · no coverage found`}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Step>
+      )
+    }
+
     case 'tool-buildGearProfile': {
       const profile = part.state === 'output-available' ? part.output : null
       return (
@@ -87,13 +186,30 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
             <>
               <p className="font-sans text-base leading-relaxed opacity-85">{profile.summary}</p>
               <dl className="grid gap-px overflow-hidden rounded-md border border-stage-foreground/25 bg-stage-foreground/25 sm:grid-cols-2">
-                {profile.requirements.map((r) => (
-                  <div key={r.attribute} className="flex flex-col gap-1 bg-stage p-3">
-                    <dt className="text-lg uppercase leading-none opacity-60">{r.attribute}</dt>
-                    <dd className="text-2xl leading-tight phosphor">{r.target}</dd>
-                    <dd className="font-sans text-sm leading-relaxed opacity-75">{r.evidence}</dd>
-                  </div>
-                ))}
+                {profile.requirements.map((r) => {
+                  const finding = r.researchRef ? findingById(r.researchRef) : undefined
+                  return (
+                    <div key={r.attribute} className="flex flex-col gap-1 bg-stage p-3">
+                      <dt className="text-lg uppercase leading-none opacity-60">{r.attribute}</dt>
+                      <dd className="text-2xl leading-tight phosphor">{r.target}</dd>
+                      <dd className="font-sans text-sm leading-relaxed opacity-75">{r.evidence}</dd>
+                      {finding && (
+                        <dd>
+                          <a
+                            href={`https://doi.org/${finding.doi}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={finding.finding}
+                            className="inline-flex w-fit items-center gap-1.5 rounded-sm border border-stage-foreground/40 px-1.5 text-lg leading-snug hover:border-primary hover:text-primary"
+                          >
+                            {`${finding.id} · ${finding.kind}${finding.sample ? ` ${finding.sample}` : ''}`}
+                            <span className="sr-only">{`: ${finding.citation}`}</span>
+                          </a>
+                        </dd>
+                      )}
+                    </div>
+                  )
+                })}
               </dl>
             </>
           )}
@@ -181,11 +297,20 @@ function renderPart(part: Part, key: string, onApproval: ApprovalHandler) {
                   <p className="text-pretty text-2xl leading-tight phosphor">{p.name}</p>
                   <p className="text-xl leading-none tabular-nums opacity-90">{p.price}</p>
                   <p className="text-pretty font-sans text-sm leading-relaxed opacity-80">{p.why}</p>
-                  {p.community && (
-                    <p className="border-t border-dashed border-stage-foreground/25 pt-2 text-pretty font-sans text-sm leading-relaxed opacity-70">
-                      <span className="font-mono text-base uppercase opacity-80">{'Riders say: '}</span>
-                      {p.community}
-                    </p>
+                  {[
+                    ['Riders say', p.community],
+                    ['Research', p.research],
+                    ['Worn by', p.wornBy],
+                  ].map(([label, text]) =>
+                    text?.trim() ? (
+                      <p
+                        key={label}
+                        className="border-t border-dashed border-stage-foreground/25 pt-2 text-pretty font-sans text-sm leading-relaxed opacity-70"
+                      >
+                        <span className="font-mono text-base uppercase opacity-80">{`${label}: `}</span>
+                        {text}
+                      </p>
+                    ) : null,
                   )}
                   <a
                     href={p.url}

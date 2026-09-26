@@ -38,10 +38,26 @@ const COMMUNITY_DOMAINS = [
   'climbing.com',
 ]
 
+const RESEARCH_DOMAINS = [
+  'pubmed.ncbi.nlm.nih.gov',
+  'pmc.ncbi.nlm.nih.gov',
+  'bjsm.bmj.com',
+  'journals.lww.com',
+  'journals.sagepub.com',
+  'jospt.org',
+  'link.springer.com',
+  'sciencedirect.com',
+  'frontiersin.org',
+  'mdpi.com',
+]
+
 export const searchWeb = (query: string) => tavily(query, RETAILER_DOMAINS)
 export const searchCommunity = (query: string) => tavily(query, COMMUNITY_DOMAINS)
+export const searchResearch = (query: string) => tavily(query, RESEARCH_DOMAINS, 5)
+/** Unrestricted search, for athlete and race-kit coverage that lives on news and brand sites. */
+export const searchOpen = (query: string) => tavily(query, [], 4)
 
-async function tavily(query: string, domains: string[]): Promise<SearchHit[]> {
+async function tavily(query: string, domains: string[], maxResults = 8): Promise<SearchHit[]> {
   const apiKey = process.env.TAVILY_API_KEY
   if (!apiKey) throw new Error('TAVILY_API_KEY is not configured')
 
@@ -50,9 +66,9 @@ async function tavily(query: string, domains: string[]): Promise<SearchHit[]> {
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       query,
-      max_results: 8,
+      max_results: maxResults,
       search_depth: 'basic',
-      include_domains: domains,
+      ...(domains.length ? { include_domains: domains } : {}),
     }),
     signal: AbortSignal.timeout(20_000),
   })
