@@ -3,7 +3,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { Fitting } from './fitting'
 
 const API = 'https://backend.wassist.app/api/v1'
-const AGENT_NAME = 'Forma · vertiqal'
+/** Previews get their own agent so opening one can never replace the live production agent. */
+const AGENT_NAME = process.env.VERCEL_ENV === 'production' ? 'Forma · vertiqal' : 'Forma · vertiqal · preview'
+const MAX_CONVERSATION_PAGES = 20
 
 interface Agent {
   id: string
@@ -12,7 +14,7 @@ interface Agent {
   tools: { name: string; apiSchema?: { url?: string } }[]
 }
 
-interface Conversation {
+export interface Conversation {
   id: string
   contact: { phoneNumber: string; name: string | null }
   active: unknown
@@ -23,9 +25,11 @@ interface Message {
   createdAt: string
   text: unknown
   unified: unknown
+  template?: unknown
+  image?: unknown
 }
 
-type Paginated<T> = { results: T[] }
+type Paginated<T> = { results: T[]; next?: string | null }
 
 function apiKey() {
   const key = process.env.WASSIST_API_KEY
@@ -59,15 +63,18 @@ export function isValidWebhookToken(token: string | null) {
 
 const digits = (s: string) => s.replace(/\D/g, '')
 
-/** Reuses the Forma agent if it already points at this deployment, otherwise replaces it. */
+/**
+ * Reuses this environment's Forma agent if it already points at this deployment, otherwise
+ * replaces it. Only agents with this environment's exact name are ever deleted.
+ */
 export async function ensureAgent(origin: string): Promise<Agent> {
   const webhookUrl = `${origin}/api/wassist/webhook?token=${webhookToken()}`
   const { results } = await wassist<Paginated<Agent>>('/agents/?limit=100')
-  const forma = results.filter((a) => a.name.startsWith('Forma ·'))
-  const current = forma.find((a) => a.tools.some((t) => t.apiSchema?.url === webhookUrl))
+  const ours = results.filter((a) => a.name === AGENT_NAME)
+  const current = ours.find((a) => a.tools.some((t) => t.apiSchema?.url === webhookUrl))
   if (current) return current
 
-  await Promise.all(forma.map((a) => wassist(`/agents/${a.id}/`, { method: 'DELETE' })))
+  await Promise.all(ours.map((a) => wassist(`/agents/${a.id}/`, { method: 'DELETE' })))
   const created = await wassist<Agent>('/agents/byoa/', { method: 'POST', json: { webhookUrl } })
   return wassist<Agent>(`/agents/${created.id}/`, {
     method: 'PATCH',
@@ -80,10 +87,33 @@ export async function ensureAgent(origin: string): Promise<Agent> {
   })
 }
 
-export async function findConversation(phone: string) {
-  const { results } = await wassist<Paginated<Conversation>>('/conversations/?limit=100')
-  return results.find((c) => digits(c.contact.phoneNumber) === digits(phone)) ?? null
+/** Pages through every conversation matching the filter (newest first), up to a safety cap. */
+export async function* listConversations(filter: Record<string, string> = {}) {
+  for (let page = 0; page < MAX_CONVERSATION_PAGES; page++) {
+    const query = new URLSearchParams({ ...filter, limit: '100', offset: String(page * 100) })
+    const { results, next } = await wassist<Paginated<Conversation>>(`/conversations/?${query}`)
+    yield* results
+    if (!next || results.length < 100) return
+  }
 }
+
+export async function findConversation(phone: string) {
+  for await (const c of listConversations()) {
+    if (digits(c.contact.phoneNumber) === digits(phone)) return c
+  }
+  return null
+}
+
+/** Shows "typing…" on the shopper's phone. WhatsApp clears it after a short while, so callers repeat it. */
+export const markTyping = (conversationId: string) =>
+  wassist(`/conversations/${conversationId}/typing/`, { method: 'POST' }).catch(() => undefined)
+
+/** Pre-approved template: the only way to message someone after their 24-hour window has closed. */
+export const sendTemplate = (conversationId: string, name: string, body: string[]) =>
+  wassist(`/conversations/${conversationId}/messages/`, {
+    method: 'POST',
+    json: { type: 'template', template: { name, variables: { body } } },
+  })
 
 type UnifiedButton = { type: 'url'; text: string; url: string } | { type: 'quick_reply'; text: string; quickReplyId: string }
 
@@ -151,21 +181,24 @@ export async function sendFitting(conversationId: string, fitting: Fitting) {
 }
 
 const textOf = (m: Message): string => {
-  for (const v of [m.text, m.unified]) {
+  for (const v of [m.text, m.unified, m.template]) {
     if (typeof v === 'string' && v.trim()) return v
     if (v && typeof v === 'object') {
       const t = (v as { body?: unknown; text?: unknown }).body ?? (v as { text?: unknown }).text
       if (typeof t === 'string' && t.trim()) return t
     }
   }
-  return ''
+  return m.image ? '[sent a photo]' : ''
 }
 
 /** Recent chat as plain lines, oldest first, for the reply agent's context. */
 export async function recentTranscript(phone: string, limit = 20) {
   const conversation = await findConversation(phone)
-  if (!conversation) return ''
-  const { results } = await wassist<Paginated<Message>>(`/conversations/${conversation.id}/messages/?limit=${limit}`)
+  return conversation ? transcriptOf(conversation.id, limit) : ''
+}
+
+export async function transcriptOf(conversationId: string, limit = 20) {
+  const { results } = await wassist<Paginated<Message>>(`/conversations/${conversationId}/messages/?limit=${limit}`)
   return results
     .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt))
     .map((m) => ({ role: m.role, text: textOf(m) }))
@@ -184,6 +217,23 @@ export async function shopperLines(phone: string, max = 4) {
     .filter((text) => text && !text.startsWith('/connect'))
     .slice(-max)
     .map((text) => text.slice(0, 160))
+}
+
+/** The shoe name from the "Your pick" message sendFitting writes, if the shopper chose one in the app. */
+export const pickFromTranscript = (transcript: string) => transcript.match(/\*Your pick: (.+?)\*/)?.[1]?.trim() ?? null
+
+/** Downloads an inbound WhatsApp photo for the vision model. Only Wassist-hosted media is fetched. */
+export async function fetchInboundImage(url: string) {
+  const host = new URL(url).hostname
+  if (!/(^|\.)wassist\.app$/.test(host)) return null
+  let res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
+  if (res.status === 401 || res.status === 403) {
+    res = await fetch(url, { cache: 'no-store', headers: { 'X-API-Key': apiKey() }, signal: AbortSignal.timeout(10_000) })
+  }
+  const mediaType = res.headers.get('content-type')?.split(';')[0] ?? ''
+  if (!res.ok || !/^image\/(jpeg|png|webp)$/.test(mediaType)) return null
+  const data = new Uint8Array(await res.arrayBuffer())
+  return data.byteLength <= 5_000_000 ? { mediaType, data } : null
 }
 
 export const chatUrlFor = (connectUrl: string) => connectUrl.split('?')[0]
