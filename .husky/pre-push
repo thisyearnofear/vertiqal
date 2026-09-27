@@ -1,0 +1,8 @@
+# Scan every commit not yet on a remote for secrets.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-push: gitleaks not found. Install it (brew install gitleaks) or bypass with --no-verify." >&2
+  exit 1
+fi
+gitleaks git --log-opts="--all --not --remotes" --verbose || exit 1
+
+pnpm typecheck

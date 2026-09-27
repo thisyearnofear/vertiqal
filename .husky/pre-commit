@@ -1,0 +1,9 @@
+# Scan the staged diff for secrets before anything else.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not found. Install it (brew install gitleaks) or bypass with --no-verify." >&2
+  exit 1
+fi
+gitleaks protect --staged --verbose || exit 1
+
+# Lint (and auto-fix) only the files being committed.
+pnpm lint-staged
