@@ -74,11 +74,11 @@ Server-side only (Vercel **Vars** or an uncommitted `.env.local`). Never expose 
 | `NEXT_PUBLIC_SAMPLE_CLIP` | URL of the one-click sample clip (optional, public) | Sample button hidden |
 | `WASSIST_CHECKIN_TEMPLATE` | Name of the approved WhatsApp template for the break-in check-in (optional) | Check-in job skips |
 | `CRON_SECRET` | Authenticates Vercel Cron calls to the check-in job | Check-in job returns 401 |
+| `VLMRUN_API_KEY` | VLM Run pose refinement | Provider falls back to MediaPipe only |
 
 ### WhatsApp setup notes
 
 - Production and preview deployments each get their own Wassist agent (`Forma · vertiqal` and `Forma · vertiqal · preview`). Opening a preview never replaces the live agent.
 - The break-in check-in (`vercel.json` cron, daily 09:00 UTC) messages shoppers after their 24-hour window has closed, which WhatsApp only allows through an approved template. Create a UTILITY template on your own WhatsApp Business number (the Wassist sandbox can't send templates). Give it one body variable, `{{1}}` = shoe name, and keep the phrase **"vertiqal check-in"** in the body, because the job uses it to avoid sending twice. For example: *"Hi, it's Forma with your vertiqal check-in. How are your {{1}} feeling now you've worn them in? Tell me what's working and anything that rubs, and I'll factor it into your next scan."*
-| `VLMRUN_API_KEY` | VLM Run pose refinement | Provider falls back to MediaPipe only |
 
 AI Gateway authenticates automatically on Vercel; no key is needed.
