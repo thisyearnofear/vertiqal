@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { SPORTS, type Sport } from './metrics/readout'
+import { SPORTS, type Sport } from './metrics/readout.ts'
 
 export const SHAPES = ['pebble', 'orb', 'visor', 'crag'] as const
 export const PHOSPHORS = ['amber', 'green', 'ice'] as const

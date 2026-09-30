@@ -1,23 +1,36 @@
 'use client'
 
-import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
-import { Camera, ChevronDown, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
+import { Camera, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
 import { savePersona } from '@/app/actions'
-import { FormaConsole, FormaTuner } from '@/components/forma/forma-console'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { EMPTY_NOTES, contextLines, type FittingNotesState } from '@/lib/agent/fitting-notes'
+import { EMPTY_NOTES, type FittingNotesState } from '@/lib/agent/fitting-notes'
+import { briefFromReadout, type ShopperPrefs } from '@/lib/agent/brief'
+import { nextDepth, type Depth } from '@/lib/agent/depth'
 import { cueFor } from '@/lib/coach'
 import { memberContext, type MemberView } from '@/lib/member/schema'
+import {
+  FALLBACK_HEIGHT_CM,
+  analysisHeight,
+  buildConfirmedPrefs,
+  parseHeightCm,
+  prefsValid,
+  type PrefDraft,
+} from '@/lib/fitting/prefs'
+import { canFindShoes, clearsBaseline, measurementInvalidated, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
 import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
 import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
 import type { PoseSession } from '@/lib/pose/types'
 import { cn } from '@/lib/utils'
 import type { HeroFrame } from '@/lib/hero/frame'
-import { AgentPanel, type AgentPanelHandle } from './agent/agent-panel'
+import { AgentPanel } from './agent/agent-panel'
 import { outputsOf, type ShoePick } from './agent/outputs'
 import { HeroCard } from './hero/hero-card'
 import { useGearAgent } from './agent/use-gear-agent'
+import { ExampleWalkthrough, type ExampleState } from './example-walkthrough'
+import { FittingBrief } from './fitting-brief'
+import { FittingHeader } from './fitting-header'
 import { FittingNotes } from './fitting-notes'
 import { GaitReadout } from './gait-readout'
 import { LiveOverlay } from './live-overlay'
@@ -37,16 +50,14 @@ interface Baseline {
   clipName: string
 }
 
-const DEFAULT_HEIGHT_CM = 175
-const SPORT_LIST: Sport[] = ['running', 'climbing']
-const SPORT_CHOICE: Record<Sport, string> = { running: 'I run', climbing: 'I climb' }
 const CAPTURE_SECONDS: Record<Sport, number> = { running: 20, climbing: 45 }
 const MAX_KEYFRAMES = 3
 const CUE_GAP_MS = 6000
 const REPEAT_CUE_GAP_MS = 14000
 const ANNOUNCED_MOODS = new Set<Mood>(['pleased', 'asking', 'working', 'sad'])
-const SAMPLE_CLIP = process.env.NEXT_PUBLIC_SAMPLE_CLIP || null
 const LABEL = 'text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved'
+const PRIVACY_LINE =
+  'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them.'
 
 const scrollToSection = (id: string) => {
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -61,17 +72,26 @@ type SessionState =
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName))
 
+const prefersStill = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
 export function StrideLab({ initialPersona, initialMember }: { initialPersona: Persona; initialMember: MemberView }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const tunerId = useId()
   const [clip, setClip] = useState<Clip | null>(null)
   const [sport, setSport] = useState<Sport>(initialMember.last?.sport ?? 'running')
   const [providerId, setProviderId] = useState(POSE_PROVIDERS[0].id)
   const [sessionState, setSessionState] = useState<SessionState>({ status: 'loading' })
   const [providerStatus, setProviderStatus] = useState<string | null>(null)
-  const [heightCm, setHeightCm] = useState(DEFAULT_HEIGHT_CM)
-  const [tracker, setTracker] = useState(() => createTracker(initialMember.last?.sport ?? 'running', DEFAULT_HEIGHT_CM))
+  const [prefDraft, setPrefDraft] = useState<PrefDraft>({
+    size: initialMember.last?.size ?? '',
+    budgetPounds: '',
+    heightCm: '',
+    goal: '',
+    surface: '',
+  })
+  const [calibrationCm, setCalibrationCm] = useState(FALLBACK_HEIGHT_CM)
+  const [tracker, setTracker] = useState(() => createTracker(initialMember.last?.sport ?? 'running', FALLBACK_HEIGHT_CM))
   const [snapshot, setSnapshot] = useState<MovementSnapshot | null>(null)
+  const [lockedReadout, setLockedReadout] = useState<Readout | null>(null)
   const [playing, setPlaying] = useState(true)
   const [baseline, setBaseline] = useState<Baseline | null>(null)
   const [persona, setPersona] = useState(initialPersona)
@@ -84,8 +104,11 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   const [notes, setNotes] = useState<FittingNotesState>(EMPTY_NOTES)
   const [lockLine, setLockLine] = useState<string | null>(null)
   const [choice, setChoice] = useState<ShoePick | null>(null)
+  const [example, setExample] = useState<ExampleState | null>(null)
+  const [depth, setDepth] = useState<Depth>('considered')
+  const [confirmedPrefs, setConfirmedPrefs] = useState<ShopperPrefs | null>(null)
+  const [attempted, setAttempted] = useState(false)
   const agent = useGearAgent()
-  const agentPanel = useRef<AgentPanelHandle>(null)
   const speak = useVoice(voiceOn)
   const { member, forget } = useMember(initialMember)
 
@@ -112,15 +135,20 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   }, [providerId])
 
   const readout = useMemo(() => readoutOf(snapshot, sport), [snapshot, sport])
-  const context = useMemo(() => [...contextLines(notes, sport), ...memberContext(member)], [notes, sport, member])
+  const memberLines = useMemo(() => memberContext(member), [member])
   const picks = useMemo(() => outputsOf(agent.messages)?.picks ?? [], [agent.messages])
+  const [providerMismatch, setProviderMismatch] = useState(false)
+  const exampleButtonRef = useRef<HTMLButtonElement>(null)
 
   const restartAnalysis = useCallback((nextSport: Sport, height: number) => {
     setTracker(createTracker(nextSport, height))
+    setCalibrationCm(height)
     setSnapshot(null)
+    setLockedReadout(null)
     setKeyframes([])
     setHero(null)
     setCaption(null)
+    setProviderMismatch(false)
   }, [])
 
   const addKeyframe = useCallback((frame: Keyframe) => {
@@ -128,17 +156,83 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   }, [])
 
   const live = useLiveCamera(() => {
-    restartAnalysis(sport, heightCm)
+    restartAnalysis(sport, calibrationCm)
     void speak(sport === 'running' ? 'Go. Run naturally.' : 'Go. Climb naturally.')
   })
   const liveActive = live.phase === 'starting' || live.phase === 'countdown' || live.phase === 'recording'
 
-  const goLive = () => {
+  const releaseClip = () => {
     setClip((previous) => {
       if (previous?.url.startsWith('blob:')) URL.revokeObjectURL(previous.url)
       return null
     })
-    restartAnalysis(sport, heightCm)
+  }
+
+  const updateDraft = useCallback(
+    (next: PrefDraft) => {
+      const heightChanged = parseHeightCm(next.heightCm) !== parseHeightCm(prefDraft.heightCm)
+      setPrefDraft(next)
+      setNotes((current) => ({ ...current, goal: next.goal, surface: next.surface }))
+      if (!heightChanged) return
+      const plan = remeasurePlan({
+        enteredCm: parseHeightCm(next.heightCm),
+        calibratedCm: calibrationCm,
+        providerChanged: false,
+        liveDone: live.phase === 'done',
+      })
+      agent.reset()
+      setChoice(null)
+      setConfirmedPrefs(null)
+      if (plan === 'none') return
+      if (plan === 'recapture' || liveActive) return
+      setLockedReadout(null)
+      setLockLine(null)
+      restartAnalysis(sport, parseHeightCm(next.heightCm)!)
+      const video = videoRef.current
+      if (video && clip) {
+        video.currentTime = 0
+        void video.play()
+        setPlaying(true)
+      }
+    },
+    [prefDraft.heightCm, calibrationCm, live.phase, liveActive, clip, sport, agent, restartAnalysis],
+  )
+
+  const updateNotes = useCallback((next: FittingNotesState) => {
+    setNotes(next)
+    setPrefDraft((d) => ({ ...d, goal: next.goal, surface: next.surface }))
+  }, [])
+
+  const resetSession = useCallback(
+    (reason: ResetReason) => {
+      agent.reset()
+      live.clear()
+      setChoice(null)
+      setConfirmedPrefs(null)
+      setAttempted(false)
+      if (clearsBaseline(reason)) setBaseline(null)
+      if (reason === 'sport' || reason === 'start-fresh') {
+        setPrefDraft((d) => ({ ...d, goal: '', surface: '' }))
+      }
+      setNotes((current) => notesAfterReset(reason, current))
+      setLockedReadout(null)
+      setCaption(null)
+    },
+    [agent, live],
+  )
+
+  const currentAnalysisHeight = analysisHeight(prefDraft).heightCm
+
+  const goLive = () => {
+    const entered = parseHeightCm(prefDraft.heightCm)
+    if (entered === null) {
+      setAttempted(true)
+      return
+    }
+    resetSession('record')
+    setExample(null)
+    releaseClip()
+    restartAnalysis(sport, entered)
     live.start(CAPTURE_SECONDS[sport])
   }
 
@@ -157,32 +251,41 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
 
   const loadFile = useCallback(
     (file: File) => {
-      live.clear()
+      resetSession('new-clip')
+      setExample(null)
       setClip((previous) => {
         if (previous?.url.startsWith('blob:')) URL.revokeObjectURL(previous.url)
         return { url: URL.createObjectURL(file), name: file.name }
       })
       setPlaying(true)
-      restartAnalysis(sport, heightCm)
+      restartAnalysis(sport, currentAnalysisHeight)
     },
-    [sport, heightCm, restartAnalysis, live.clear],
+    [sport, currentAnalysisHeight, restartAnalysis, resetSession],
   )
 
-  const showSample = () => {
-    if (SAMPLE_CLIP) {
-      live.clear()
-      setClip((previous) => {
-        if (previous?.url.startsWith('blob:')) URL.revokeObjectURL(previous.url)
-        return { url: SAMPLE_CLIP, name: 'Sample run' }
-      })
-      setPlaying(true)
-      restartAnalysis(sport, heightCm)
-      return
-    }
-    agentPanel.current?.runSample()
+  const showExample = () => {
+    resetSession('example')
+    releaseClip()
+    restartAnalysis(sport, currentAnalysisHeight)
+    setExample({ step: 0, playing: !prefersStill() })
+    requestAnimationFrame(() => document.getElementById('example-heading')?.focus())
   }
 
-  // Each stage hands over to the next one: once Forma starts shopping, bring its answer into view.
+  const exitExample = () => {
+    setExample(null)
+    requestAnimationFrame(() => {
+      exampleButtonRef.current?.scrollIntoView({ block: 'center' })
+      exampleButtonRef.current?.focus()
+    })
+  }
+
+  const startFresh = () => {
+    resetSession('start-fresh')
+    setExample(null)
+    releaseClip()
+    restartAnalysis(sport, currentAnalysisHeight)
+  }
+
   const shopping = Boolean(agent.sentBrief)
   useEffect(() => {
     if (shopping) requestAnimationFrame(() => scrollToSection('forma-procurement'))
@@ -190,13 +293,11 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
 
   const changeSport = (next: Sport) => {
     if (next === sport) return
-    live.clear()
-    setNotes(EMPTY_NOTES)
+    resetSession('sport')
+    setExample(null)
+    releaseClip()
     setSport(next)
-    setBaseline(null)
-    setChoice(null)
-    agent.reset()
-    restartAnalysis(next, heightCm)
+    restartAnalysis(next, currentAnalysisHeight)
   }
 
   const changePersona = (next: Persona) => {
@@ -219,14 +320,39 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   const restart = () => {
     const video = videoRef.current
     if (!video) return
+    agent.reset()
+    setChoice(null)
+    setConfirmedPrefs(null)
     video.currentTime = 0
-    restartAnalysis(sport, heightCm)
+    restartAnalysis(sport, calibrationCm)
     void video.play()
     setPlaying(true)
   }
 
+  const changeProvider = (next: string) => {
+    if (next === providerId) return
+    agent.reset()
+    setChoice(null)
+    setConfirmedPrefs(null)
+    const hasMeasurement = Boolean(lockedReadout) || readout.events > 0
+    if (hasMeasurement && live.phase === 'done') {
+      setProviderMismatch(true)
+    } else if (hasMeasurement) {
+      setLockedReadout(null)
+      setLockLine(null)
+      restartAnalysis(sport, calibrationCm)
+      const video = videoRef.current
+      if (video && clip) {
+        video.currentTime = 0
+        void video.play()
+        setPlaying(true)
+      }
+    }
+    setProviderId(next)
+  }
+
   const onShortcut = useEffectEvent((e: KeyboardEvent) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || !clip) return
+    if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || !clip || example) return
     if (e.key === ' ') {
       e.preventDefault()
       togglePlay()
@@ -257,16 +383,28 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     if (ANNOUNCED_MOODS.has(mood)) void speak(speechFor(persona.voice, mood, sport))
   }, [mood, persona.voice, sport, speak])
 
-  // Freeze the runner's own number at the moment of lock, so Forma's line doesn't churn with every frame.
-  const announceLock = useEffectEvent(() => {
-    const line = lockedLine(persona.voice, readout.metrics)
+  const lockMeasurement = useEffectEvent((final: Readout) => {
+    const line = lockedLine(persona.voice, final.metrics)
     setLockLine(line)
     if (line) void speak(line)
+    setLockedReadout(final)
+    if (!clip) return
+    const video = videoRef.current
+    if (video && !video.paused) {
+      video.pause()
+      setPlaying(false)
+    }
   })
   useEffect(() => {
-    if (readout.ready) announceLock()
-    else setLockLine(null)
-  }, [readout.ready])
+    if (liveActive) return
+    if (readout.ready && !lockedReadout) {
+      lockMeasurement(readout)
+    } else if (!readout.ready && !lockedReadout) {
+      setLockLine(null)
+    }
+  }, [readout, liveActive, lockedReadout])
+
+  const enteredHeight = parseHeightCm(prefDraft.heightCm)
 
   const proof = baseline && readout.ready
     ? readout.metrics.reduce(
@@ -279,45 +417,94 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
       )
     : null
 
-  const stage = shopping ? 'results' : clip || liveActive || readout.events > 0 ? 'capture' : 'invite'
-  const measured = readout.events > 0 || Boolean(baseline)
+  const sentBrief = agent.sentBrief
+  const measuredReady = Boolean(lockedReadout?.ready) || (readout.ready && !liveActive)
+  const recorded = live.phase === 'done'
+  const provisional = enteredHeight === null && (readout.events > 0 || Boolean(lockedReadout))
+  const staleMeasurement = measurementInvalidated({ enteredCm: enteredHeight, calibratedCm: calibrationCm, providerMismatch })
+  const needsRecapture = recorded && staleMeasurement
+
+  const submitReady = canFindShoes({
+    example: Boolean(example),
+    liveActive,
+    busy: agent.busy,
+    measuredReady,
+    prefsValid: prefsValid(prefDraft),
+    heightCalibrated: enteredHeight !== null && !staleMeasurement,
+  })
+
+  const submitHint = liveActive
+    ? 'Wait for the capture to finish.'
+    : provisional || enteredHeight === null
+      ? 'Distance estimates need your height — enter it above.'
+      : needsRecapture
+        ? 'The height or engine changed after recording. The camera never saved the clip, so film again to recalibrate.'
+        : !measuredReady
+          ? 'Upload a clip or film yourself first — Forma needs real measurements.'
+          : !submitReady
+            ? 'Complete the required fields above.'
+            : null
+
+  const buildPrefs = (runDepth: Depth): ShopperPrefs | null =>
+    buildConfirmedPrefs({ draft: prefDraft, notes, sport, voice: persona.voice, depth: runDepth, memberLines })
+
+  const submitSearch = () => {
+    setAttempted(true)
+    if (!submitReady || !lockedReadout) return
+    const prefs = buildPrefs(depth)
+    if (!prefs) return
+    setConfirmedPrefs(prefs)
+    setChoice(null)
+    agent.send(briefFromReadout(lockedReadout), prefs)
+  }
+
+  const deeper = nextDepth(agent.prefs?.depth ?? depth)
+  const lookHarder = () => {
+    const previous = confirmedPrefs ?? agent.prefs
+    if (!sentBrief || !deeper || !previous || agent.busy) return
+    const prefs = { ...previous, depth: deeper }
+    setDepth(deeper)
+    setConfirmedPrefs(prefs)
+    setChoice(null)
+    agent.send(sentBrief, prefs)
+  }
+
+  const retrySearch = () => {
+    const prefs = confirmedPrefs ?? agent.prefs
+    if (!sentBrief || !prefs || agent.busy) return
+    setChoice(null)
+    agent.send(sentBrief, prefs)
+  }
+
+  const stage = stageOf({
+    example: Boolean(example),
+    capturing: Boolean(clip) || liveActive || readout.events > 0,
+    measuredReady,
+    sent: shopping,
+    hasOutputs: picks.length > 0,
+    hasChoice: Boolean(choice),
+  })
+
   const heroPicks = choice ? [choice, ...picks.filter((p) => p.url !== choice.url)] : picks
+  const panelReadout = lockedReadout ?? readout
 
   return (
     <div
-      className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-8 lg:py-10"
+      className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 md:px-8 lg:py-8"
       style={{ '--stage-foreground': PHOSPHOR_COLOR[persona.phosphor] } as CSSProperties}
     >
-      <header className="housing flex flex-col gap-5 rounded-2xl px-5 py-4 md:px-7">
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-5">
-            <h1 className="font-mono text-5xl leading-none tracking-wider text-foreground engraved">
-              vertiqal
-              <span className="sr-only">: your body is the search query</span>
-            </h1>
-            <p className="hidden whitespace-nowrap border-l border-border pl-5 text-xs font-semibold uppercase leading-relaxed tracking-[0.2em] text-muted-foreground engraved lg:block" aria-hidden>
-              Your body is
-              <br />
-              the search query
-            </p>
-          </div>
+      <FittingHeader
+        persona={persona}
+        mood={mood}
+        sport={sport}
+        onSport={changeSport}
+        onPersona={changePersona}
+        tuning={tuning}
+        onToggleTuning={() => setTuning((t) => !t)}
+        lockLine={lockLine}
+      />
 
-          <FormaConsole
-            persona={persona}
-            mood={mood}
-            sport={sport}
-            tuning={tuning}
-            tunerId={tunerId}
-            onToggleTuning={() => setTuning((t) => !t)}
-            line={mood === 'ready' ? lockLine : null}
-          />
-        </div>
-        <div id={tunerId} hidden={!tuning}>
-          {tuning && <FormaTuner persona={persona} onChange={changePersona} sport={sport} />}
-        </div>
-      </header>
-
-      {member.linked && stage === 'invite' && (
+      {member.linked && (
         <aside aria-label="Welcome back" className="housing flex flex-col gap-3 rounded-2xl px-5 py-4 md:flex-row md:items-center md:justify-between md:px-7">
           <div className="flex min-w-0 flex-col gap-1">
             <p className={LABEL}>{`Welcome back · ${member.phone}`}</p>
@@ -328,87 +515,113 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
               {member.said.length > 0 && (
                 <span className="text-muted-foreground">{` You told Forma: “${member.said.at(-1)}”`}</span>
               )}
-              <span className="text-muted-foreground">{' Your next scan builds on that.'}</span>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void forget()}
-            className="w-fit shrink-0 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            Forget me
-          </button>
+          <div className="flex shrink-0 items-center gap-4">
+            <button
+              type="button"
+              onClick={startFresh}
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              Start another fitting
+            </button>
+            <button
+              type="button"
+              onClick={() => void forget()}
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              Forget me
+            </button>
+          </div>
         </aside>
       )}
 
-      <main className={cn('grid grid-cols-1 gap-6', measured && 'lg:grid-cols-[minmax(0,1fr)_360px]')}>
-        <section aria-label="Movement analysis" className="housing flex min-w-0 flex-col gap-5 rounded-2xl p-4 md:p-6">
-          {clip && (
-            <p className="truncate px-1 font-mono text-lg leading-none text-muted-foreground" title={clip.name}>
-              {clip.name}
-            </p>
-          )}
+      <main className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        {example ? (
+          <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} />
+        ) : (
+          <section aria-label="Movement analysis" className="housing flex min-w-0 flex-col gap-4 rounded-2xl p-4 md:p-6">
+            {clip && (
+              <p className="truncate px-1 font-mono text-lg leading-none text-muted-foreground" title={clip.name}>
+                {clip.name}
+              </p>
+            )}
 
-          <PoseStage
-            key={clip?.url ?? (live.stream ? 'live' : 'empty')}
-            themeKey={persona.phosphor}
-            videoRef={videoRef}
-            src={clip?.url ?? null}
-            stream={live.stream}
-            onKeyframe={addKeyframe}
-            onHero={setHero}
-            overlay={
-              live.phase === 'off' || live.phase === 'error' ? undefined : (
-                <LiveOverlay
-                  phase={live.phase}
-                  secondsLeft={live.secondsLeft}
-                  caption={caption}
-                  events={readout.events}
-                  sport={sport}
-                />
-              )
-            }
-            session={sessionState.status === 'ready' ? sessionState.session : null}
-            tracker={tracker}
-            sport={sport}
-            engine={engine}
-            statusLabel={statusLabel}
-            onSnapshot={setSnapshot}
-            onFile={loadFile}
-            progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
-            idleAction={
+            <div className="flex flex-wrap items-center gap-3 px-1">
               <button
+                ref={exampleButtonRef}
                 type="button"
-                onClick={showSample}
-                className="flex items-center gap-2 whitespace-nowrap rounded-sm border-2 border-stage-foreground bg-stage-foreground px-3 py-1.5 text-lg uppercase leading-none text-stage transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none md:text-2xl"
+                onClick={showExample}
+                className={cn(buttonVariants({ size: 'lg', variant: stage === 'invite' ? 'default' : 'outline' }), 'cursor-pointer whitespace-nowrap px-4')}
               >
-                <Play className="size-4 fill-current" aria-hidden />
-                <span className="sm:hidden">Show me a sample</span>
-                <span className="hidden sm:block">{SAMPLE_CLIP ? 'Show me a sample run' : 'Show me a sample fitting'}</span>
+                <Play aria-hidden />
+                See an example
               </button>
-            }
-          />
+              <label className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), 'cursor-pointer whitespace-nowrap px-4 focus-within:ring-3 focus-within:ring-ring/50')}>
+                <Upload aria-hidden />
+                {stage === 'invite' ? 'Upload a clip' : 'Another clip'}
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) loadFile(file)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+              {liveActive ? (
+                <Button variant="outline" size="lg" className="whitespace-nowrap px-4" onClick={live.stop}>
+                  <Square aria-hidden />
+                  Stop capture
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="whitespace-nowrap px-4"
+                  onClick={goLive}
+                  disabled={engine !== 'ready' || enteredHeight === null}
+                  title={enteredHeight === null ? 'Enter your height in the brief first — recordings cannot be re-analysed later' : undefined}
+                >
+                  <Camera aria-hidden />
+                  {stage === 'invite' ? 'Film me' : 'Film again'}
+                </Button>
+              )}
+            </div>
 
-          <div className="flex flex-col gap-4 px-1 md:flex-row md:items-center md:justify-between">
-            {stage === 'invite' ? (
-              <div role="group" aria-label="What are we fitting?" className="well flex w-fit gap-1 rounded-lg p-1">
-                {SPORT_LIST.map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={sport === value}
-                    onClick={() => changeSport(value)}
-                    className={cn(
-                      'rounded-md px-4 py-2 text-sm font-semibold uppercase tracking-wider focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                      sport === value ? 'housing text-foreground' : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {SPORT_CHOICE[value]}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
+            <PoseStage
+              key={clip?.url ?? (live.stream ? 'live' : 'empty')}
+              themeKey={persona.phosphor}
+              videoRef={videoRef}
+              src={clip?.url ?? null}
+              stream={live.stream}
+              onKeyframe={addKeyframe}
+              onHero={setHero}
+              overlay={
+                live.phase === 'off' || live.phase === 'error' ? undefined : (
+                  <LiveOverlay
+                    phase={live.phase}
+                    secondsLeft={live.secondsLeft}
+                    caption={caption}
+                    events={readout.events}
+                    sport={sport}
+                  />
+                )
+              }
+              session={sessionState.status === 'ready' ? sessionState.session : null}
+              tracker={tracker}
+              sport={sport}
+              engine={engine}
+              statusLabel={statusLabel}
+              onSnapshot={setSnapshot}
+              onFile={loadFile}
+              progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
+            />
+
+            {(clip || live.stream) && (
+              <div className="flex flex-wrap items-center gap-3 px-1">
                 {clip && (
                   <>
                     <Button variant="outline" size="icon-lg" onClick={togglePlay} aria-label={playing ? 'Pause (Space)' : 'Play (Space)'}>
@@ -433,134 +646,145 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-3">
-              {liveActive ? (
-                <Button variant="outline" size="lg" className="px-4" onClick={live.stop}>
-                  <Square aria-hidden />
-                  Stop capture
-                </Button>
-              ) : (
-                <Button variant="outline" size="lg" className="px-4" onClick={goLive} disabled={engine !== 'ready'}>
-                  <Camera aria-hidden />
-                  {stage === 'invite' ? 'Film me' : 'Film again'}
-                </Button>
-              )}
-              <label className={cn(buttonVariants({ size: 'lg', variant: stage === 'invite' ? 'default' : 'outline' }), 'cursor-pointer px-4 focus-within:ring-3 focus-within:ring-ring/50')}>
-                <Upload aria-hidden />
-                {stage === 'invite' ? 'Upload a clip' : 'Another clip'}
-                <input
-                  type="file"
-                  accept="video/*"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) loadFile(file)
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-            </div>
-          </div>
-          {live.error && (
-            <p role="alert" className="px-1 text-sm leading-relaxed text-primary">
-              {`Live capture unavailable: ${live.error}.`}
-            </p>
-          )}
-          {stage === 'invite' && (
-            <p className="max-w-2xl px-1 text-pretty text-sm leading-relaxed text-muted-foreground">
-              {`${SPORTS[sport].clipHint} Frames never leave your browser.`}
-            </p>
-          )}
-        </section>
-
-        {measured && (
-          <aside className="housing flex flex-col gap-6 rounded-2xl p-5">
-            <GaitReadout readout={readout} baseline={baseline?.readout ?? null} />
-
-            {baseline && (
-              <div className="flex flex-col gap-2 border-t border-border pt-5">
-                <p className={LABEL}>Proof run</p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {proof
-                    ? `${proof.improved} of ${proof.scored} scored metrics improved vs `
-                    : 'Load a clip in your new shoes to compare against '}
-                  <span className="font-semibold text-foreground">{baseline.clipName}</span>.
-                </p>
-                <Button variant="outline" size="lg" className="h-10 w-fit px-4" onClick={() => setBaseline(null)}>
-                  <PinOff aria-hidden />
-                  Clear baseline
-                </Button>
-              </div>
+            {live.error && (
+              <p role="alert" className="px-1 text-sm leading-relaxed text-primary">
+                {`Live capture unavailable: ${live.error}.`}
+              </p>
             )}
-
-            {readout.ready && (
-              <details className="group border-t border-border pt-5">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                  <span className={LABEL}>Numbers look off?</span>
-                  <span className="flex min-w-0 items-center gap-2 font-mono text-lg leading-none text-muted-foreground">
-                    <span className="truncate">{`${heightCm} cm`}</span>
-                    <ChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden />
-                  </span>
-                </summary>
-                <div className="mt-5 flex flex-col gap-6">
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="mover-height" className={LABEL}>
-                      Your height
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        id="mover-height"
-                        type="number"
-                        min={120}
-                        max={220}
-                        value={heightCm}
-                        onChange={(e) => setHeightCm(Number(e.target.value))}
-                        onBlur={() => restartAnalysis(sport, heightCm)}
-                        className="well h-10 w-24 rounded-md px-3 font-mono text-2xl tabular-nums text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                      />
-                      <span className="text-sm text-muted-foreground">cm · scales distances</span>
-                    </div>
-                  </div>
-
-                  <ProviderPicker
-                    providers={POSE_PROVIDERS}
-                    value={providerId}
-                    onChange={setProviderId}
-                    status={sessionState.status === 'error' ? sessionState.message : providerStatus}
-                  />
-                </div>
-              </details>
-            )}
-          </aside>
+            <p className="max-w-2xl px-1 text-pretty text-xs leading-relaxed text-muted-foreground">
+              {enteredHeight === null
+                ? `${SPORTS[sport].clipHint} Enter your height in the brief before filming — recordings can't be re-analysed afterwards.`
+                : `${SPORTS[sport].clipHint} Recording captures ${CAPTURE_SECONDS[sport]} seconds, live only — the video is never saved.`}{' '}
+              {PRIVACY_LINE}
+            </p>
+          </section>
         )}
 
-        <div id="forma-procurement" className={cn('scroll-mt-6', measured && 'lg:col-span-2')}>
+        <aside className="housing flex flex-col gap-6 rounded-2xl p-5">
+          {example ? (
+            <section aria-label="Make it your fitting" className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground engraved">Make it your fitting</h2>
+                <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+                  The example uses synthetic numbers. For a real shortlist, film a clip or upload one — Forma measures only your movement, then you confirm the brief.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'cursor-pointer whitespace-nowrap px-4 focus-within:ring-3 focus-within:ring-ring/50')}>
+                  <Upload aria-hidden />
+                  Upload a clip
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) loadFile(file)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="whitespace-nowrap px-4"
+                  onClick={goLive}
+                  disabled={engine !== 'ready' || enteredHeight === null}
+                  title={enteredHeight === null ? 'Enter your height in the brief first — recordings cannot be re-analysed later' : undefined}
+                >
+                  <Camera aria-hidden />
+                  Film me
+                </Button>
+              </div>
+              <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{PRIVACY_LINE}</p>
+            </section>
+          ) : (
+            <FittingBrief
+              sport={sport}
+              draft={prefDraft}
+              notes={notes}
+              onDraft={updateDraft}
+              onNotes={updateNotes}
+              onSubmit={submitSearch}
+              attempted={attempted}
+              submitLabel={sentBrief ? 'Update search' : 'Find my shoes'}
+              submitEnabled={submitReady}
+              submitHint={submitHint}
+              provisionalHeight={provisional}
+            />
+          )}
+
+          {readout.events > 0 && (
+            <div className="border-t border-border pt-5">
+              <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
+            </div>
+          )}
+
+          {baseline && (
+            <div className="flex flex-col gap-2 border-t border-border pt-5">
+              <p className={LABEL}>Baseline · this session only</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {'Compare your movement across sessions. '}
+                {proof
+                  ? `${proof.improved} of ${proof.scored} scored metrics improved vs `
+                  : 'Load a clip to compare against '}
+                <span className="font-semibold text-foreground">{baseline.clipName}</span>.
+              </p>
+              <Button variant="outline" size="lg" className="h-10 w-fit px-4" onClick={() => setBaseline(null)}>
+                <PinOff aria-hidden />
+                Clear baseline
+              </Button>
+            </div>
+          )}
+
+          <details className="group border-t border-border pt-5">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+              <span className={LABEL}>Analysis settings</span>
+              <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>
+                +
+              </span>
+            </summary>
+            <div className="mt-5">
+              <ProviderPicker
+                providers={POSE_PROVIDERS}
+                value={providerId}
+                onChange={changeProvider}
+                status={sessionState.status === 'error' ? sessionState.message : providerStatus}
+              />
+            </div>
+          </details>
+        </aside>
+
+        <div id="forma-procurement" className={cn('scroll-mt-6', 'lg:col-span-2')}>
           <AgentPanel
-            ref={agentPanel}
             agent={agent}
-            readout={readout}
             sport={sport}
-            heightCm={heightCm}
-            voice={persona.voice}
-            capturing={liveActive}
-            context={context}
             member={member}
             choice={choice}
             onChoose={setChoice}
-            onPinBaseline={readout.ready ? () => setBaseline({ readout, clipName: clip?.name ?? 'today' }) : undefined}
+            onPinBaseline={measuredReady ? () => setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today' }) : undefined}
             baselinePinned={Boolean(baseline)}
+            deeper={deeper}
+            onLookHarder={lookHarder}
+            onRetry={retrySearch}
+            onStartFresh={startFresh}
+            confirmedSize={prefDraft.size}
+            onSizeCommit={(size) => {
+              setPrefDraft((d) => ({ ...d, size }))
+              setConfirmedPrefs((p) => (p ? { ...p, size } : p))
+            }}
           />
         </div>
 
         {choice && hero && (
-          <div id="hero-frame" className={cn('scroll-mt-6', measured && 'lg:col-span-2')}>
-            <HeroCard frame={hero} readout={readout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
+          <div id="hero-frame" className="scroll-mt-6 lg:col-span-2">
+            <HeroCard frame={hero} readout={panelReadout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
           </div>
         )}
 
-        {stage === 'results' && picks.length > 0 && !choice && (
-          <div id="fitting-notes" className={cn('scroll-mt-6', measured && 'lg:col-span-2')}>
-            <FittingNotes sport={sport} readout={readout} keyframes={keyframes} value={notes} onChange={setNotes} />
+        {shopping && picks.length > 0 && !choice && !example && (
+          <div id="fitting-notes" className="scroll-mt-6 lg:col-span-2">
+            <FittingNotes sport={sport} readout={panelReadout} keyframes={keyframes} value={notes} onChange={updateNotes} />
           </div>
         )}
       </main>

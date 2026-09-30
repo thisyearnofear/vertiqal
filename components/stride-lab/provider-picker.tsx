@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { PoseProvider } from '@/lib/pose/types'
 
@@ -9,7 +10,27 @@ interface ProviderPickerProps {
   status?: string | null
 }
 
+const HOSTED_LABEL: Record<string, string> = {
+  vlmrun: 'Sends sampled frames to VLM Run',
+}
+
 export function ProviderPicker({ providers, value, onChange, status }: ProviderPickerProps) {
+  const [pending, setPending] = useState<string | null>(null)
+  const [consented, setConsented] = useState<Record<string, boolean>>({})
+  const [checked, setChecked] = useState(false)
+
+  const request = (id: string) => {
+    if (!HOSTED_LABEL[id] || consented[id]) return onChange(id)
+    setPending(id)
+    setChecked(false)
+  }
+
+  const confirm = (id: string) => {
+    setConsented((current) => ({ ...current, [id]: true }))
+    setPending(null)
+    onChange(id)
+  }
+
   return (
     <fieldset className="flex flex-col gap-2 border-t border-border pt-5">
       <legend className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-foreground engraved">
@@ -17,37 +38,62 @@ export function ProviderPicker({ providers, value, onChange, status }: ProviderP
       </legend>
       {providers.map((provider) => {
         const selected = provider.id === value
+        const hosted = HOSTED_LABEL[provider.id]
         return (
-          <label
-            key={provider.id}
-            className={cn(
-              'flex cursor-pointer items-center gap-3 rounded-md p-3 transition-colors has-focus-visible:ring-3 has-focus-visible:ring-ring/50',
-              selected ? 'housing' : 'well',
-              !provider.available && 'cursor-not-allowed opacity-60',
-            )}
-          >
-            <input
-              type="radio"
-              name="pose-provider"
-              value={provider.id}
-              checked={selected}
-              disabled={!provider.available}
-              onChange={() => onChange(provider.id)}
-              className="sr-only"
-            />
-            <span className="led shrink-0" data-state={selected ? 'on' : 'off'} aria-hidden />
-            <span className="flex flex-1 flex-col">
-              <span className="text-sm font-semibold text-foreground">{provider.label}</span>
-              <span className="text-xs leading-relaxed text-muted-foreground">
+          <div key={provider.id} className="flex flex-col gap-2">
+            <label
+              className={cn(
+                'flex cursor-pointer items-center gap-3 rounded-md p-3 transition-colors has-focus-visible:ring-3 has-focus-visible:ring-ring/50',
+                selected ? 'housing' : 'well',
+                !provider.available && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              <input
+                type="radio"
+                name="pose-provider"
+                value={provider.id}
+                checked={selected}
+                disabled={!provider.available}
+                onChange={() => request(provider.id)}
+                className="sr-only"
+              />
+              <span className="led shrink-0" data-state={selected ? 'on' : 'off'} aria-hidden />
+              <span className="flex flex-1 flex-col">
+                <span className="text-sm font-semibold text-foreground">{provider.label}</span>
+                <span className="text-xs leading-relaxed text-muted-foreground">
                   {provider.available ? provider.detail : provider.unavailableReason}
+                  {hosted && ` · ${hosted}`}
                 </span>
                 {selected && status && (
                   <span className="mt-1 font-mono text-xs leading-relaxed text-foreground" role="status">
                     {status}
                   </span>
                 )}
-            </span>
-          </label>
+              </span>
+            </label>
+            {pending === provider.id && (
+              <div className="well flex flex-col gap-2 rounded-md p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">{hosted}</p>
+                <label className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => setChecked(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  I understand sampled frames from my clip leave this device for hosted analysis.
+                </label>
+                <button
+                  type="button"
+                  disabled={!checked}
+                  onClick={() => confirm(provider.id)}
+                  className="w-fit rounded-sm border-2 border-primary bg-primary px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-primary-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Enable hosted analysis
+                </button>
+              </div>
+            )}
+          </div>
         )
       })}
     </fieldset>

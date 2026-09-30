@@ -116,6 +116,7 @@ export function FormaConsole({
   tunerId,
   onToggleTuning,
   line,
+  compact = false,
 }: {
   persona: Persona
   mood: Mood
@@ -125,20 +126,28 @@ export function FormaConsole({
   onToggleTuning: () => void
   /** Overrides the mood line, e.g. with the runner's own number when measurements lock. */
   line?: string | null
+  compact?: boolean
 }) {
   const speech = line ?? speechFor(persona.voice, mood, sport)
 
   return (
-    <div className="flex items-center gap-4">
-        <div className="screen flex size-20 shrink-0 items-center justify-center rounded-xl md:size-24">
-          <FormaAvatar mood={mood} shape={persona.shape} className="size-16 md:size-20" />
+    <div className="flex items-center gap-3 md:gap-4">
+        <div className={cn('screen flex shrink-0 items-center justify-center rounded-xl', compact ? 'size-12' : 'size-20 md:size-24')}>
+          <FormaAvatar mood={mood} shape={persona.shape} className={compact ? 'size-10' : 'size-16 md:size-20'} />
         </div>
         <div className="flex min-w-0 flex-col gap-1">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
             Forma
             <span className="font-mono text-base normal-case tracking-normal">{`· ${VOICE_PROFILE[persona.voice].label.toLowerCase()}`}</span>
           </p>
-          <p key={speech} role="status" className="animate-type-in text-pretty font-mono text-2xl leading-tight text-foreground">
+          <p
+            key={speech}
+            role="status"
+            className={cn(
+              'animate-type-in text-pretty font-mono leading-tight text-foreground',
+              compact ? 'hidden truncate text-lg sm:block sm:max-w-52' : 'text-2xl',
+            )}
+          >
             {speech}
           </p>
           <button

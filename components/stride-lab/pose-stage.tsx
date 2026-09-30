@@ -36,8 +36,6 @@ interface PoseStageProps {
   statusLabel: string | null
   onSnapshot: (snapshot: MovementSnapshot) => void
   onFile: (file: File) => void
-  /** Call to action shown on the idle screen, under the promise. */
-  idleAction?: ReactNode
   /** Measurement progress for a loaded clip: pips fill per event, then a lock banner plays once. */
   progress?: { events: number; target: number; ready: boolean }
 }
@@ -49,8 +47,8 @@ const ENGINE_LINE: Record<EngineState, string> = {
 }
 
 const PROMISE: Record<Sport, string> = {
-  running: 'Film 10 seconds of you running. Get shoes matched to how you actually move.',
-  climbing: 'Film one short climb. Get shoes matched to how you actually move.',
+  running: 'Record or upload 20 seconds of you running. Get shoes matched to how you actually move.',
+  climbing: 'Record or upload up to 45 seconds of one climb. Get shoes matched to how you actually move.',
 }
 
 function BootLine({ index, children }: { index: number; children: string }) {
@@ -100,7 +98,6 @@ export function PoseStage({
   statusLabel,
   onSnapshot,
   onFile,
-  idleAction,
   progress,
 }: PoseStageProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -276,7 +273,7 @@ export function PoseStage({
   return (
     <div
       ref={containerRef}
-      className="screen aspect-[4/3] w-full sm:aspect-video"
+      className="screen aspect-[4/3] w-full sm:aspect-video lg:aspect-[21/10]"
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -307,24 +304,19 @@ export function PoseStage({
       {idle && !dragging && (
         <div className="absolute inset-0 z-10 flex animate-boot flex-col justify-between p-5 font-mono text-stage-foreground md:p-10">
           <div className="flex flex-col gap-1 text-base leading-snug phosphor md:text-xl">
-            <p>{'VERTIQAL V-01 MOVEMENT ANALYSER'}</p>
             <div className="hidden flex-col gap-1 sm:flex">
               <BootLine index={0}>{`POSE ENGINE ........ ${ENGINE_LINE[engine]}`}</BootLine>
               <BootLine index={1}>{`MODE .............. ${SPORTS[sport].label.toUpperCase()}`}</BootLine>
-              <BootLine index={2}>{'FORMA UNIT ........ ONLINE'}</BootLine>
             </div>
           </div>
           <div className={'flex w-3/5 flex-col items-start gap-3 md:w-1/2'}>
-            <p className="text-2xl leading-none phosphor md:text-4xl">
-              NO SIGNAL
-              <span className="ml-2 inline-block animate-blink" aria-hidden>
-                {'█'}
-              </span>
-            </p>
+            <p className="text-2xl leading-none phosphor md:text-4xl">READY FOR YOUR CLIP</p>
             <p className="text-pretty text-lg leading-snug phosphor md:text-2xl">{PROMISE[sport]}</p>
-            {idleAction}
-            <p className="hidden text-pretty text-base leading-snug opacity-70 sm:block">{'> OR DROP A SIDE-ON CLIP ON THIS SCREEN'}</p>
+            <p className="hidden text-pretty text-base leading-snug opacity-70 sm:block">{'> OR DROP A CLIP ON THIS SCREEN'}</p>
           </div>
+          <p className="absolute bottom-3 right-4 text-xs uppercase tracking-wider opacity-60 md:bottom-4 md:right-6">
+            Illustration · not a video analysis
+          </p>
         </div>
       )}
 

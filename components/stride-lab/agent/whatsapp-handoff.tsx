@@ -63,8 +63,8 @@ export function WhatsAppHandoff({ fitting, member }: { fitting: Fitting; member:
       <div className="flex flex-col gap-3 rounded-md border border-stage-foreground/40 p-4 md:p-5">
         <p className="text-xl leading-snug phosphor">{`> FORMA IS ON ${shown}`}</p>
         <p className="max-w-xl font-sans text-base leading-relaxed opacity-85">
-          Your fitting, this pick and the stock check are in the chat. Tell Forma how they feel once they&apos;re worn in;
-          your next scan here picks up from that conversation.
+          Your fitting, chosen shoe and any completed availability check are in the chat. Tell Forma how they feel once
+          they&apos;re worn in; your next scan here picks up from that conversation.
         </p>
         <a
           href={sent.chatUrl}
@@ -122,8 +122,8 @@ export function WhatsAppHandoff({ fitting, member }: { fitting: Fitting; member:
     <>
       <p className="text-xl leading-snug phosphor">{'> KEEP FORMA IN YOUR POCKET'}</p>
       <p className="max-w-xl font-sans text-base leading-relaxed opacity-80">
-        Get this pick and its stock check on WhatsApp. Ask about sizing or break-in there. Forma remembers the fitting,
-        so next time you scan, it starts from what you told it.
+        Get your fitting, chosen shoe and any completed availability check on WhatsApp. Ask about sizing or break-in
+        there. Forma remembers the fitting, so next time you scan, it starts from what you told it.
       </p>
     </>
   )

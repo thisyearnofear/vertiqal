@@ -1,6 +1,6 @@
 import type { Pose } from '../pose/types'
-import { ClimbTracker, type ClimbSnapshot } from './climb'
-import { GaitTracker, deriveSignals, type GaitSignal, type GaitSnapshot } from './gait'
+import { ClimbTracker, type ClimbSnapshot } from './climb.ts'
+import { GaitTracker, deriveSignals, type GaitSignal, type GaitSnapshot } from './gait.ts'
 
 export type Sport = 'running' | 'climbing'
 export type MovementSnapshot = GaitSnapshot | ClimbSnapshot

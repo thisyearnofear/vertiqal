@@ -130,6 +130,9 @@
         transparent 3px
       );
   }
+  .screen-readable::after {
+    opacity: 0.12;
+  }
 
   .phosphor {
     text-shadow:

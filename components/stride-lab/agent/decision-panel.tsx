@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, type FormEvent } from 'react'
-import { ArrowUpRight, Pin } from 'lucide-react'
+import { ArrowUpRight, Pin, RotateCcw } from 'lucide-react'
 import { buttonVariants, Button } from '@/components/ui/button'
 import type { Sport } from '@/lib/metrics/readout'
 import type { MemberView } from '@/lib/member/schema'
 import type { Passport } from '@/lib/passport/schema'
+import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from '@/lib/fitting/stock'
 import { cn } from '@/lib/utils'
 import type { Fitting } from '@/lib/wassist/fitting'
 import type { ShoePick } from './outputs'
@@ -21,7 +22,7 @@ interface DecisionPanelProps {
   picks: ShoePick[]
   sport: Sport
   size: string
-  onSizeChange: (size: string) => void
+  onSizeCommit: (size: string) => void
   onChoose: (pick: ShoePick | null) => void
   fitting: Fitting | null
   passport: Passport | null
@@ -36,7 +37,7 @@ export function DecisionPanel({
   picks,
   sport,
   size,
-  onSizeChange,
+  onSizeCommit,
   onChoose,
   fitting,
   passport,
@@ -45,42 +46,65 @@ export function DecisionPanel({
   baselinePinned,
 }: DecisionPanelProps) {
   const [draft, setDraft] = useState(size)
-  const stock = useStockCheck({ productName: pick.name, productUrl: pick.url, size })
-  const data = stock.data
+  const [submitted, setSubmitted] = useState<string | null>(null)
+  const stock = useStockCheck(stockTargetFor(pick, submitted))
+  const mismatched = draftDiffers(submitted, draft)
+  const checking = submitted !== null && (stock.isLoading || stock.isValidating)
+  const checkedData = submitted && !checking && !stock.error ? stock.data : undefined
+  const data = checkedData && !mismatched ? checkedData : undefined
   const available = data?.verdict === 'in_stock'
   const unavailable = data?.verdict === 'out_of_stock' || data?.verdict === 'size_not_listed'
-  const settled = Boolean(data || stock.error)
   const index = picks.findIndex((p) => p.url === pick.url)
   const nextPick = picks.find((_, i) => i > index) ?? picks.find((p) => p.url !== pick.url)
-  const price = data?.price || pick.price
-  const stockText = data ? stockLine(data, size) : 'Size not verified'
+  const price = data && submitted === draft.trim() ? data.price || pick.price : pick.price
+  const snapshot = choiceSnapshot({
+    draft,
+    submitted,
+    verdict: data && submitted ? stockLine(data, submitted) : null,
+  })
 
   const commit = (e: FormEvent) => {
     e.preventDefault()
     const next = draft.trim()
-    if (next && next !== size) onSizeChange(next)
+    if (!next) return
+    if (next === submitted) {
+      void stock.mutate()
+      return
+    }
+    setSubmitted(next)
+    onSizeCommit(next)
+  }
+
+  const retry = () => {
+    if (submitted) void stock.mutate()
   }
 
   const recordChoice = () => {
-    if (!member.linked) return
+    if (!member.linked || !snapshot) return
     void fetch('/api/member', {
       method: 'POST',
       keepalive: true,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sport, name: pick.name, retailer: pick.retailer, price, size, at: new Date().toISOString() }),
+      body: JSON.stringify({ sport, name: pick.name, retailer: pick.retailer, price, size: snapshot.size, at: new Date().toISOString() }),
     }).catch(() => {})
   }
 
-  const choiceFitting: Fitting | null = fitting
-    ? { ...fitting, choice: { name: pick.name, retailer: pick.retailer, url: pick.url, price, size, stock: stockText } }
-    : null
+  const passportCurrent = Boolean(draft.trim()) && passport?.size === draft.trim()
+  const choiceFitting: Fitting | null =
+    fitting && snapshot
+      ? {
+          ...fitting,
+          passportUrl: passportCurrent ? fitting.passportUrl : undefined,
+          choice: { name: pick.name, retailer: pick.retailer, url: pick.url, price, size: snapshot.size, stock: snapshot.stock },
+        }
+      : null
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
         <div className="flex min-w-0 flex-col gap-2">
           <p className="text-lg uppercase leading-none opacity-60">{`Your pick · ${pick.retailer}`}</p>
-          <p className="text-pretty text-3xl leading-tight phosphor md:text-4xl">{pick.name}</p>
+          <p className="text-pretty font-sans text-2xl font-semibold leading-tight md:text-3xl">{pick.name}</p>
           <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-80">{pick.why}</p>
         </div>
         <button type="button" onClick={() => onChoose(null)} className={cn(LINK, 'shrink-0')}>
@@ -99,74 +123,85 @@ export function DecisionPanel({
               value={draft}
               maxLength={20}
               onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => draft.trim() && draft.trim() !== size && onSizeChange(draft.trim())}
               className="h-10 w-32 rounded-sm border border-stage-foreground/50 bg-transparent px-3 text-2xl text-stage-foreground outline-none focus-visible:border-stage-foreground focus-visible:shadow-[0_0_16px_-4px_var(--stage-foreground)]"
             />
           </div>
-          {draft.trim() && draft.trim() !== size && (
+          {(!submitted || mismatched) && draft.trim() && (
             <button type="submit" className={cn(LINK, 'pb-2.5 opacity-100')}>
               {`[ CHECK ${draft.trim().toUpperCase()} ]`}
+            </button>
+          )}
+          {submitted && !mismatched && !checking && (
+            <button type="button" onClick={retry} className={cn(LINK, 'flex items-center gap-1.5 pb-2.5 opacity-100')}>
+              <RotateCcw className="size-4" aria-hidden />
+              {'[ CHECK AGAIN ]'}
             </button>
           )}
         </form>
 
         <div className="flex flex-col gap-2" aria-live="polite">
-          {stock.isLoading ? (
+          {!submitted ? (
+            <p className="text-xl uppercase leading-snug opacity-70">{'UNCHECKED · SUBMIT A SIZE TO CHECK AVAILABILITY'}</p>
+          ) : checking ? (
             <p className="flex items-center gap-2 text-xl uppercase leading-snug opacity-85">
               <span className="led" data-state="busy" aria-hidden />
-              {`Checking ${size} at ${pick.retailer} right now`}
+              {`Checking ${submitted} at ${pick.retailer} right now`}
               <span className="animate-blink" aria-hidden>
                 {'█'}
               </span>
             </p>
           ) : stock.error ? (
             <p className="text-xl uppercase leading-snug text-primary phosphor">{`! Couldn't check stock: ${stock.error.message}`}</p>
-          ) : (
-            data && (
-              <>
-                <p className={cn('text-2xl uppercase leading-snug', available ? 'phosphor' : 'text-primary phosphor')}>
-                  {`${available ? '■' : '!'} ${stockText}`}
-                </p>
-                <StockProof data={data} productName={pick.name} />
-              </>
-            )
+          ) : data ? (
+            <>
+              <p className={cn('text-2xl uppercase leading-snug', available ? 'phosphor' : 'text-primary phosphor')}>
+                {`${available ? '■' : '!'} ${stockLine(data, submitted)}`}
+              </p>
+              <StockProof data={data} productName={pick.name} />
+            </>
+          ) : null}
+          {submitted && mismatched && !checking && (
+            <>
+              <p className="text-lg uppercase leading-snug opacity-70">
+                {`${lastCheckLabel(submitted)} · ${(draft.trim() || '?').toUpperCase()} NOT CHECKED YET`}
+              </p>
+              {checkedData && <StockProof data={checkedData} productName={pick.name} />}
+            </>
           )}
         </div>
 
-        {settled && (
-          <div className="flex flex-col gap-3 border-t border-dashed border-stage-foreground/30 pt-4">
-            <div className="flex flex-wrap items-center gap-3">
-              {unavailable && nextPick && (
-                <Button size="lg" className="h-11 px-5 text-base" onClick={() => onChoose(nextPick)}>
-                  {`Try ${shortName(nextPick.name)}`}
-                </Button>
-              )}
-              <a
-                href={pick.url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={recordChoice}
-                className={cn(buttonVariants({ size: 'lg', variant: unavailable ? 'outline' : 'default' }), 'h-11 px-5 text-base')}
-              >
-                {`Buy at ${pick.retailer} · ${price}`}
-                <ArrowUpRight aria-hidden />
-              </a>
-            </div>
-            <p className="text-lg leading-snug opacity-60">
-              {available
-                ? `// ${size} VERIFIED IN STOCK. THE RETAILER IS JUST THE TILL.`
-                : '// NOT VERIFIED. CONFIRM YOUR SIZE AT CHECKOUT.'}
-            </p>
+        <div className="flex flex-col gap-3 border-t border-dashed border-stage-foreground/30 pt-4">
+          <div className="flex flex-wrap items-center gap-3">
+            {unavailable && nextPick && (
+              <Button size="lg" className="h-11 px-5 text-base" onClick={() => onChoose(nextPick)}>
+                {`Try ${shortName(nextPick.name)}`}
+              </Button>
+            )}
+            <a
+              href={pick.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={recordChoice}
+              className={cn(buttonVariants({ size: 'lg', variant: unavailable ? 'outline' : 'default' }), 'h-11 px-5 text-base')}
+            >
+              {`Buy at ${pick.retailer} · ${price}`}
+              <ArrowUpRight aria-hidden />
+            </a>
           </div>
-        )}
+          <p className="text-lg leading-snug opacity-60">
+            {available
+              ? `// ${submitted?.toUpperCase()} VERIFIED IN STOCK. THE RETAILER IS JUST THE TILL.`
+              : `// AVAILABILITY ${submitted ? 'UNCERTAIN' : 'UNCHECKED'} — CONFIRM YOUR SIZE AT THE RETAILER BEFORE BUYING.`}
+          </p>
+        </div>
       </div>
 
-      {settled && choiceFitting && <WhatsAppHandoff fitting={choiceFitting} member={member} />}
+      {choiceFitting && <WhatsAppHandoff fitting={choiceFitting} member={member} />}
 
       {onPinBaseline && (
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <p className="max-w-xl text-pretty font-sans text-base leading-relaxed opacity-80">
-            {`Once you've ${sport === 'running' ? 'run' : 'climbed'} in them for a couple of weeks, film again. Forma compares against today and shows what the new shoes actually changed.`}
+            {`Film again after a few sessions in them and Forma compares your movement across the two clips — nothing says the shoes caused any change. This session only; nothing is stored.`}
           </p>
           <button type="button" onClick={onPinBaseline} disabled={baselinePinned} className={cn(LINK, 'shrink-0 disabled:no-underline')}>
             {baselinePinned ? '■ TODAY IS YOUR BASELINE' : (
@@ -179,14 +214,17 @@ export function DecisionPanel({
         </div>
       )}
 
-      {passport && (
-        <details className="text-lg leading-snug">
-          <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ Your fit passport, for other shops and AI assistants'}</summary>
-          <div className="mt-4">
-            <PassportCard passport={passport} />
-          </div>
-        </details>
-      )}
+      {passport &&
+        (passportCurrent ? (
+          <details className="text-lg leading-snug">
+            <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ Your fit passport, for other shops and AI assistants'}</summary>
+            <div className="mt-4">
+              <PassportCard passport={passport} />
+            </div>
+          </details>
+        ) : draft.trim() ? (
+          <p className="text-lg leading-snug opacity-70">{'Check this size to update your fit passport.'}</p>
+        ) : null)}
     </div>
   )
 }
