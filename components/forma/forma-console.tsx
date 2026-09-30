@@ -132,35 +132,36 @@ export function FormaConsole({
 
   return (
     <div className="flex items-center gap-3 md:gap-4">
-        <div className={cn('screen flex shrink-0 items-center justify-center rounded-xl', compact ? 'size-12' : 'size-20 md:size-24')}>
-          <FormaAvatar mood={mood} shape={persona.shape} className={compact ? 'size-10' : 'size-16 md:size-20'} />
-        </div>
-        <div className="flex min-w-0 flex-col gap-1">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
-            Forma
-            <span className="font-mono text-base normal-case tracking-normal">{`· ${VOICE_PROFILE[persona.voice].label.toLowerCase()}`}</span>
-          </p>
-          <p
-            key={speech}
-            role="status"
-            className={cn(
-              'animate-type-in text-pretty font-mono leading-tight text-foreground',
-              compact ? 'hidden truncate text-lg sm:block sm:max-w-52' : 'text-2xl',
-            )}
-          >
-            {speech}
-          </p>
-          <button
-            type="button"
-            aria-expanded={tuning}
-            aria-controls={tunerId}
-            onClick={onToggleTuning}
-            className="flex w-fit items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            {tuning ? <X className="size-3.5" aria-hidden /> : <SlidersHorizontal className="size-3.5" aria-hidden />}
-            {tuning ? 'Done tuning' : 'Tune Forma'}
-          </button>
-        </div>
+      <div className={cn('screen flex shrink-0 items-center justify-center rounded-xl', compact ? 'size-14 sm:size-[4.5rem]' : 'size-20 md:size-24')}>
+        <FormaAvatar mood={mood} shape={persona.shape} className={compact ? 'size-12 sm:size-16' : 'size-16 md:size-20'} />
+      </div>
+      <div className={cn('min-w-0 flex-col gap-1', compact ? 'hidden sm:flex' : 'flex')}>
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
+          Forma
+          <span className="font-mono text-base normal-case tracking-normal">{`· ${VOICE_PROFILE[persona.voice].label.toLowerCase()}`}</span>
+        </p>
+        <p
+          key={speech}
+          role="status"
+          className={cn(
+            'animate-type-in text-pretty font-mono leading-tight text-foreground',
+            compact ? 'hidden truncate text-lg sm:block sm:max-w-52' : 'text-2xl',
+          )}
+        >
+          {speech}
+        </p>
+      </div>
+      <button
+        type="button"
+        aria-expanded={tuning}
+        aria-controls={tunerId}
+        onClick={onToggleTuning}
+        className="flex w-fit shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        {tuning ? <X className="size-3.5" aria-hidden /> : <SlidersHorizontal className="size-3.5" aria-hidden />}
+        <span className={compact ? 'hidden sm:inline' : undefined}>{tuning ? 'Done tuning' : 'Tune Forma'}</span>
+        {compact && <span className="sr-only sm:hidden">{tuning ? 'Done tuning' : 'Tune Forma'}</span>}
+      </button>
     </div>
   )
 }

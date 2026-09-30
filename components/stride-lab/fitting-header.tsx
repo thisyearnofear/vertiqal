@@ -1,7 +1,6 @@
 'use client'
 
 import { useId } from 'react'
-import { SlidersHorizontal, X } from 'lucide-react'
 import { FormaConsole, FormaTuner } from '@/components/forma/forma-console'
 import type { Sport } from '@/lib/metrics/readout'
 import type { Mood, Persona } from '@/lib/persona'
@@ -37,7 +36,7 @@ export function FittingHeader({
     <header className="housing flex flex-col gap-3 rounded-2xl px-5 py-4 md:px-7">
       <div className="flex items-center justify-between gap-4">
         <p className="font-mono text-4xl leading-none tracking-wider text-foreground engraved">vertiqal</p>
-        <div className="hidden shrink-0 sm:block">
+        <div className="shrink-0">
           <FormaConsole
             compact
             persona={persona}
@@ -49,16 +48,6 @@ export function FittingHeader({
             line={mood === 'ready' ? lockLine : null}
           />
         </div>
-        <button
-          type="button"
-          aria-expanded={tuning}
-          aria-controls={tunerId}
-          onClick={onToggleTuning}
-          className="flex shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:hidden"
-        >
-          {tuning ? <X className="size-3.5" aria-hidden /> : <SlidersHorizontal className="size-3.5" aria-hidden />}
-          {tuning ? 'Done tuning' : 'Tune Forma'}
-        </button>
       </div>
 
       <div className="flex flex-col gap-1">

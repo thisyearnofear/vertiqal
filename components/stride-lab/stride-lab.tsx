@@ -17,6 +17,7 @@ import {
   prefsValid,
   type PrefDraft,
 } from '@/lib/fitting/prefs'
+import { EXAMPLE_STEP_COUNT } from '@/lib/fitting/example'
 import { canFindShoes, clearsBaseline, measurementInvalidated, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
 import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
@@ -374,7 +375,18 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
         : null
 
   const mood: Mood =
-    agent.mood ?? (readout.ready && !liveActive ? 'ready' : (clip && playing) || liveActive ? 'watching' : 'asleep')
+    agent.mood ??
+    (example
+      ? example.playing
+        ? 'watching'
+        : example.step >= EXAMPLE_STEP_COUNT - 1
+          ? 'pleased'
+          : 'asking'
+      : readout.ready && !liveActive
+        ? 'ready'
+        : (clip && playing) || liveActive
+          ? 'watching'
+          : 'asleep')
 
   const announcedMood = useRef<Mood>(mood)
   useEffect(() => {
