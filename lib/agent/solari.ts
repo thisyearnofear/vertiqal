@@ -2,6 +2,8 @@ import 'server-only'
 import { Output, generateText } from 'ai'
 import { Solari, type BrowserSession, type LaunchOptions } from '@solarisdk/browser'
 import { z } from 'zod'
+import { guardedStockVerdict } from './stock-page.ts'
+import { extraStockHosts, stockUrlAllowed } from './stock-policy.ts'
 
 export const stockVerdictSchema = z.object({
   verdict: z
@@ -19,6 +21,8 @@ export interface StockCheck extends StockVerdict {
   productUrl: string
   size: string
   pageTitle: string
+  finalUrl: string
+  httpStatus: number | null
   screenshot: string | null
   sessionId: string
   egress: string
@@ -59,7 +63,54 @@ async function within<T>(work: Promise<T>, timeoutMs: number, label: string): Pr
 async function readProductPage(browser: BrowserSession, url: string) {
   const page = await browser.newPage()
   await page.setViewportSize({ width: 1280, height: 860 })
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 })
+  const allowed = (raw: string) => stockUrlAllowed(raw, extraStockHosts())
+  const stripHash = (raw: string) => {
+    try {
+      const parsed = new URL(raw)
+      parsed.hash = ''
+      return parsed.href
+    } catch {
+      return raw
+    }
+  }
+  const emptyPage = (evidenceUrl: string, httpStatus: number | null) => ({
+    finalUrl: evidenceUrl,
+    httpStatus,
+    title: '',
+    headings: [] as string[],
+    productNames: [] as string[],
+    offers: '',
+    sizes: [] as string[],
+    text: '',
+    blocked: true,
+    screenshot: null as string | null,
+  })
+  let refusedUrl: string | null = null
+  const navResponses = new Map<string, number>()
+  await page.route('**/*', (route) => {
+    const request = route.request()
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame() && !allowed(request.url())) {
+      refusedUrl = request.url()
+      return route.abort()
+    }
+    return route.continue()
+  })
+  page.on('response', (response) => {
+    const request = response.request()
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+      navResponses.set(stripHash(request.url()), response.status())
+    }
+  })
+  const statusFor = (raw: string, initial: { url(): string; status(): number } | null) =>
+    navResponses.get(stripHash(raw)) ?? (initial && stripHash(initial.url()) === stripHash(raw) ? initial.status() : null)
+
+  let response
+  try {
+    response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 })
+  } catch (error) {
+    if (refusedUrl) return emptyPage(refusedUrl, null)
+    throw error
+  }
 
   for (const selector of COOKIE_BUTTONS) {
     const button = page.locator(selector).first()
@@ -71,8 +122,13 @@ async function readProductPage(browser: BrowserSession, url: string) {
   await page.waitForSelector('button, option, select, [data-size]', { timeout: 5_000 }).catch(() => {})
   await page.waitForTimeout(1_000)
 
+  const finalUrl = page.url()
+  if (refusedUrl) return emptyPage(refusedUrl, null)
+  if (!allowed(finalUrl)) return emptyPage(finalUrl, statusFor(finalUrl, response))
+
   const signals = await page.evaluate(() => {
     const offers: unknown[] = []
+    const productNames: string[] = []
     for (const script of Array.from(document.querySelectorAll('script[type="application/ld+json"]'))) {
       try {
         const walk = (node: unknown): void => {
@@ -80,11 +136,23 @@ async function readProductPage(browser: BrowserSession, url: string) {
           if (Array.isArray(node)) return node.forEach(walk)
           const record = node as Record<string, unknown>
           if (record.offers) offers.push({ name: record.name, sku: record.sku, offers: record.offers })
+          const type = record['@type']
+          const isProduct = type === 'Product' || (Array.isArray(type) && type.includes('Product'))
+          if (isProduct && typeof record.name === 'string' && productNames.length < 6) {
+            productNames.push(record.name.slice(0, 160))
+          }
           if (record['@graph']) walk(record['@graph'])
+          if (record.mainEntity) walk(record.mainEntity)
         }
         walk(JSON.parse(script.textContent ?? ''))
       } catch {}
     }
+
+    const headings = Array.from(document.querySelectorAll('h1'))
+      .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .slice(0, 6)
+      .map((text) => text.slice(0, 160))
 
     const sizeLike = /\b(?:UK|EU|US)?\s?\d{1,2}(?:\.5)?\b/i
     const sizes = Array.from(document.querySelectorAll('button, option, label, li[role="option"], [data-size]'))
@@ -98,20 +166,29 @@ async function readProductPage(browser: BrowserSession, url: string) {
           /disabled|unavailable|out-of-stock|oos|sold-out|soldout/.test(cls)
         return `${text}${unavailable ? ' [unavailable]' : ''}`
       })
-      .filter(Boolean)
+      .filter((text): text is string => Boolean(text))
       .slice(0, 60)
 
     return {
       title: document.title,
+      headings,
+      productNames,
       offers: JSON.stringify(offers).slice(0, 3_000),
       sizes: Array.from(new Set(sizes)),
       text: document.body.innerText.replace(/\n{2,}/g, '\n').slice(0, 5_000),
     }
   })
 
+  const deliveredUrl = page.url()
+  if (refusedUrl) return emptyPage(refusedUrl, null)
+  if (!allowed(deliveredUrl)) return emptyPage(deliveredUrl, statusFor(deliveredUrl, response))
+  const httpStatus = statusFor(deliveredUrl, response)
+
   const image = await page.screenshot({ type: 'jpeg', quality: 55, timeout: 5_000 }).catch(() => null)
   return {
     ...signals,
+    finalUrl: deliveredUrl,
+    httpStatus,
     blocked: BOT_WALL.test(`${signals.title}\n${signals.text}`),
     screenshot: image ? `data:image/jpeg;base64,${Buffer.from(image).toString('base64')}` : null,
   }
@@ -213,20 +290,20 @@ export async function verifyStock(input: { productName: string; productUrl: stri
     }
 
     const remaining = Math.max(1, deadline - Date.now())
-    const verdict = run.page.blocked
-      ? {
-          verdict: 'blocked' as const,
-          sizeFound: '',
-          price: '',
-          evidence: 'The retailer returned an access check or bot-protection page.',
-        }
-      : await judgeStock(input, run.page, Math.min(JUDGE_TIMEOUT_MS, remaining))
+    const verdict = await guardedStockVerdict(
+      input.productName,
+      run.page,
+      () => judgeStock(input, run.page, Math.min(JUDGE_TIMEOUT_MS, remaining)),
+      extraStockHosts(),
+    )
 
     await run.release().catch(() => {})
     return {
       ...input,
       ...verdict,
       pageTitle: run.page.title,
+      finalUrl: run.page.finalUrl,
+      httpStatus: run.page.httpStatus,
       screenshot: run.page.screenshot,
       sessionId: run.sessionId,
       egress: run.egress,

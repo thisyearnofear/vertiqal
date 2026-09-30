@@ -27,6 +27,7 @@ import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
+import { guardedStockVerdict, inspectStockPage, type StockPageEvidence } from '../agent/stock-page.ts'
 import { frameQuality } from '../pose/framing.ts'
 
 const valid: PrefDraft = { size: 'UK 9', budgetPounds: '160', heightCm: '178', goal: 'Easy miles', surface: 'Road' }
@@ -357,4 +358,120 @@ test('a stale getUserMedia resolution releases its tracks instead of starting ca
 
   const live = await settleStream(Promise.resolve(fake), () => false)
   assert.equal(live, fake)
+})
+
+const pageFixture = (over: Partial<StockPageEvidence> = {}): StockPageEvidence => ({
+  finalUrl: 'https://www.sportsshoes.com/product/nike-pegasus-41',
+  httpStatus: 200,
+  title: "NIKE Men's Pegasus 41 Running Shoes | SportsShoes",
+  headings: ["NIKE Men's Pegasus 41 Running Shoes"],
+  productNames: [],
+  sizes: ['UK 8', 'UK 9', 'UK 10'],
+  blocked: false,
+  ...over,
+})
+
+test('stock page gate: matching h1 verifies the page for judging', () => {
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture()).status, 'verified')
+})
+
+test('stock page gate: structured Product name works without an h1', () => {
+  const page = pageFixture({ headings: [], productNames: ['Nike Pegasus 41 Road Running Shoes'] })
+  assert.equal(inspectStockPage('Nike Pegasus 41', page).status, 'verified')
+})
+
+test('stock page gate: soft error and login pages are unclear even with stale Product schema', () => {
+  const stale = { productNames: ['Nike Pegasus 41 Road Running Shoes'], sizes: ['UK 9'] }
+  for (const heading of ['Page not found', '404', 'Something went wrong', 'Sign in to your account', 'Log in']) {
+    assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ ...stale, headings: [heading] })).status, 'unclear', heading)
+  }
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ ...stale, headings: [], title: 'Page not found' })).status, 'unclear')
+  assert.equal(
+    inspectStockPage('Nike Pegasus 41', pageFixture({ headings: ["NIKE Men's Pegasus 41 Running Shoes"], title: 'Nike Pegasus 41 | SportsShoes' })).status,
+    'verified',
+    'a valid product title does not trip the soft-error check',
+  )
+})
+
+test('stock page gate: title alone or a generic homepage heading is unclear', () => {
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ headings: [] })).status, 'unclear')
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ headings: ['SportsShoes.com — running shoes for everyone'] })).status, 'unclear')
+})
+
+test('stock page gate: same brand different model or version is unclear', () => {
+  assert.equal(
+    inspectStockPage('Nike Pegasus 41', pageFixture({ headings: ['Nike Vomero 18 Running Shoes'] })).status,
+    'unclear',
+  )
+  assert.equal(
+    inspectStockPage('Nike Pegasus 41', pageFixture({ headings: ['Nike Pegasus 40 Running Shoes'] })).status,
+    'unclear',
+  )
+})
+
+test('stock page gate: numeric-only product names cannot verify identity', () => {
+  assert.equal(inspectStockPage('41', pageFixture()).status, 'unclear')
+})
+
+test('stock page gate: allowed redirect verifies, disallowed or malformed final URLs are blocked', () => {
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ finalUrl: 'https://sportsshoes.com/p/redirected' })).status, 'verified')
+  assert.equal(
+    inspectStockPage('Nike Pegasus 41', pageFixture({ finalUrl: 'https://sportsshoes.com.evil.example/p' })).status,
+    'blocked',
+  )
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ finalUrl: 'http://sportsshoes.com/p' })).status, 'blocked')
+  assert.equal(
+    inspectStockPage('Nike Pegasus 41', pageFixture({ finalUrl: 'https://user:pass@sportsshoes.com/p' })).status,
+    'blocked',
+  )
+})
+
+test('stock page gate: missing or error HTTP responses are blocked', () => {
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ httpStatus: null })).status, 'blocked')
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ httpStatus: 404 })).status, 'blocked')
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ httpStatus: 500 })).status, 'blocked')
+})
+
+test('stock page gate: error and login headings never verify identity', () => {
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ headings: ['Page not found'] })).status, 'unclear')
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ headings: ['Sign in to your account'] })).status, 'unclear')
+})
+
+test('stock page gate: matched identity with no size controls is unclear, bot wall is blocked', () => {
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ sizes: [] })).status, 'unclear')
+  assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ blocked: true })).status, 'blocked')
+})
+
+test('guarded stock verdict: the judge only runs on a verified page', { timeout: 2_000 }, async () => {
+  let calls = 0
+  const judge = async () => {
+    calls += 1
+    return { verdict: 'in_stock', sizeFound: 'UK 9', price: '£95', evidence: 'judge saw it' }
+  }
+
+  const blocked = await guardedStockVerdict('Nike Pegasus 41', pageFixture({ blocked: true }), judge)
+  assert.equal(blocked.verdict, 'blocked')
+  assert.equal(blocked.sizeFound, '')
+
+  const unclear = await guardedStockVerdict('Nike Pegasus 41', pageFixture({ headings: [] }), judge)
+  assert.equal(unclear.verdict, 'unclear')
+
+  const staleSchema = await guardedStockVerdict(
+    'Nike Pegasus 41',
+    pageFixture({ headings: ['Sign in'], productNames: ['Nike Pegasus 41 Road Running Shoes'] }),
+    judge,
+  )
+  assert.equal(staleSchema.verdict, 'unclear')
+  assert.equal(calls, 0)
+
+  const verdicts = ['in_stock', 'out_of_stock', 'size_not_listed', 'unclear'] as const
+  for (const verdict of verdicts) {
+    const result = await guardedStockVerdict('Nike Pegasus 41', pageFixture(), async () => {
+      calls += 1
+      return { verdict, sizeFound: 'UK 9', price: '£95', evidence: 'judge saw it' }
+    })
+    assert.equal(result.verdict, verdict)
+    assert.equal(result.evidence, 'judge saw it')
+  }
+  assert.equal(calls, 4)
 })
