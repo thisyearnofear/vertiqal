@@ -10,7 +10,7 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 
 ## What Forma does
 
-1. **Shows the loop first.** The home page opens on the fitting bench with a clearly labelled synthetic example, upload and live-camera actions, the running/climbing choice, and a stage-aware next-step prompt. The illustrative example never calls agent, stock or shopper APIs.
+1. **Shows the loop first.** The home page opens on the fitting bench with a six-stage labelled example walkthrough, upload and live-camera actions, the running/climbing choice, and a stage-aware next-step prompt. Forma sits in a persistent dock (sticky column on desktop, bottom bar on mobile) that announces the current step and hosts tuning. The example never calls agent, stock or shopper APIs — see *Example assets and limits* below for the footage source and its limits.
 2. **Measures on-device.** MediaPipe pose tracking runs in the browser on a phone clip or live camera: cadence, foot strike and overstride for running; reach, hip position and precision for climbing. Live capture shows real pose-derived person, hips and feet framing checks. Video never leaves the device unless you opt in.
 3. **Confirms the brief before searching.** Movement cannot establish size, budget, goal, surface or comfort needs, so those shopper details are confirmed explicitly before a personal research run. Changing height or the pose provider invalidates a stale measurement.
 4. **Turns movement into fit requirements.** A gear agent (Grok via Vercel AI Gateway) builds a movement profile, then works through visible steps: research, live retailer stock, rider reports and athletes who wear the shoe. Each claim carries a citation checked against the publisher.
@@ -42,6 +42,15 @@ pnpm test:fitting # fitting-state and preference rules
 pnpm typecheck    # the real type gate: next.config ignores TS errors during build
 pnpm build
 ```
+
+## Example assets and limits
+
+The six-stage walkthrough is an illustrated journey, not a genuine recorded fitting.
+
+- **Footage (running only):** a 3-second clip (7:55–7:58) from *Orientation to Physical Efficiency Battery* (1986), Federal Law Enforcement Training Center — via the [Moving Image Archive](https://www.movingimagearchive.com/sources/orientation-to-physical-efficiency-battery-a4d3e5b5?clip=e9224f58-34ac-5ab8-9f9c-e5d5baed3804), originally published on the [Internet Archive](https://archive.org/details/gov.ntis.ava18914vnb1) and labelled public domain by both archives. Archival use implies no endorsement or consent; the runner's height is unknown and the clip is never analysed.
+- **Everything else is synthetic:** measurements, brief, direction concepts and the receipt template are fixtures, clearly labelled "not measured from this archive clip". The receipt says `Not run · no availability verified` — it shows what a real check reports, it does not simulate a verdict. The climbing example uses an inline illustration, not footage.
+- **Cost:** the walkthrough calls no APIs; the ~200 KB clip is served from `public/` so it only costs ordinary CDN bandwidth per visitor. Genuine saved research and stock outputs still require further assets and live verification.
+- Fixture and credit live in `lib/fitting/example.ts` (`EXAMPLE_FOOTAGE`).
 
 ## Solari cookbook patterns applied
 

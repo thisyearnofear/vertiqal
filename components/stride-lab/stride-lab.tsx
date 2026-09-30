@@ -19,13 +19,14 @@ import {
   type PrefDraft,
   type PrefField,
 } from '@/lib/fitting/prefs'
-import { EXAMPLE_STEP_COUNT } from '@/lib/fitting/example'
+import { EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion } from '@/lib/fitting/example'
 import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
 import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
 import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
 import type { FrameQuality, PoseSession } from '@/lib/pose/types'
 import { cn } from '@/lib/utils'
+import { FormaDock } from '@/components/forma/forma-dock'
 import type { HeroFrame } from '@/lib/hero/frame'
 import { AgentPanel } from './agent/agent-panel'
 import { outputsOf, type ShoePick } from './agent/outputs'
@@ -272,7 +273,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     resetSession('example')
     releaseClip()
     restartAnalysis(sport, currentAnalysisHeight)
-    setExample({ step: 0, playing: !prefersStill() })
+    setExample({ step: 0, playing: !prefersStill(), concept: 0 })
     requestAnimationFrame(() => document.getElementById('example-heading')?.focus())
   }
 
@@ -381,11 +382,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   const mood: Mood =
     agent.mood ??
     (example
-      ? example.playing
-        ? 'watching'
-        : example.step >= EXAMPLE_STEP_COUNT - 1
-          ? 'pleased'
-          : 'asking'
+      ? (EXAMPLE_MOODS[example.step] ?? 'watching')
       : readout.ready && !liveActive
         ? 'ready'
         : (clip && playing) || liveActive
@@ -517,10 +514,20 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     requestAnimationFrame(() => document.getElementById(BRIEF_FIELD_ID[field])?.focus({ preventScroll: true }))
   }
 
+  const personalFilm = () => {
+    const missingHeight = enteredHeight === null
+    if (example) setExample(null)
+    if (missingHeight) {
+      requestAnimationFrame(() => focusBriefField('height'))
+      return
+    }
+    if (engine === 'ready') goLive()
+  }
+
   const runNextAction = () => {
     const action = nextStep.action?.kind
     if (action === 'example') showExample()
-    else if (action === 'upload-example') document.getElementById('example-upload')?.click()
+    else if (action === 'upload-example') document.getElementById('clip-upload')?.click()
     else if (action === 'upload') document.getElementById('clip-upload')?.click()
     else if (action === 'brief') focusBriefField(missingFields[0] ?? 'size')
     else if (action === 'results') scrollToSection('forma-procurement')
@@ -535,15 +542,20 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
       className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 md:px-8 lg:py-8"
       style={{ '--stage-foreground': PHOSPHOR_COLOR[persona.phosphor] } as CSSProperties}
     >
-      <FittingHeader
-        persona={persona}
-        mood={mood}
-        sport={sport}
-        onSport={changeSport}
-        onPersona={changePersona}
-        tuning={tuning}
-        onToggleTuning={() => setTuning((t) => !t)}
-        lockLine={lockLine}
+      <FittingHeader sport={sport} onSport={changeSport} />
+
+      <input
+        id="clip-upload"
+        type="file"
+        accept="video/*"
+        tabIndex={-1}
+        className="sr-only"
+        aria-label="Upload a clip for your own fitting"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) loadFile(file)
+          e.target.value = ''
+        }}
       />
 
       {member.linked && (
@@ -578,18 +590,30 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
         </aside>
       )}
 
-      <NextStep step={nextStep} onAction={runNextAction} />
+      <div className="grid grid-cols-1 gap-5 pb-44 lg:grid-cols-[minmax(0,1fr)_280px] lg:pb-0">
+        <div className="flex min-w-0 flex-col gap-5">
+          <NextStep step={nextStep} onAction={runNextAction} />
 
-      <main className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <main className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         {example ? (
           <ExampleWalkthrough
             sport={sport}
             state={example}
             onState={setExample}
             onExit={exitExample}
-            onFilm={goLive}
-            canFilm={engine === 'ready' && enteredHeight !== null}
-            filmHint={enteredHeight === null ? 'Enter your height in the brief first — recordings cannot be re-analysed later' : undefined}
+            onFilm={personalFilm}
+            onUpload={() => document.getElementById('clip-upload')?.click()}
+            canFilm={engine !== 'error' && (enteredHeight === null || engine === 'ready')}
+            filmLabel={enteredHeight === null ? 'Set up my camera' : 'Film me'}
+            filmHint={
+              enteredHeight === null
+                ? 'Film me needs your height first — this exits the example and focuses the height field in your brief.'
+                : engine === 'loading'
+                  ? 'Pose engine is warming up. You can upload a clip now.'
+                  : engine === 'error'
+                    ? 'Live analysis is unavailable right now — upload a clip instead.'
+                    : undefined
+            }
           />
         ) : (
           <section aria-label="Movement analysis" className="housing flex min-w-0 flex-col gap-4 rounded-2xl p-4 md:p-6">
@@ -609,21 +633,15 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                 <Play aria-hidden />
                 See an example
               </button>
-              <label className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), 'cursor-pointer whitespace-nowrap px-4 focus-within:ring-3 focus-within:ring-ring/50')}>
+              <Button
+                variant="outline"
+                size="lg"
+                className="whitespace-nowrap px-4"
+                onClick={() => document.getElementById('clip-upload')?.click()}
+              >
                 <Upload aria-hidden />
                 {stage === 'invite' ? 'Upload a clip' : 'Another clip'}
-                <input
-                  id="clip-upload"
-                  type="file"
-                  accept="video/*"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) loadFile(file)
-                    e.target.value = ''
-                  }}
-                />
-              </label>
+              </Button>
               {liveActive ? (
                 <Button variant="outline" size="lg" className="whitespace-nowrap px-4" onClick={live.stop}>
                   <Square aria-hidden />
@@ -634,12 +652,20 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                   variant="outline"
                   size="lg"
                   className="whitespace-nowrap px-4"
-                  onClick={goLive}
-                  disabled={engine !== 'ready' || enteredHeight === null}
-                  title={enteredHeight === null ? 'Enter your height in the brief first — recordings cannot be re-analysed later' : undefined}
+                  onClick={personalFilm}
+                  disabled={enteredHeight !== null && engine !== 'ready'}
+                  title={
+                    enteredHeight === null
+                      ? 'Set your height in the brief first — recordings cannot be re-analysed later'
+                      : engine === 'loading'
+                        ? 'Pose engine is warming up'
+                        : engine === 'error'
+                          ? 'Live analysis is unavailable right now — upload a clip instead'
+                          : undefined
+                  }
                 >
                   <Camera aria-hidden />
-                  {stage === 'invite' ? 'Film me' : 'Film again'}
+                  {enteredHeight === null ? 'Set up my camera' : stage === 'invite' ? 'Film me' : 'Film again'}
                 </Button>
               )}
             </div>
@@ -725,32 +751,28 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <label className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'cursor-pointer whitespace-nowrap px-4 focus-within:ring-3 focus-within:ring-ring/50')}>
+                <Button size="lg" className="whitespace-nowrap px-4" onClick={() => document.getElementById('clip-upload')?.click()}>
                   <Upload aria-hidden />
                   Upload a clip
-                  <input
-                    id="example-upload"
-                    type="file"
-                    accept="video/*"
-                    className="sr-only"
-                    aria-label="Upload a clip for your own fitting"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) loadFile(file)
-                      e.target.value = ''
-                    }}
-                  />
-                </label>
+                </Button>
                 <Button
                   variant="outline"
                   size="lg"
                   className="whitespace-nowrap px-4"
-                  onClick={goLive}
-                  disabled={engine !== 'ready' || enteredHeight === null}
-                  title={enteredHeight === null ? 'Enter your height in the brief first — recordings cannot be re-analysed later' : undefined}
+                  onClick={personalFilm}
+                  disabled={enteredHeight !== null && engine !== 'ready'}
+                  title={
+                    enteredHeight === null
+                      ? 'Set your height in the brief first — recordings cannot be re-analysed later'
+                      : engine === 'loading'
+                        ? 'Pose engine is warming up'
+                        : engine === 'error'
+                          ? 'Live analysis is unavailable right now — upload a clip instead'
+                          : undefined
+                  }
                 >
                   <Camera aria-hidden />
-                  Film me
+                  {enteredHeight === null ? 'Set up my camera' : 'Film me'}
                 </Button>
               </div>
               <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{PRIVACY_LINE}</p>
@@ -812,7 +834,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
           </details>
         </aside>
 
-        <div id="forma-procurement" className={cn('scroll-mt-6', 'lg:col-span-2')}>
+        <div id="forma-procurement" className={cn('scroll-mt-6', 'xl:col-span-2')}>
           <AgentPanel
             agent={agent}
             sport={sport}
@@ -835,17 +857,31 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
         </div>
 
         {choice && hero && (
-          <div id="hero-frame" className="scroll-mt-6 lg:col-span-2">
+          <div id="hero-frame" className="scroll-mt-6 xl:col-span-2">
             <HeroCard frame={hero} readout={panelReadout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
           </div>
         )}
 
         {shopping && picks.length > 0 && !choice && !example && (
-          <div id="fitting-notes" className="scroll-mt-6 lg:col-span-2">
+          <div id="fitting-notes" className="scroll-mt-6 xl:col-span-2">
             <FittingNotes sport={sport} readout={panelReadout} keyframes={keyframes} value={notes} onChange={updateNotes} />
           </div>
         )}
       </main>
+        </div>
+
+        <FormaDock
+          persona={persona}
+          mood={mood}
+          sport={sport}
+          line={example ? exampleCompanion(sport, example.step) : mood === 'ready' && lockLine ? lockLine : nextStep.detail}
+          stageLabel={example ? `Example ${example.step + 1} of ${EXAMPLE_STEP_COUNT}` : nextStep.title}
+          tuning={tuning}
+          onToggleTuning={() => setTuning((t) => !t)}
+          onPersona={changePersona}
+          action={nextStep.action ? { label: nextStep.action.label, onClick: runNextAction } : null}
+        />
+      </div>
     </div>
   )
 }

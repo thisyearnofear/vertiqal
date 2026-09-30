@@ -40,7 +40,7 @@ Measurement always comes from untouched frames. The hero card grade and try-on i
 
 - `session.ts` derives the visible stage, supplies the next-action rail, decides whether a measurement can submit, and plans a re-analysis or recapture when height/provider inputs change.
 - `prefs.ts` validates the required brief (size, budget, 120–220 cm height, goal and surface) before `/api/agent` runs. Foot width and niggles remain optional.
-- `example.ts` supplies the synthetic, clearly labelled walkthrough. Example mode cannot authorise research, stock, passport or WhatsApp calls.
+- `example.ts` supplies the synthetic, clearly labelled six-stage walkthrough (archival running clip fixture plus synthetic measurements, brief, concepts and an un-run receipt template; see README for attribution). Example mode cannot authorise research, stock, passport or WhatsApp calls.
 - `stock.ts` separates a typed draft size from the explicitly submitted size and carries the server-issued product token, so an old verdict, passport or arbitrary URL cannot be applied to a new request.
 - `camera.ts` releases late `getUserMedia` streams that resolve after capture is stopped or superseded.
 
