@@ -43,7 +43,7 @@ export function nextStepFor(state: {
     return {
       eyebrow: 'Next · Example',
       title: 'Watch the fitting loop',
-      detail: 'This walkthrough is synthetic. Upload or film your own clip when you want real measurements.',
+      detail: 'Illustrative fitting data. Your own clip starts a personal fitting.',
       action: { kind: 'upload-example', label: 'Upload my clip' },
     }
   }

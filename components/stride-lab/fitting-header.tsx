@@ -1,9 +1,6 @@
 'use client'
 
-import { useId } from 'react'
-import { FormaConsole, FormaTuner } from '@/components/forma/forma-console'
 import type { Sport } from '@/lib/metrics/readout'
-import type { Mood, Persona } from '@/lib/persona'
 import { cn } from '@/lib/utils'
 import { HowItWorks } from './how-it-works'
 
@@ -11,44 +8,14 @@ const SPORT_LIST: Sport[] = ['running', 'climbing']
 const SPORT_CHOICE: Record<Sport, string> = { running: 'I run', climbing: 'I climb' }
 
 interface FittingHeaderProps {
-  persona: Persona
-  mood: Mood
   sport: Sport
   onSport: (sport: Sport) => void
-  onPersona: (persona: Persona) => void
-  tuning: boolean
-  onToggleTuning: () => void
-  lockLine: string | null
 }
 
-export function FittingHeader({
-  persona,
-  mood,
-  sport,
-  onSport,
-  onPersona,
-  tuning,
-  onToggleTuning,
-  lockLine,
-}: FittingHeaderProps) {
-  const tunerId = useId()
+export function FittingHeader({ sport, onSport }: FittingHeaderProps) {
   return (
     <header className="housing flex flex-col gap-3 rounded-2xl px-5 py-4 md:px-7">
-      <div className="flex items-center justify-between gap-4">
-        <p className="font-mono text-4xl leading-none tracking-wider text-foreground engraved">vertiqal</p>
-        <div className="shrink-0">
-          <FormaConsole
-            compact
-            persona={persona}
-            mood={mood}
-            sport={sport}
-            tuning={tuning}
-            tunerId={tunerId}
-            onToggleTuning={onToggleTuning}
-            line={mood === 'ready' ? lockLine : null}
-          />
-        </div>
-      </div>
+      <p className="font-mono text-4xl leading-none tracking-wider text-foreground engraved">vertiqal</p>
 
       <div className="flex flex-col gap-1">
         <h1 className="text-balance text-xl font-semibold leading-tight text-foreground lg:text-2xl">
@@ -77,10 +44,6 @@ export function FittingHeader({
           ))}
         </div>
         <HowItWorks />
-      </div>
-
-      <div id={tunerId} hidden={!tuning}>
-        {tuning && <FormaTuner persona={persona} onChange={onPersona} sport={sport} />}
       </div>
     </header>
   )

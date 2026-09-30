@@ -44,10 +44,10 @@ function Choice({
   )
 }
 
-function Tuner({ persona, onChange, sport }: { persona: Persona; onChange: (p: Persona) => void; sport: Sport }) {
+function Tuner({ persona, onChange, sport, compact = false }: { persona: Persona; onChange: (p: Persona) => void; sport: Sport; compact?: boolean }) {
   const set = (patch: Partial<Persona>) => onChange({ ...persona, ...patch })
   return (
-    <div className="flex flex-col gap-5 border-t border-border pt-5 md:flex-row md:gap-8">
+    <div className={cn('flex flex-col gap-5 border-t border-border pt-5', !compact && 'md:flex-row md:gap-8')}>
       <fieldset className="flex flex-col gap-2">
         <legend className="pb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">Body</legend>
         <div role="radiogroup" aria-label="Body shape" className="well flex gap-1 rounded-lg p-1">
@@ -80,7 +80,7 @@ function Tuner({ persona, onChange, sport }: { persona: Persona; onChange: (p: P
 
       <fieldset className="flex min-w-0 flex-1 flex-col gap-2">
         <legend className="pb-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">Voice</legend>
-        <div role="radiogroup" aria-label="Voice" className="grid gap-2 sm:grid-cols-3">
+        <div role="radiogroup" aria-label="Voice" className={cn('grid gap-2', !compact && 'sm:grid-cols-3')}>
           {VOICES.map((voice) => (
             <button
               key={voice}

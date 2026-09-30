@@ -21,7 +21,7 @@ import {
   remeasurePlan,
   stageOf,
 } from './session.ts'
-import { EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleMetrics, nextStep } from './example.ts'
+import { EXAMPLE_FOOTAGE, EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleCompanion, exampleMetrics, nextStep } from './example.ts'
 import { settleStream } from './camera.ts'
 import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
@@ -196,16 +196,34 @@ test('sport change clears sport-specific goal/surface and vision findings, keeps
   assert.equal(clearsBaseline('new-clip'), false)
 })
 
-test('example scripts: three steps per sport, synthetic fixture metrics, no product claims', () => {
+test('example scripts: six stages per sport, synthetic fixture data, no product or stock claims', () => {
   for (const sport of ['running', 'climbing'] as const) {
     const script = EXAMPLE_SCRIPTS[sport]
     assert.equal(script.steps.length, EXAMPLE_STEP_COUNT)
     assert.equal(exampleMetrics(sport).length > 0, true)
-    assert.match(script.steps[2].body, /illustrative direction, not a verified product recommendation/i)
+    assert.match(script.steps[3].body, /illustrative direction, not a verified product recommendation/i)
+    const blob = JSON.stringify(script)
+    assert.doesNotMatch(blob, /in stock|out of stock|£\d+ available|https?:\/\//, 'concepts carry no product, price or stock claims')
+    assert.equal(script.concepts.length, 3)
+    for (const c of script.concepts) assert.ok(c.tradeoff.length > 0)
+    assert.doesNotMatch(script.brief.height, /\d{3}\s*cm/, 'no invented height for example footage')
   }
+  assert.equal(EXAMPLE_FOOTAGE.credit.includes('Orientation to Physical Efficiency Battery'), true)
+  assert.equal(EXAMPLE_FOOTAGE.heightKnown, false, 'the archival runner height is unknown')
+  assert.equal(EXAMPLE_FOOTAGE.src.startsWith('/examples/'), true, 'footage is served locally, never hotlinked')
   assert.equal(nextStep(0, 1), 1)
-  assert.equal(nextStep(2, 1), 2, 'no auto-advance past the last step')
+  assert.equal(nextStep(EXAMPLE_STEP_COUNT - 1, 1), EXAMPLE_STEP_COUNT - 1, 'no auto-advance past the last step')
   assert.equal(nextStep(0, -1), 0)
+})
+
+test('dock companion lines match the footage each sport actually shows', () => {
+  assert.equal(exampleCompanion('running', 1), 'The footage is archival; these measurements are illustrative.')
+  assert.equal(exampleCompanion('climbing', 1), 'The movement and measurements are illustrative.')
+  assert.doesNotMatch(exampleCompanion('climbing', 1), /archiv|footage/i, 'climbing has no archival clip to claim')
+  for (let step = 0; step < EXAMPLE_STEP_COUNT; step++) {
+    assert.ok(exampleCompanion('running', step).length > 0)
+    assert.ok(exampleCompanion('climbing', step).length > 0)
+  }
 })
 
 test('stock target: draft edits never authorise a request and picks carry a server-issued token', () => {
