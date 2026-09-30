@@ -40,9 +40,17 @@ Measurement always comes from untouched frames. The hero card grade and try-on i
 
 - `session.ts` derives the visible stage, supplies the next-action rail, decides whether a measurement can submit, and plans a re-analysis or recapture when height/provider inputs change.
 - `prefs.ts` validates the required brief (size, budget, 120–220 cm height, goal and surface) before `/api/agent` runs. Foot width and niggles remain optional.
-- `example.ts` supplies the synthetic, clearly labelled six-stage walkthrough (archival running clip fixture plus synthetic measurements, brief, concepts and an un-run receipt template; see README for attribution). Example mode cannot authorise research, stock, passport or WhatsApp calls.
+- `example.ts` supplies the synthetic, clearly labelled six-stage walkthrough (AI-generated running clip fixture plus synthetic measurements, brief, concepts and an un-run receipt template; see README for attribution). Example mode cannot authorise research, stock, passport or WhatsApp calls.
 - `stock.ts` separates a typed draft size from the explicitly submitted size and carries the server-issued product token, so an old verdict, passport or arbitrary URL cannot be applied to a new request.
 - `camera.ts` releases late `getUserMedia` streams that resolve after capture is stopped or superseded.
+
+## Local motion validation
+
+The running workflow optionally records per-processed-frame keypoints and accepted contacts in memory after an explicit user action. `PoseStage` sends the unthrottled frame timestamp and snapshot to `createValidationRecorder` in `lib/pose/validation.ts`; exports contain no video, images, clip names, source URLs or account information, but keypoints and height can still be identifying. The illustrated example never enters this path. The recorder stops at the first rewind, source-dimension change or resource cap; changing clip, height, provider or sport clears the trace. These bounds prevent repeat passes from being presented as independent evidence.
+
+`lib/pose/validation-cli.ts` compares saved contacts against complete, independently supplied same-timeline annotations. The caller must supply the matching tolerance. Same-side, one-to-one matching maximises cardinality before minimising timing error; explicit excluded intervals affect both denominators. Reports include misses, extras, timing errors and visibility counts for processed frames, not elapsed-time coverage. There are no accuracy acceptance thresholds, 3D claims or shoe-fit validity claims. Synthetic and unclassified sources are marked debug-only. See README for the annotation contract and privacy/capture protocol.
+
+FreeMoCap remains a separate, optional offline reference system. No FreeMoCap code or dependency is incorporated, and no native-file importer exists. Multi-camera comparison requires calibrated, synchronised real recordings and reference-quality review; real-human validation remains pending.
 
 ## API routes
 

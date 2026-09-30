@@ -3,7 +3,22 @@ import type { FrameQuality, Keypoint, Pose } from './types'
 const MIN_SCORE = 0.5
 const NO_FRAME: FrameQuality = { person: false, hips: false, feet: false }
 
-const usable = (keypoint?: Keypoint) => Boolean(keypoint && keypoint.score >= MIN_SCORE)
+export function usableKeypoint(keypoint?: Keypoint): keypoint is Keypoint {
+  return (
+    !!keypoint &&
+    Number.isFinite(keypoint.score) &&
+    keypoint.score >= MIN_SCORE &&
+    keypoint.score <= 1 &&
+    Number.isFinite(keypoint.x) &&
+    Number.isFinite(keypoint.y) &&
+    keypoint.x >= 0 &&
+    keypoint.x <= 1 &&
+    keypoint.y >= 0 &&
+    keypoint.y <= 1
+  )
+}
+
+const usable = usableKeypoint
 
 export function frameQuality(pose: Pose | null): FrameQuality {
   if (!pose) return NO_FRAME

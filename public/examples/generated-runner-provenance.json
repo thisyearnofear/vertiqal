@@ -1,0 +1,44 @@
+{
+  "assetType": "ai-generated-video",
+  "provider": "fal.ai",
+  "model": "Seedance 1.5 Pro",
+  "endpointId": "fal-ai/bytedance/seedance/v1.5/pro/text-to-video",
+  "modelUrl": "https://fal.ai/models/fal-ai/bytedance/seedance/v1.5/pro/text-to-video",
+  "requestId": "01a0f44e-9bb4-7a13-a69c-8f0bd562c82b",
+  "seed": 41729,
+  "sourceVideoUrl": "https://v3b.fal.media/files/b/0aac8d51/GuytZxv4HExe-0oB7WskL_video.mp4",
+  "sourceMedia": {
+    "width": 1280,
+    "height": 720,
+    "framesPerSecond": 24,
+    "durationSeconds": 12.041667,
+    "bytes": 6979048,
+    "audio": false
+  },
+  "pricing": {
+    "currency": "USD",
+    "unit": "1m tokens",
+    "unitPrice": 1.2,
+    "estimatedBillingQuantity": 0.2592,
+    "preflightEstimatedCost": 0.31104,
+    "actualBilledCost": null,
+    "note": "Preflight estimate only; the actual billed cost has not been queried."
+  },
+  "usage": {
+    "providerListing": "Commercial use",
+    "purpose": "Synthetic illustration in the Forma fitting walkthrough",
+    "measurements": "Illustrative fixtures, not extracted from this generated clip",
+    "calibratedHeightKnown": false,
+    "validation": "Not evidence of real-person gait accuracy or shoe fit. Sampled frames reviewed for visual illustration only."
+  },
+  "input": {
+    "prompt": "A single continuous twelve-second sports demonstration shot of one fictional adult woman jogging at a comfortable, steady pace on a low-profile motorized treadmill in a clean studio. The treadmill has no side handrails obscuring the runner. Strict left-side profile view: the runner faces screen right and stays centered in the frame. Locked-off tripod camera, perpendicular to the runner at hip height, wide enough that her entire head, torso, arms, hips, knees, ankles, and both shoes remain visible throughout, with generous space above her head and below her feet. Show the full treadmill deck and the belt moving naturally underneath her feet. Her feet alternate believable planted contact and swing phases as her legs cycle naturally; her arms swing gently in opposition. She wears a fitted burnt-orange athletic top, charcoal running shorts, and plain unbranded white running shoes. A warm neutral beige studio wall, matte floor, soft even daylight, subtle natural shadows, realistic proportions, clear separation of limbs, and consistent clothing and body shape throughout. Calm, credible sports-lab photography rather than a commercial montage. Exactly one adult runner, one uninterrupted take, no cuts, no slow motion, no camera pan or zoom, no dramatic camera angles, no text or logos, no graphics or skeleton overlays, no other people. The runner and scene are entirely synthetic and do not depict a real identifiable person.",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": "12",
+    "camera_fixed": true,
+    "seed": 41729,
+    "enable_safety_checker": true,
+    "generate_audio": false
+  }
+}

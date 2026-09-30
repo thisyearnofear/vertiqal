@@ -1,4 +1,4 @@
-import { frameQuality } from '../pose/framing.ts'
+import { frameQuality, usableKeypoint as usable } from '../pose/framing.ts'
 import type { FrameQuality, Keypoint, Pose } from '../pose/types'
 import type { Side } from './gait'
 
@@ -41,7 +41,6 @@ interface LimbState {
   lastPlacement: { at: Point; timeSec: number } | null
 }
 
-const MIN_SCORE = 0.5
 const LEG_TO_HEIGHT = 0.49
 /** Speeds are in leg-lengths per second so they hold for any camera distance. */
 const MOVING_SPEED = 0.9
@@ -50,8 +49,6 @@ const SETTLE_SEC = 0.12
 const READJUST_DISTANCE = 0.2
 const READJUST_WINDOW_SEC = 2.5
 const MOVES_WINDOW_SEC = 20
-
-const usable = (k?: Keypoint): k is Keypoint => !!k && k.score >= MIN_SCORE
 
 function angleAt(a: Point, b: Point, c: Point) {
   const v1 = { x: a.x - b.x, y: a.y - b.y }
@@ -90,12 +87,19 @@ export class ClimbTracker {
     this.heightCm = heightCm
   }
 
+  private reset() {
+    this.lastTime = -Infinity
+    this.feet = { left: freshLimb(), right: freshLimb() }
+    this.hands = { left: freshLimb(), right: freshLimb() }
+    this.placements = []
+    this.handMoves = []
+    this.toeDown = new RunningMean()
+    this.hipOffset = new RunningMean()
+    this.reachElbow = new RunningMean()
+  }
+
   update(timeSec: number, pose: Pose | null, width: number, height: number): ClimbSnapshot {
-    if (timeSec < this.lastTime - 0.1) {
-      this.feet = { left: freshLimb(), right: freshLimb() }
-      this.hands = { left: freshLimb(), right: freshLimb() }
-      this.handMoves = []
-    }
+    if (timeSec < this.lastTime - 0.1) this.reset()
     this.lastTime = timeSec
 
     const toPx = (k: Keypoint): Point => ({ x: k.x * width, y: k.y * height })
@@ -115,15 +119,23 @@ export class ClimbTracker {
           if (wrist.y < shoulder.y) this.reachElbow.add(angle)
         }
 
-        if (!legPx) continue
+        if (!legPx) {
+          this.feet[side] = freshLimb()
+          this.hands[side] = freshLimb()
+          continue
+        }
         const ankle = pose[`${side}_ankle`]
         if (usable(ankle)) {
           const settled = this.track(this.feet[side], toPx(ankle), timeSec, legPx)
           if (this.feet[side].moving) movingFoot = side
           if (settled) this.recordPlacement(side, settled, pose, toPx, legPx, timeSec)
+        } else {
+          this.feet[side] = freshLimb()
         }
         if (usable(wrist) && usable(shoulder) && wrist.y < shoulder.y) {
           if (this.track(this.hands[side], toPx(wrist), timeSec, legPx)) this.handMoves.push(timeSec)
+        } else {
+          this.hands[side] = freshLimb()
         }
       }
 
@@ -133,6 +145,9 @@ export class ClimbTracker {
         const feetX = ((la.x + ra.x) / 2) * width
         this.hipOffset.add((Math.abs(hipX - feetX) / legPx) * this.heightCm * LEG_TO_HEIGHT)
       }
+    } else {
+      this.feet = { left: freshLimb(), right: freshLimb() }
+      this.hands = { left: freshLimb(), right: freshLimb() }
     }
 
     this.handMoves = this.handMoves.filter((t) => timeSec - t <= MOVES_WINDOW_SEC)

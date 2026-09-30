@@ -24,7 +24,8 @@ import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, note
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
 import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
 import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
-import type { FrameQuality, PoseSession } from '@/lib/pose/types'
+import type { FrameQuality, Pose, PoseSession } from '@/lib/pose/types'
+import { createValidationRecorder, type ValidationCapture, type ValidationSource } from '@/lib/pose/validation'
 import { cn } from '@/lib/utils'
 import { FormaDock } from '@/components/forma/forma-dock'
 import type { HeroFrame } from '@/lib/hero/frame'
@@ -41,6 +42,7 @@ import { LiveOverlay } from './live-overlay'
 import { NextStep } from './next-step'
 import { PoseStage, type Keyframe } from './pose-stage'
 import { ProviderPicker } from './provider-picker'
+import { ValidationControls } from './validation-controls'
 import { useLiveCamera } from './use-live-camera'
 import { useMember } from './use-member'
 import { useVoice } from './use-voice'
@@ -97,6 +99,10 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   const [calibrationCm, setCalibrationCm] = useState(FALLBACK_HEIGHT_CM)
   const [tracker, setTracker] = useState(() => createTracker(initialMember.last?.sport ?? 'running', FALLBACK_HEIGHT_CM))
   const [snapshot, setSnapshot] = useState<MovementSnapshot | null>(null)
+  const recorderRef = useRef<ReturnType<typeof createValidationRecorder> | null>(null)
+  const [captureStatus, setCaptureStatus] = useState<'idle' | 'recording' | 'ready'>('idle')
+  const [capturedTrace, setCapturedTrace] = useState<ValidationCapture | null>(null)
+  const [captureSource, setCaptureSource] = useState<ValidationSource>('unclassified')
   const [lockedReadout, setLockedReadout] = useState<Readout | null>(null)
   const [playing, setPlaying] = useState(true)
   const [baseline, setBaseline] = useState<Baseline | null>(null)
@@ -146,6 +152,12 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   const [providerMismatch, setProviderMismatch] = useState(false)
   const exampleButtonRef = useRef<HTMLButtonElement>(null)
 
+  const clearValidationCapture = useCallback(() => {
+    recorderRef.current = null
+    setCapturedTrace(null)
+    setCaptureStatus('idle')
+  }, [])
+
   const restartAnalysis = useCallback((nextSport: Sport, height: number) => {
     setTracker(createTracker(nextSport, height))
     setCalibrationCm(height)
@@ -155,7 +167,8 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     setHero(null)
     setCaption(null)
     setProviderMismatch(false)
-  }, [])
+    clearValidationCapture()
+  }, [clearValidationCapture])
 
   const addKeyframe = useCallback((frame: Keyframe) => {
     setKeyframes((current) => (current.length >= MAX_KEYFRAMES ? current : [...current, frame]))
@@ -180,6 +193,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
       setPrefDraft(next)
       setNotes((current) => ({ ...current, goal: next.goal, surface: next.surface }))
       if (!heightChanged) return
+      clearValidationCapture()
       const plan = remeasurePlan({
         enteredCm: parseHeightCm(next.heightCm),
         calibratedCm: calibrationCm,
@@ -201,7 +215,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
         setPlaying(true)
       }
     },
-    [prefDraft.heightCm, calibrationCm, live.phase, liveActive, clip, sport, agent, restartAnalysis],
+    [prefDraft.heightCm, calibrationCm, live.phase, liveActive, clip, sport, agent, restartAnalysis, clearValidationCapture],
   )
 
   const updateNotes = useCallback((next: FittingNotesState) => {
@@ -223,8 +237,10 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
       setNotes((current) => notesAfterReset(reason, current))
       setLockedReadout(null)
       setCaption(null)
+      clearValidationCapture()
+      setCaptureSource('unclassified')
     },
-    [agent, live],
+    [agent, live, clearValidationCapture],
   )
 
   const currentAnalysisHeight = analysisHeight(prefDraft).heightCm
@@ -337,6 +353,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
 
   const changeProvider = (next: string) => {
     if (next === providerId) return
+    clearValidationCapture()
     agent.reset()
     setChoice(null)
     setConfirmedPrefs(null)
@@ -401,7 +418,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     setLockLine(line)
     if (line) void speak(line)
     setLockedReadout(final)
-    if (!clip) return
+    if (!clip || recorderRef.current) return
     const video = videoRef.current
     if (video && !video.paused) {
       video.pause()
@@ -418,6 +435,73 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   }, [readout, liveActive, lockedReadout])
 
   const enteredHeight = parseHeightCm(prefDraft.heightCm)
+
+  const validationCanStart =
+    !example &&
+    sport === 'running' &&
+    engine === 'ready' &&
+    Boolean(clip || live.phase === 'recording') &&
+    !providerMismatch &&
+    (enteredHeight === null || enteredHeight === calibrationCm)
+
+  const onValidationFrame = useCallback(
+    (frame: { timeSec: number; pose: Pose | null; width: number; height: number; snapshot: MovementSnapshot }) => {
+      const recorder = recorderRef.current
+      if (!recorder || frame.snapshot.sport !== 'running') return
+      recorder.record(frame.timeSec, frame.pose, frame.width, frame.height, frame.snapshot)
+      if (recorder.stopReason) {
+        const trace = recorder.finish()
+        recorderRef.current = null
+        setCapturedTrace(trace)
+        setCaptureStatus(trace ? 'ready' : 'idle')
+      }
+    },
+    [],
+  )
+
+  const stopCapture = useCallback(() => {
+    const recorder = recorderRef.current
+    if (!recorder) return
+    const trace = recorder.finish()
+    recorderRef.current = null
+    setCapturedTrace(trace)
+    setCaptureStatus(trace ? 'ready' : 'idle')
+  }, [])
+
+  const startCapture = () => {
+    if (!validationCanStart || captureStatus === 'recording') return
+    const video = videoRef.current
+    if (!video || video.readyState < 2) return
+    recorderRef.current = createValidationRecorder({
+      captureId: crypto.randomUUID(),
+      sourceKind: captureSource,
+      providerId,
+      heightCm: enteredHeight,
+    })
+    setCapturedTrace(null)
+    setCaptureStatus('recording')
+    if (clip && video.paused) {
+      void video.play()
+      setPlaying(true)
+    }
+  }
+
+  const exportCapture = () => {
+    if (!capturedTrace) return
+    const blob = new Blob([JSON.stringify(capturedTrace, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `forma-running-validation-${capturedTrace.captureId.slice(0, 8)}.json`
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+
+  useEffect(() => {
+    if (!clip && captureStatus === 'recording' && ['done', 'error', 'off'].includes(live.phase)) stopCapture()
+  }, [live.phase, captureStatus, clip, stopCapture])
 
   const proof = baseline && readout.ready
     ? readout.metrics.reduce(
@@ -698,6 +782,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
               statusLabel={statusLabel}
               onSnapshot={setSnapshot}
               onFile={loadFile}
+              onValidationFrame={onValidationFrame}
               progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
             />
 
@@ -725,6 +810,22 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                   <span className="sr-only">{': Forma speaks coaching cues aloud'}</span>
                 </button>
               </div>
+            )}
+
+            {sport === 'running' && !example && (clip || liveActive || captureStatus === 'ready') && (
+              <ValidationControls
+                status={captureStatus}
+                source={captureSource}
+                traceSource={capturedTrace?.sourceKind ?? null}
+                onSource={setCaptureSource}
+                canStart={validationCanStart}
+                onStart={startCapture}
+                onStop={stopCapture}
+                onExport={exportCapture}
+                stopReason={capturedTrace?.stopReason ?? null}
+                frameCount={capturedTrace?.frames.length ?? 0}
+                contactCount={capturedTrace?.contacts.length ?? 0}
+              />
             )}
 
             {live.error && (

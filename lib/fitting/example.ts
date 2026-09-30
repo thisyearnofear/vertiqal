@@ -38,7 +38,7 @@ export const EXAMPLE_STEP_MS = 5200
 
 export const EXAMPLE_COMPANIONS = [
   'Here is the whole fitting journey. Nothing is being uploaded.',
-  'The footage is archival; these measurements are illustrative.',
+  'The runner is AI-generated; these measurements are illustrative.',
   'Movement cannot tell me your size, budget or preferences.',
   'A fitting should explain the choice and its trade-offs.',
   'A receipt shows what was checked—not a guarantee of stock.',
@@ -53,13 +53,14 @@ export function exampleCompanion(sport: Sport, step: number): string {
 }
 
 export const EXAMPLE_FOOTAGE = {
-  src: '/examples/archival-runner.mp4',
-  credit: 'Orientation to Physical Efficiency Battery (1986), Federal Law Enforcement Training Center',
-  sourceUrl:
-    'https://www.movingimagearchive.com/sources/orientation-to-physical-efficiency-battery-a4d3e5b5?clip=e9224f58-34ac-5ab8-9f9c-e5d5baed3804',
-  originalUrl: 'https://archive.org/details/gov.ntis.ava18914vnb1',
-  rights: 'Labelled public domain by the Internet Archive source and the Moving Image Archive',
-  range: '7:55–7:58',
+  kind: 'generated',
+  src: '/examples/generated-runner.mp4',
+  poster: '/examples/generated-runner-poster.webp',
+  credit: 'AI-generated runner · Seedance 1.5 Pro via fal.ai',
+  sourceUrl: 'https://fal.ai/models/fal-ai/bytedance/seedance/v1.5/pro/text-to-video',
+  provenanceUrl: '/examples/generated-runner-provenance.json',
+  rights: 'fal lists this model for commercial use. This is a synthetic illustration, not real-person footage.',
+  range: '12-second generated clip',
   heightKnown: false,
 } as const
 
@@ -89,7 +90,7 @@ const SHARED_STEPS = {
 export const EXAMPLE_SCRIPTS: Record<Sport, ExampleScript> = {
   running: {
     steps: [
-      { title: 'Load the example', body: 'Archival footage, loaded locally — nothing is uploaded or analysed.' },
+      { title: 'Load the example', body: 'AI-generated footage, served locally — nothing is uploaded or analysed.' },
       { title: 'Observe movement', body: '' },
       SHARED_STEPS.brief,
       {
@@ -99,7 +100,7 @@ export const EXAMPLE_SCRIPTS: Record<Sport, ExampleScript> = {
       SHARED_STEPS.evidence,
       SHARED_STEPS.yours,
     ],
-    brief: { goal: 'Easy miles', surface: 'Road', size: 'UK 9', budget: '£160', height: 'Unknown — the archival runner’s height was not recorded' },
+    brief: { goal: 'Easy miles', surface: 'Road', size: 'UK 9', budget: '£160', height: 'Not applicable — generated subject, no real-world calibration' },
     rationale: [
       {
         attribute: 'Movement observation',
