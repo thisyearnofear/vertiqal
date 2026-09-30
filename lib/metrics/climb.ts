@@ -1,4 +1,5 @@
-import type { Keypoint, Pose } from '../pose/types'
+import { frameQuality } from '../pose/framing.ts'
+import type { FrameQuality, Keypoint, Pose } from '../pose/types'
 import type { Side } from './gait'
 
 interface Point {
@@ -23,6 +24,7 @@ export interface ClimbSnapshot {
   movingFoot: Side | null
   lastPlacement: Placement | null
   totalPlacements: number
+  framing: FrameQuality
   readjusts: number
   quietFeetPct: number | null
   avgToeDownDeg: number | null
@@ -144,6 +146,7 @@ export class ClimbTracker {
       movingFoot,
       lastPlacement: this.placements.at(-1) ?? null,
       totalPlacements: total,
+      framing: frameQuality(pose),
       readjusts,
       quietFeetPct: total ? ((total - readjusts) / total) * 100 : null,
       avgToeDownDeg: this.toeDown.value,

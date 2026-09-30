@@ -9,6 +9,7 @@ import type { MemberView } from '@/lib/member/schema'
 import type { Passport } from '@/lib/passport/schema'
 import { Button } from '@/components/ui/button'
 import type { Fitting } from '@/lib/wassist/fitting'
+import type { BriefField } from '../fitting-brief'
 import { AgentSteps, activityOf } from './agent-steps'
 import { DecisionPanel } from './decision-panel'
 import { closingLineOf, outputsOf, type AgentOutputs, type ShoePick } from './outputs'
@@ -51,6 +52,7 @@ interface AgentPanelProps {
   onStartFresh: () => void
   confirmedSize: string
   onSizeCommit: (size: string) => void
+  onBriefField: (field: BriefField) => void
 }
 
 export function AgentPanel({
@@ -67,6 +69,7 @@ export function AgentPanel({
   onStartFresh,
   confirmedSize,
   onSizeCommit,
+  onBriefField,
 }: AgentPanelProps) {
   const { messages, status, error, sentBrief, prefs, busy } = agent
 
@@ -148,6 +151,15 @@ export function AgentPanel({
             {!busy && (
               <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-dashed border-stage-foreground/30 pt-4 text-lg leading-none">
                 <span className="opacity-60">{'NOT QUITE?'}</span>
+                <button type="button" onClick={() => onBriefField('budget')} className={LINK}>
+                  {'[ ADJUST BUDGET ]'}
+                </button>
+                <button type="button" onClick={() => onBriefField('goal')} className={LINK}>
+                  {'[ CHANGE GOAL ]'}
+                </button>
+                <button type="button" onClick={() => onBriefField('niggles')} className={LINK}>
+                  {'[ ADD COMFORT NOTES ]'}
+                </button>
                 {deeper && (
                   <button
                     type="button"
@@ -158,9 +170,6 @@ export function AgentPanel({
                     {'[ LOOK HARDER ]'}
                   </button>
                 )}
-                <a href="#fitting-notes" className={LINK}>
-                  {'[ TELL FORMA MORE ↓ ]'}
-                </a>
               </div>
             )}
           </>

@@ -1,4 +1,5 @@
-import type { Keypoint, Pose } from '../pose/types'
+import { frameQuality } from '../pose/framing.ts'
+import type { FrameQuality, Keypoint, Pose } from '../pose/types'
 
 export type Side = 'left' | 'right'
 
@@ -27,6 +28,7 @@ export interface GaitSnapshot {
   lastStrike: Strike | null
   recentStrikes: Strike[]
   totalStrikes: number
+  framing: FrameQuality
   avgOverstrideCm: number | null
   avgKneeAtStrike: number | null
 }
@@ -126,6 +128,7 @@ export class GaitTracker {
       lastStrike: this.lastStrike,
       recentStrikes: this.allStrikes.slice(-6).reverse(),
       totalStrikes: this.allStrikes.length,
+      framing: frameQuality(pose),
       avgOverstrideCm: mean(this.allStrikes.map((s) => s.overstrideCm)),
       avgKneeAtStrike: mean(this.allStrikes.map((s) => s.kneeAngle)),
     }

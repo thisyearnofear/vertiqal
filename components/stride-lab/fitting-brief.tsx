@@ -11,6 +11,17 @@ import { cn } from '@/lib/utils'
 const LABEL = 'text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved'
 const INPUT = 'well h-10 w-full rounded-md px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50'
 
+export const BRIEF_FIELD_ID = {
+  size: 'brief-size',
+  budget: 'brief-budget',
+  height: 'brief-height',
+  goal: 'brief-goal',
+  surface: 'brief-surface',
+  niggles: 'brief-niggles',
+} as const
+
+export type BriefField = keyof typeof BRIEF_FIELD_ID
+
 interface FittingBriefProps {
   sport: Sport
   draft: PrefDraft
@@ -48,7 +59,7 @@ export function FittingBrief({
   const set = (patch: Partial<PrefDraft>) => onDraft({ ...draft, ...patch })
 
   return (
-    <section aria-labelledby={`${id}-heading`} className="flex flex-col gap-4">
+    <section id="fitting-brief" aria-labelledby={`${id}-heading`} className="flex scroll-mt-6 flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h2 id={`${id}-heading`} className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground engraved">
           Your brief
@@ -60,11 +71,11 @@ export function FittingBrief({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={`${id}-size`} className={LABEL}>
+          <label htmlFor={BRIEF_FIELD_ID.size} className={LABEL}>
             Shoe size <span className="sr-only">(required)</span>
           </label>
           <input
-            id={`${id}-size`}
+            id={BRIEF_FIELD_ID.size}
             required
             maxLength={20}
             placeholder="e.g. UK 9"
@@ -78,11 +89,11 @@ export function FittingBrief({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={`${id}-budget`} className={LABEL}>
+          <label htmlFor={BRIEF_FIELD_ID.budget} className={LABEL}>
             Max budget (£, UK) <span className="sr-only">(required)</span>
           </label>
           <input
-            id={`${id}-budget`}
+            id={BRIEF_FIELD_ID.budget}
             required
             inputMode="numeric"
             maxLength={6}
@@ -103,11 +114,11 @@ export function FittingBrief({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={`${id}-height`} className={LABEL}>
+          <label htmlFor={BRIEF_FIELD_ID.height} className={LABEL}>
             Height (cm) <span className="sr-only">{`(required, ${HEIGHT_MIN_CM} to ${HEIGHT_MAX_CM})`}</span>
           </label>
           <input
-            id={`${id}-height`}
+            id={BRIEF_FIELD_ID.height}
             required
             type="number"
             min={HEIGHT_MIN_CM}
@@ -127,11 +138,11 @@ export function FittingBrief({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={`${id}-goal`} className={LABEL}>
+          <label htmlFor={BRIEF_FIELD_ID.goal} className={LABEL}>
             Goal <span className="sr-only">(required)</span>
           </label>
           <select
-            id={`${id}-goal`}
+            id={BRIEF_FIELD_ID.goal}
             required
             value={draft.goal}
             onChange={(e) => set({ goal: e.target.value })}
@@ -148,11 +159,11 @@ export function FittingBrief({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor={`${id}-surface`} className={LABEL}>
+          <label htmlFor={BRIEF_FIELD_ID.surface} className={LABEL}>
             {options.surfaceLabel} <span className="sr-only">(required)</span>
           </label>
           <select
-            id={`${id}-surface`}
+            id={BRIEF_FIELD_ID.surface}
             required
             value={draft.surface}
             onChange={(e) => set({ surface: e.target.value })}
@@ -191,11 +202,11 @@ export function FittingBrief({
         </div>
 
         <div className="col-span-2 flex flex-col gap-1.5">
-          <label htmlFor={`${id}-niggles`} className={LABEL}>
+          <label htmlFor={BRIEF_FIELD_ID.niggles} className={LABEL}>
             Niggles <span className="normal-case tracking-normal">(optional)</span>
           </label>
           <input
-            id={`${id}-niggles`}
+            id={BRIEF_FIELD_ID.niggles}
             maxLength={160}
             placeholder={sport === 'running' ? 'e.g. sore shins after 10k' : 'e.g. bunion on left foot'}
             value={notes.niggles}

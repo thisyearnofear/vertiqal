@@ -10,8 +10,8 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 
 ## What Forma does
 
-1. **Shows the loop first.** The home page opens on the fitting bench with a clearly labelled synthetic example, upload and live-camera actions, and the running/climbing choice. The illustrative example never calls agent, stock or shopper APIs.
-2. **Measures on-device.** MediaPipe pose tracking runs in the browser on a phone clip or live camera: cadence, foot strike and overstride for running; reach, hip position and precision for climbing. Video never leaves the device unless you opt in.
+1. **Shows the loop first.** The home page opens on the fitting bench with a clearly labelled synthetic example, upload and live-camera actions, the running/climbing choice, and a stage-aware next-step prompt. The illustrative example never calls agent, stock or shopper APIs.
+2. **Measures on-device.** MediaPipe pose tracking runs in the browser on a phone clip or live camera: cadence, foot strike and overstride for running; reach, hip position and precision for climbing. Live capture shows real pose-derived person, hips and feet framing checks. Video never leaves the device unless you opt in.
 3. **Confirms the brief before searching.** Movement cannot establish size, budget, goal, surface or comfort needs, so those shopper details are confirmed explicitly before a personal research run. Changing height or the pose provider invalidates a stale measurement.
 4. **Turns movement into fit requirements.** A gear agent (Grok via Vercel AI Gateway) builds a movement profile, then works through visible steps: research, live retailer stock, rider reports and athletes who wear the shoe. Each claim carries a citation checked against the publisher.
 5. **You choose how far to dig.** Search starts at Considered; **Look harder** moves to Deep and adds research and athlete evidence.

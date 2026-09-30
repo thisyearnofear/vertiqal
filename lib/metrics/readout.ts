@@ -142,8 +142,8 @@ export function readoutOf(snapshot: MovementSnapshot | null, sport: Sport): Read
 function emptyMetrics(sport: Sport): MetricReading[] {
   const empty = readoutOf(
     sport === 'running'
-      ? { sport, timeSec: 0, direction: 1, kneeAngle: {}, trunkLeanDeg: null, cadenceSpm: null, lastStrike: null, recentStrikes: [], totalStrikes: 0, avgOverstrideCm: null, avgKneeAtStrike: null }
-      : { sport, timeSec: 0, elbowAngle: {}, movingFoot: null, lastPlacement: null, totalPlacements: 0, readjusts: 0, quietFeetPct: null, avgToeDownDeg: null, hipOffsetCm: null, avgReachElbowDeg: null, movesPerMin: null },
+      ? { sport, timeSec: 0, direction: 1, kneeAngle: {}, trunkLeanDeg: null, cadenceSpm: null, lastStrike: null, recentStrikes: [], totalStrikes: 0, framing: { person: false, hips: false, feet: false }, avgOverstrideCm: null, avgKneeAtStrike: null }
+      : { sport, timeSec: 0, elbowAngle: {}, movingFoot: null, lastPlacement: null, totalPlacements: 0, framing: { person: false, hips: false, feet: false }, readjusts: 0, quietFeetPct: null, avgToeDownDeg: null, hipOffsetCm: null, avgReachElbowDeg: null, movesPerMin: null },
     sport,
   )
   return empty.metrics
