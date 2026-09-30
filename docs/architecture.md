@@ -9,7 +9,7 @@ Phone clip / live camera
 lib/pose (browser)            MediaPipe every frame ── optional VLM Run refinement (/api/pose/vlmrun)
   │
   ▼
-lib/metrics (browser)         cadence, foot strike, overstride │ reach, hip position, precision
+lib/metrics (browser)         cadence, foot strike, overstride │ reach, hip position, precision │ framing quality
   │                           ├─▶ lib/hero: best frame → hero card (canvas, on-device)
   │                           └─▶ fitting-notes: footfall stills → /api/vision (opt-in, Grok vision)
   ▼
@@ -38,7 +38,7 @@ Measurement always comes from untouched frames. The hero card grade and try-on i
 
 `lib/fitting/` owns client-side gates that would otherwise be spread through the UI:
 
-- `session.ts` derives the visible stage, decides whether a measurement can submit, and plans a re-analysis or recapture when height/provider inputs change.
+- `session.ts` derives the visible stage, supplies the next-action rail, decides whether a measurement can submit, and plans a re-analysis or recapture when height/provider inputs change.
 - `prefs.ts` validates the required brief (size, budget, 120–220 cm height, goal and surface) before `/api/agent` runs. Foot width and niggles remain optional.
 - `example.ts` supplies the synthetic, clearly labelled walkthrough. Example mode cannot authorise research, stock, passport or WhatsApp calls.
 - `stock.ts` separates a typed draft size from the explicitly submitted size, so an old verdict or passport cannot be applied to a new size.

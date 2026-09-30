@@ -156,7 +156,7 @@ export function FormaConsole({
         aria-expanded={tuning}
         aria-controls={tunerId}
         onClick={onToggleTuning}
-        className="flex w-fit shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex min-h-10 min-w-10 w-fit shrink-0 items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         {tuning ? <X className="size-3.5" aria-hidden /> : <SlidersHorizontal className="size-3.5" aria-hidden />}
         <span className={compact ? 'hidden sm:inline' : undefined}>{tuning ? 'Done tuning' : 'Tune Forma'}</span>

@@ -15,14 +15,16 @@ import {
   buildConfirmedPrefs,
   parseHeightCm,
   prefsValid,
+  validatePrefs,
   type PrefDraft,
+  type PrefField,
 } from '@/lib/fitting/prefs'
 import { EXAMPLE_STEP_COUNT } from '@/lib/fitting/example'
-import { canFindShoes, clearsBaseline, measurementInvalidated, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
+import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
 import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
 import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
-import type { PoseSession } from '@/lib/pose/types'
+import type { FrameQuality, PoseSession } from '@/lib/pose/types'
 import { cn } from '@/lib/utils'
 import type { HeroFrame } from '@/lib/hero/frame'
 import { AgentPanel } from './agent/agent-panel'
@@ -30,11 +32,12 @@ import { outputsOf, type ShoePick } from './agent/outputs'
 import { HeroCard } from './hero/hero-card'
 import { useGearAgent } from './agent/use-gear-agent'
 import { ExampleWalkthrough, type ExampleState } from './example-walkthrough'
-import { FittingBrief } from './fitting-brief'
+import { BRIEF_FIELD_ID, FittingBrief, type BriefField } from './fitting-brief'
 import { FittingHeader } from './fitting-header'
 import { FittingNotes } from './fitting-notes'
 import { GaitReadout } from './gait-readout'
 import { LiveOverlay } from './live-overlay'
+import { NextStep } from './next-step'
 import { PoseStage, type Keyframe } from './pose-stage'
 import { ProviderPicker } from './provider-picker'
 import { useLiveCamera } from './use-live-camera'
@@ -56,6 +59,7 @@ const MAX_KEYFRAMES = 3
 const CUE_GAP_MS = 6000
 const REPEAT_CUE_GAP_MS = 14000
 const ANNOUNCED_MOODS = new Set<Mood>(['pleased', 'asking', 'working', 'sad'])
+const EMPTY_FRAME: FrameQuality = { person: false, hips: false, feet: false }
 const LABEL = 'text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved'
 const PRIVACY_LINE =
   'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them.'
@@ -496,6 +500,32 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     hasOutputs: picks.length > 0,
     hasChoice: Boolean(choice),
   })
+  const missingFields = Object.keys(validatePrefs(prefDraft)) as PrefField[]
+  const nextStep = nextStepFor({
+    stage,
+    example: Boolean(example),
+    capture: live.phase,
+    events: readout.events,
+    target: MIN_EVENTS,
+    eventLabel: SPORTS[sport].events,
+    missingPrefs: missingFields.length,
+    needsRecapture,
+  })
+
+  const focusBriefField = (field: BriefField) => {
+    scrollToSection('fitting-brief')
+    requestAnimationFrame(() => document.getElementById(BRIEF_FIELD_ID[field])?.focus({ preventScroll: true }))
+  }
+
+  const runNextAction = () => {
+    const action = nextStep.action?.kind
+    if (action === 'example') showExample()
+    else if (action === 'upload-example') document.getElementById('example-upload')?.click()
+    else if (action === 'upload') document.getElementById('clip-upload')?.click()
+    else if (action === 'brief') focusBriefField(missingFields[0] ?? 'size')
+    else if (action === 'results') scrollToSection('forma-procurement')
+    else if (action === 'recapture') goLive()
+  }
 
   const heroPicks = choice ? [choice, ...picks.filter((p) => p.url !== choice.url)] : picks
   const panelReadout = lockedReadout ?? readout
@@ -548,9 +578,19 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
         </aside>
       )}
 
+      <NextStep step={nextStep} onAction={runNextAction} />
+
       <main className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         {example ? (
-          <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} />
+          <ExampleWalkthrough
+            sport={sport}
+            state={example}
+            onState={setExample}
+            onExit={exitExample}
+            onFilm={goLive}
+            canFilm={engine === 'ready' && enteredHeight !== null}
+            filmHint={enteredHeight === null ? 'Enter your height in the brief first — recordings cannot be re-analysed later' : undefined}
+          />
         ) : (
           <section aria-label="Movement analysis" className="housing flex min-w-0 flex-col gap-4 rounded-2xl p-4 md:p-6">
             {clip && (
@@ -573,6 +613,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                 <Upload aria-hidden />
                 {stage === 'invite' ? 'Upload a clip' : 'Another clip'}
                 <input
+                  id="clip-upload"
                   type="file"
                   accept="video/*"
                   className="sr-only"
@@ -616,8 +657,10 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                   <LiveOverlay
                     phase={live.phase}
                     secondsLeft={live.secondsLeft}
+                    totalSeconds={CAPTURE_SECONDS[sport]}
                     caption={caption}
                     events={readout.events}
+                    framing={snapshot?.framing ?? EMPTY_FRAME}
                     sport={sport}
                   />
                 )
@@ -686,9 +729,11 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                   <Upload aria-hidden />
                   Upload a clip
                   <input
+                    id="example-upload"
                     type="file"
                     accept="video/*"
                     className="sr-only"
+                    aria-label="Upload a clip for your own fitting"
                     onChange={(e) => {
                       const file = e.target.files?.[0]
                       if (file) loadFile(file)
@@ -785,6 +830,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
               setPrefDraft((d) => ({ ...d, size }))
               setConfirmedPrefs((p) => (p ? { ...p, size } : p))
             }}
+            onBriefField={focusBriefField}
           />
         </div>
 

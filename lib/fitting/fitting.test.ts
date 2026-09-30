@@ -16,6 +16,7 @@ import {
   canFindShoes,
   clearsBaseline,
   measurementInvalidated,
+  nextStepFor,
   notesAfterReset,
   remeasurePlan,
   stageOf,
@@ -24,6 +25,7 @@ import { EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleMetrics, nextStep } from '.
 import { settleStream } from './camera.ts'
 import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
+import { frameQuality } from '../pose/framing.ts'
 
 const valid: PrefDraft = { size: 'UK 9', budgetPounds: '160', heightCm: '178', goal: 'Easy miles', surface: 'Road' }
 const blank: PrefDraft = { size: '', budgetPounds: '', heightCm: '', goal: '', surface: '' }
@@ -133,6 +135,39 @@ test('stage machine: invite -> capture -> confirm -> research -> choose -> decis
   assert.equal(stageOf({ ...base, measuredReady: true, sent: true, hasOutputs: true }), 'choose')
   assert.equal(stageOf({ ...base, measuredReady: true, sent: true, hasOutputs: true, hasChoice: true }), 'decision')
   assert.equal(stageOf({ ...base, example: true, sent: true, hasOutputs: true }), 'invite', 'example never leaves the invite stage')
+})
+
+test('next step follows the real fitting state without pretending the example is measured', () => {
+  const base = { stage: 'invite' as const, example: false, capture: 'off' as const, events: 0, target: 6, eventLabel: 'footfalls', missingPrefs: 5, needsRecapture: false }
+  assert.equal(nextStepFor(base).action?.kind, 'example')
+  assert.equal(nextStepFor({ ...base, example: true }).action?.kind, 'upload-example')
+  assert.equal(nextStepFor({ ...base, needsRecapture: true }).action?.kind, 'recapture')
+  assert.equal(nextStepFor({ ...base, stage: 'capture', capture: 'recording', events: 2 }).action, null)
+  assert.match(nextStepFor({ ...base, stage: 'capture', capture: 'recording', events: 2 }).detail, /4 more footfalls/)
+  assert.deepEqual(nextStepFor({ ...base, stage: 'capture', capture: 'done', events: 2 }).action, { kind: 'recapture', label: 'Film again' })
+  assert.match(nextStepFor({ ...base, stage: 'capture', capture: 'done', events: 2 }).detail, /Film again/)
+  assert.deepEqual(nextStepFor({ ...base, stage: 'capture', capture: 'error' }).action, { kind: 'upload', label: 'Upload a clip' })
+  assert.equal(nextStepFor({ ...base, stage: 'confirm', missingPrefs: 2 }).action?.kind, 'brief')
+  assert.equal(nextStepFor({ ...base, stage: 'research' }).action?.kind, 'results')
+  assert.equal(nextStepFor({ ...base, stage: 'decision' }).action?.label, 'Review stock check')
+})
+
+test('frame quality checks whether the person, hips and both feet are visible', () => {
+  const point = { x: 0.5, y: 0.5, score: 0.9 }
+  assert.deepEqual(frameQuality(null), { person: false, hips: false, feet: false })
+  assert.deepEqual(
+    frameQuality({
+      nose: point,
+      left_hip: point,
+      right_hip: point,
+      left_ankle: point,
+      left_heel: point,
+      right_ankle: point,
+      right_foot: point,
+    }),
+    { person: true, hips: true, feet: true },
+  )
+  assert.equal(frameQuality({ nose: point, left_hip: point, right_hip: point }).feet, false)
 })
 
 test('sport change clears sport-specific goal/surface and vision findings, keeps the rest', () => {

@@ -31,6 +31,12 @@ export interface Keypoint {
 
 export type Pose = Partial<Record<KeypointName, Keypoint>>
 
+export interface FrameQuality {
+  person: boolean
+  hips: boolean
+  feet: boolean
+}
+
 /**
  * A running pose session. Live providers detect on demand for the current
  * frame; batch providers (e.g. a hosted ViTPose run) precompute a track and

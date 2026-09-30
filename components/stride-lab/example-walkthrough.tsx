@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw, X } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, Pause, Play, RotateCcw, Upload, X } from 'lucide-react'
 import { EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, EXAMPLE_STEP_MS, exampleMetrics, nextStep } from '@/lib/fitting/example'
 import { SPORTS, type Sport } from '@/lib/metrics/readout'
 import { Button } from '@/components/ui/button'
@@ -17,9 +17,12 @@ interface ExampleWalkthroughProps {
   state: ExampleState
   onState: (state: ExampleState) => void
   onExit: () => void
+  onFilm: () => void
+  canFilm: boolean
+  filmHint?: string
 }
 
-export function ExampleWalkthrough({ sport, state, onState, onExit }: ExampleWalkthroughProps) {
+export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, canFilm, filmHint }: ExampleWalkthroughProps) {
   const script = EXAMPLE_SCRIPTS[sport]
   const { step, playing } = state
   const [still] = useState(() =>
@@ -160,6 +163,28 @@ export function ExampleWalkthrough({ sport, state, onState, onExit }: ExampleWal
             <span className="font-sans text-xs uppercase tracking-wider opacity-60">Reduced motion: step through manually</span>
           )}
         </div>
+
+        {lastStep && (
+          <div className="flex flex-col gap-3 rounded-md border border-stage-foreground/30 p-4 font-sans">
+            <div className="flex flex-col gap-1">
+              <p className="text-base font-semibold text-stage-foreground">Want this for your movement?</p>
+              <p className="text-pretty text-sm leading-relaxed text-stage-foreground/75">
+                Upload a clip or record live. The example stays synthetic; only your own footage produces measurements.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button size="lg" className="h-10 px-4 text-sm" onClick={() => document.getElementById('example-upload')?.click()}>
+                <Upload aria-hidden />
+                Upload my clip
+              </Button>
+              <Button variant="outline" size="lg" className="h-10 px-4 text-sm" onClick={onFilm} disabled={!canFilm} title={filmHint}>
+                <Camera aria-hidden />
+                Film me
+              </Button>
+            </div>
+            {!canFilm && filmHint && <p className="text-xs leading-relaxed text-stage-foreground/70">{filmHint}</p>}
+          </div>
+        )}
       </div>
     </section>
   )
