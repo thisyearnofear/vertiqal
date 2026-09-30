@@ -37,7 +37,7 @@ function Metric({ metric, baseline, locked, index }: { metric: MetricReading; ba
   )
 }
 
-export function GaitReadout({ readout, baseline }: { readout: Readout; baseline: Readout | null }) {
+export function GaitReadout({ readout, baseline, provisionalHeight }: { readout: Readout; baseline: Readout | null; provisionalHeight?: boolean }) {
   const eventWord = SPORTS[readout.sport].events
   const baseMetrics = new Map(baseline?.metrics.map((m) => [m.id, m]))
 
@@ -52,6 +52,11 @@ export function GaitReadout({ readout, baseline }: { readout: Readout; baseline:
             {`${String(readout.events).padStart(2, '0')} ${eventWord.toUpperCase()}`}
           </span>
         </div>
+        {provisionalHeight && (
+          <p className="rounded-md border border-primary/50 bg-primary/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+            Distance estimates need your height
+          </p>
+        )}
         <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
           {readout.metrics.map((metric, index) => (
             <Metric key={metric.id} metric={metric} baseline={baseMetrics.get(metric.id)} locked={readout.ready} index={index} />

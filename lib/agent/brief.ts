@@ -1,5 +1,5 @@
 import type { Readout, Sport } from '@/lib/metrics/readout'
-import { VOICE_PROFILE, type Voice } from '@/lib/persona'
+import { VOICE_PROFILE, type Voice } from '../persona.ts'
 import type { Depth } from './depth'
 
 export interface BriefMetric {
