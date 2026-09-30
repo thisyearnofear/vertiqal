@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   FALLBACK_HEIGHT_CM,
   analysisHeight,
@@ -28,7 +29,11 @@ import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
 import { guardedStockVerdict, inspectStockPage, type StockPageEvidence } from '../agent/stock-page.ts'
-import { frameQuality } from '../pose/framing.ts'
+import { frameQuality, usableKeypoint } from '../pose/framing.ts'
+import { GaitTracker, MIN_STRIKES_FOR_SIGNALS } from '../metrics/gait.ts'
+import { ClimbTracker } from '../metrics/climb.ts'
+import { attractPose } from '../../components/stride-lab/attract-runner.ts'
+import type { Pose } from '../pose/types.ts'
 
 const valid: PrefDraft = { size: 'UK 9', budgetPounds: '160', heightCm: '178', goal: 'Easy miles', surface: 'Road' }
 const blank: PrefDraft = { size: '', budgetPounds: '', heightCm: '', goal: '', surface: '' }
@@ -208,16 +213,31 @@ test('example scripts: six stages per sport, synthetic fixture data, no product 
     for (const c of script.concepts) assert.ok(c.tradeoff.length > 0)
     assert.doesNotMatch(script.brief.height, /\d{3}\s*cm/, 'no invented height for example footage')
   }
-  assert.equal(EXAMPLE_FOOTAGE.credit.includes('Orientation to Physical Efficiency Battery'), true)
-  assert.equal(EXAMPLE_FOOTAGE.heightKnown, false, 'the archival runner height is unknown')
+  assert.equal(EXAMPLE_FOOTAGE.kind, 'generated')
+  assert.equal(EXAMPLE_FOOTAGE.credit.includes('Seedance 1.5 Pro'), true)
+  assert.equal(EXAMPLE_FOOTAGE.heightKnown, false, 'a generated subject has no real-world height')
   assert.equal(EXAMPLE_FOOTAGE.src.startsWith('/examples/'), true, 'footage is served locally, never hotlinked')
+  assert.equal(EXAMPLE_FOOTAGE.poster.startsWith('/examples/'), true, 'poster is served locally')
+  assert.equal(EXAMPLE_FOOTAGE.provenanceUrl.startsWith('/examples/'), true, 'provenance is served locally')
   assert.equal(nextStep(0, 1), 1)
   assert.equal(nextStep(EXAMPLE_STEP_COUNT - 1, 1), EXAMPLE_STEP_COUNT - 1, 'no auto-advance past the last step')
   assert.equal(nextStep(0, -1), 0)
 })
 
+test('generated-runner provenance fixture is complete and carries no credentials', () => {
+  const raw = readFileSync(new URL('../../public/examples/generated-runner-provenance.json', import.meta.url), 'utf8')
+  const p = JSON.parse(raw)
+  assert.equal(p.requestId, '01a0f44e-9bb4-7a13-a69c-8f0bd562c82b')
+  assert.equal(p.endpointId, 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video')
+  assert.equal(p.input.duration, '12')
+  assert.equal(p.input.generate_audio, false)
+  assert.equal(p.sourceMedia.audio, false)
+  assert.doesNotMatch(raw, /"[^"]*(api[_-]?key|secret|credential|authorization|bearer)[^"]*":/i, 'provenance must not embed secret fields')
+  assert.equal(p.usage.measurements.includes('not extracted from this generated clip'), true)
+})
+
 test('dock companion lines match the footage each sport actually shows', () => {
-  assert.equal(exampleCompanion('running', 1), 'The footage is archival; these measurements are illustrative.')
+  assert.equal(exampleCompanion('running', 1), 'The runner is AI-generated; these measurements are illustrative.')
   assert.equal(exampleCompanion('climbing', 1), 'The movement and measurements are illustrative.')
   assert.doesNotMatch(exampleCompanion('climbing', 1), /archiv|footage/i, 'climbing has no archival clip to claim')
   for (let step = 0; step < EXAMPLE_STEP_COUNT; step++) {
@@ -492,4 +512,113 @@ test('guarded stock verdict: the judge only runs on a verified page', { timeout:
     assert.equal(result.evidence, 'judge saw it')
   }
   assert.equal(calls, 4)
+})
+
+const kp = (x: number, y: number, score = 1) => ({ x, y, score })
+
+test('usableKeypoint requires in-frame coordinates and bounded confidence', () => {
+  assert.equal(usableKeypoint(kp(0.5, 0.5, 0.9)), true)
+  assert.equal(usableKeypoint(kp(0.5, 0.5, 0.49)), false, 'below the existing confidence floor')
+  assert.equal(usableKeypoint(kp(0.5, 0.5, 0.5)), true, 'the existing 0.5 floor is inclusive')
+  assert.equal(usableKeypoint(kp(0, 1, 0.5)), true, 'frame edges are valid coordinates')
+  assert.equal(usableKeypoint(kp(-1, 0.5, 1)), false, 'offscreen hip must not read as usable')
+  assert.equal(usableKeypoint(kp(2, 0.5, 1)), false)
+  assert.equal(usableKeypoint(kp(0.5, -0.2, 1)), false)
+  assert.equal(usableKeypoint(kp(NaN, 0.5, 1)), false)
+  assert.equal(usableKeypoint(kp(0.5, NaN, 1)), false)
+  assert.equal(usableKeypoint(kp(0.5, 0.5, Infinity)), false, 'non-finite score is not confident')
+  assert.equal(usableKeypoint(kp(0.5, 0.5, NaN)), false)
+  assert.equal(usableKeypoint(undefined), false)
+  const hipsOut = { left_hip: kp(-1, 0.5), right_hip: kp(2, 0.5) }
+  assert.deepEqual(frameQuality(hipsOut), { person: false, hips: false, feet: false }, 'offscreen hips must fail framing')
+})
+
+const ATTRACT_OPTS = { centerX: 0.6, height: 0.55, groundY: 0.86, aspect: 9 / 16 }
+const FRAME_W = 1280
+const FRAME_H = 720
+const runGait = (tracker: GaitTracker, startSec: number, seconds: number) => {
+  let snap
+  for (let i = 0; i <= Math.round(seconds * 30); i++) {
+    const t = startSec + i / 30
+    snap = tracker.update(t, attractPose(t, ATTRACT_OPTS), FRAME_W, FRAME_H)
+  }
+  return snap!
+}
+
+test('gait tracker: rewinding a looping clip clears accumulated strikes', () => {
+  const tracker = new GaitTracker(178)
+  const first = runGait(tracker, 0, 3)
+  assert.ok(first.totalStrikes > 0, 'the synthetic runner must register strikes')
+  const after = tracker.update(0, attractPose(0, ATTRACT_OPTS), FRAME_W, FRAME_H)
+  assert.equal(after.totalStrikes, 0, 'rewind must reset accumulation, not keep prior events')
+})
+
+test('gait tracker: repeated short passes never reach the signal threshold', () => {
+  const tracker = new GaitTracker(178)
+  for (let pass = 0; pass < 3; pass++) runGait(tracker, 0, 0.5)
+  const snap = tracker.update(0.02, attractPose(0.02, ATTRACT_OPTS), FRAME_W, FRAME_H)
+  assert.ok(snap.totalStrikes < MIN_STRIKES_FOR_SIGNALS, 'three looping passes must not pool into one measurement')
+})
+
+test('gait tracker: a pose gap keeps past strikes but fabricates no contact', () => {
+  const tracker = new GaitTracker(178)
+  const first = runGait(tracker, 0, 3)
+  const before = first.totalStrikes
+  let snap = tracker.update(3.1, null, FRAME_W, FRAME_H)
+  snap = tracker.update(3.15, null, FRAME_W, FRAME_H)
+  assert.equal(snap.totalStrikes, before, 'missing poses must not erase legitimate events')
+  assert.equal(snap.cadenceSpm, null, 'cadence window is empty after a gap')
+  for (let i = 0; i < 4; i++) {
+    const t = 3.2 + i / 30
+    snap = tracker.update(t, attractPose(t, ATTRACT_OPTS), FRAME_W, FRAME_H)
+  }
+  assert.equal(snap.totalStrikes, before, 'no strike can be detected until ankle history refills')
+})
+
+test('gait tracker: low-confidence hips clear the timing history without dropping events', () => {
+  const tracker = new GaitTracker(178)
+  const first = runGait(tracker, 0, 3)
+  const before = first.totalStrikes
+  let snap
+  for (let i = 0; i < 4; i++) {
+    const t = 3.1 + i / 30
+    const dim: Pose = { ...attractPose(t, ATTRACT_OPTS), left_hip: kp(0.4, 0.3, 0.49), right_hip: kp(0.5, 0.3, 0.49) }
+    snap = tracker.update(t, dim, FRAME_W, FRAME_H)
+  }
+  assert.equal(snap!.totalStrikes, before, 'a degraded frame keeps earlier strikes but detects nothing')
+})
+
+const climbPose = (footX: number, restX = 0.78): Pose => ({
+  left_hip: kp(0.45, 0.3),
+  right_hip: kp(0.55, 0.3),
+  left_knee: kp(0.45, 0.55),
+  right_knee: kp(0.55, 0.55),
+  left_ankle: kp(footX, 0.8),
+  right_ankle: kp(restX, 0.8),
+})
+
+test('climb tracker: rewinding clears placements and running means', () => {
+  const tracker = new ClimbTracker(178)
+  let snap
+  for (let i = 0; i <= 6; i++) snap = tracker.update(i / 30, climbPose(0.4), FRAME_W, FRAME_H)
+  for (let i = 0; i <= 12; i++) snap = tracker.update(0.23 + i / 30, climbPose(0.7), FRAME_W, FRAME_H)
+  assert.ok(snap!.totalPlacements > 0, 'the synthetic foot move must settle into a placement')
+  snap = tracker.update(0, climbPose(0.4), FRAME_W, FRAME_H)
+  assert.equal(snap.totalPlacements, 0, 'rewind must reset accumulation')
+  assert.equal(snap.avgToeDownDeg, null)
+  assert.equal(snap.avgReachElbowDeg, null)
+  assert.equal(snap.movingFoot, null, 'fresh limbs are not mid-move after a rewind')
+})
+
+test('climb tracker: a pose gap does not fabricate a placement', () => {
+  const tracker = new ClimbTracker(178)
+  let snap
+  for (let i = 0; i <= 6; i++) snap = tracker.update(i / 30, climbPose(0.4), FRAME_W, FRAME_H)
+  for (let i = 0; i <= 12; i++) snap = tracker.update(0.23 + i / 30, climbPose(0.7), FRAME_W, FRAME_H)
+  const before = snap!.totalPlacements
+  tracker.update(0.7, null, FRAME_W, FRAME_H)
+  tracker.update(0.75, null, FRAME_W, FRAME_H)
+  for (let i = 0; i <= 10; i++) snap = tracker.update(0.8 + i / 30, climbPose(0.55), FRAME_W, FRAME_H)
+  assert.equal(snap!.totalPlacements, before, 'a still foot after a gap is not a new placement')
+  assert.equal(snap!.movingFoot, null, 'lost tracking does not resume an old settle')
 })

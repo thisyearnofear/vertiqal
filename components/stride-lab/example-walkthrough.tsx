@@ -110,7 +110,7 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
           </h2>
           <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
             {sport === 'running'
-              ? 'Archival footage plus a synthetic fitting. No live products or stock checked.'
+              ? 'AI-generated footage plus an illustrative fitting. No live products or stock checked.'
               : 'Synthetic movement example. Not analysed from a real clip; no live products or stock checked.'}
           </p>
         </div>
@@ -152,6 +152,8 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
                 <video
                   ref={videoRef}
                   src={EXAMPLE_FOOTAGE.src}
+                  poster={EXAMPLE_FOOTAGE.poster}
+                  aria-label="AI-generated runner illustration; not real-person movement analysis"
                   muted
                   playsInline
                   controls
@@ -162,20 +164,20 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
                   {`Loaded locally · example footage · ${EXAMPLE_FOOTAGE.credit} · ${EXAMPLE_FOOTAGE.range}`}
                 </p>
                 <p className="font-sans text-xs leading-relaxed opacity-60">
-                  {`${EXAMPLE_FOOTAGE.rights}. The runner's height is unknown; nothing here is measured from this clip.`}
+                  This runner is AI-generated. The example measurements are fixtures, not measurements of this clip.
                 </p>
                 <details className="font-sans text-xs opacity-70">
                   <summary className="cursor-pointer underline decoration-dotted underline-offset-4">Source &amp; rights</summary>
                   <p className="mt-1 leading-relaxed">
-                    {'Clip '}
+                    {'Model '}
                     <a className="underline" href={EXAMPLE_FOOTAGE.sourceUrl} target="_blank" rel="noreferrer">
-                      Moving Image Archive
+                      Seedance 1.5 Pro on fal.ai
                     </a>
-                    {' · original film '}
-                    <a className="underline" href={EXAMPLE_FOOTAGE.originalUrl} target="_blank" rel="noreferrer">
-                      Internet Archive
+                    {' · '}
+                    <a className="underline" href={EXAMPLE_FOOTAGE.provenanceUrl} target="_blank" rel="noreferrer">
+                      generation details
                     </a>
-                    {`. ${EXAMPLE_FOOTAGE.rights}. Archival use implies no endorsement or consent.`}
+                    {`. ${EXAMPLE_FOOTAGE.rights} Not proof of real-person gait or shoe fit.`}
                   </p>
                 </details>
               </>
@@ -204,7 +206,7 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
             </dl>
             <p className="font-sans text-sm leading-relaxed opacity-75">
               {sport === 'running'
-                ? 'Illustrative measurements · not measured from this archive clip.'
+                ? 'Illustrative measurements · not measured from this generated clip.'
                 : 'Illustrative measurements · not measured from a real clip.'}{' '}
               In a real fitting these numbers come from your footage.
             </p>

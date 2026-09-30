@@ -1,4 +1,4 @@
-import { frameQuality } from '../pose/framing.ts'
+import { frameQuality, usableKeypoint as usable } from '../pose/framing.ts'
 import type { FrameQuality, Keypoint, Pose } from '../pose/types'
 
 export type Side = 'left' | 'right'
@@ -33,14 +33,11 @@ export interface GaitSnapshot {
   avgKneeAtStrike: number | null
 }
 
-const MIN_SCORE = 0.5
 const HISTORY_SEC = 2.5
 const CADENCE_WINDOW_SEC = 6
 const MIN_STEP_INTERVAL_SEC = 0.25
 /** Hip-to-ankle length as a fraction of standing height (anthropometric average). */
 const LEG_TO_HEIGHT = 0.49
-
-const usable = (k?: Keypoint): k is Keypoint => !!k && k.score >= MIN_SCORE
 
 function angleAt(a: Point, b: Point, c: Point) {
   const v1 = { x: a.x - b.x, y: a.y - b.y }
@@ -83,7 +80,7 @@ export class GaitTracker {
 
   update(timeSec: number, pose: Pose | null, width: number, height: number): GaitSnapshot {
     // The clip looped or the user scrubbed backwards: timing-based state is no longer valid.
-    if (timeSec < this.lastTime - 0.1) this.resetWindow()
+    if (timeSec < this.lastTime - 0.1) this.reset()
     this.lastTime = timeSec
 
     const toPx = (k: Keypoint): Point => ({ x: k.x * width, y: k.y * height })
@@ -114,6 +111,8 @@ export class GaitTracker {
       for (const side of ['left', 'right'] as const) {
         this.detectStrike(side, timeSec, pose, kneeAngle[side], toPx)
       }
+    } else {
+      this.resetWindow()
     }
 
     this.windowStrikes = this.windowStrikes.filter((s) => timeSec - s.timeSec <= CADENCE_WINDOW_SEC)
@@ -161,7 +160,11 @@ export class GaitTracker {
     const hipK = pose[`${side}_hip`]
     const kneeK = pose[`${side}_knee`]
     const { left_hip: lh, right_hip: rh } = pose
-    if (!usable(ankle) || !usable(hipK) || !usable(kneeK) || !usable(lh) || !usable(rh)) return
+    if (!usable(ankle) || !usable(hipK) || !usable(kneeK) || !usable(lh) || !usable(rh)) {
+      this.ankleHistory[side] = []
+      this.lastStrikeTime[side] = -Infinity
+      return
+    }
 
     const history = this.ankleHistory[side]
     const ankleY = toPx(ankle).y

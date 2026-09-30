@@ -38,18 +38,58 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 ```bash
 pnpm install
 pnpm dev        # http://localhost:3000
-pnpm test:fitting # fitting-state and preference rules
+pnpm test:fitting # fitting-state, capture and preference rules
+pnpm test:pose    # local export and annotation-comparison unit tests
 pnpm typecheck    # the real type gate: next.config ignores TS errors during build
 pnpm build
 ```
+
+## Motion validation (running first)
+
+Forma's movement estimates are experimental. This workflow compares detected foot-contact events against independently supplied annotations; it does not certify biomechanics, shoe fit or clinical validity.
+
+1. Record a real, consented side-on clip with the full body and both feet visible, a stationary camera and known height. Keep the original video privately so contact times can be reviewed. AI-generated footage can exercise the interface but cannot validate real-person measurement accuracy.
+2. Upload the clip, open the local validation controls and explicitly start collecting data. Select the source honestly: unclassified, consent-confirmed real footage, or synthetic/debug. Nothing is collected by this control until you start it. Stop and export the JSON locally. It contains keypoints, entered height, provider, source declaration, original video timestamps and detected contacts, but no video/images, clip name, source URL or account information. Keypoints and height can still be identifying; keep exports outside the repository and share only with permission.
+3. Independently inspect every contact in a chosen interval of the original clip. Record left/right contacts at their original `video.currentTime` timestamps; do not copy detected contacts into the reference. Explicitly exclude intervals you cannot judge and document why. Mark the annotation set complete only after reviewing the entire evaluation interval.
+4. Compare the export with your annotation JSON using the CLI below. Select and document the matching window before looking at the results. The example `80` ms is an invocation example, not a recommended accuracy threshold.
+
+```bash
+pnpm validate:motion /path/to/capture.json /path/to/annotations.json --tolerance-ms 80
+```
+
+Annotation template (replace the capture id and interval with values from your export, fill contacts, then set `complete` to `true`):
+
+```json
+{
+  "schemaVersion": 1,
+  "captureId": "replace-with-exported-captureId",
+  "source": "manual",
+  "referenceNotes": "Describe how contact frames were independently reviewed and any timing uncertainty.",
+  "complete": false,
+  "interval": { "startSec": 0, "endSec": 10 },
+  "excludedIntervals": [],
+  "contacts": []
+}
+```
+
+Each contact is `{ "timeSec": <number>, "side": "left" | "right" }`. Each exclusion is `{ "startSec": <number>, "endSec": <number>, "reason": <string> }`; its endpoints are inclusive. The CLI refuses incomplete annotations, mismatched capture ids, invalid timelines, duplicate contacts and resource-truncated captures. Matching is one-to-one and same-side: maximise the number of contacts within the supplied window, then minimise total absolute timing error. Reports include precision/recall with explicit counts, misses, extra detections, timing errors and processed-frame visibility counts. An empty denominator is `null`, not perfect accuracy. Source declarations are not independently verified; synthetic and unclassified captures are labelled `debug-only`. There is no accuracy pass/fail threshold or aggregate leaderboard.
+
+The recorder retains the first continuous segment and stops on rewind or dimensions changes. It records all frames actually processed by Forma, not every source-video frame; visibility counts are frame counts, not elapsed-time coverage. Resource caps are 18,000 processed frames and 2,000 contacts, with no subsampling; a cap-stopped export is marked truncated and refused by the comparison tool. Live capture exports no video, so uploaded clips are preferable for independent annotation. Height, provider, sport or clip changes discard the in-memory trace. The provider identifier records the selected mode, not per-frame backend provenance; the optional hosted mode may fall back to MediaPipe.
+
+### FreeMoCap's role
+
+Use [FreeMoCap](https://github.com/freemocap/freemocap) as a separate offline reference workflow, not a runtime dependency. Its [multi-camera guide](https://freemocap.github.io/documentation/multi-camera-calibration.html) describes calibrated, overlapping camera views. Capture the same real movement simultaneously and compare a single-view Forma export against independently reviewed reference events; align timestamps and record calibration/synchronisation quality. Such annotations may use `source: "calibrated-multicamera"` with those details in `referenceNotes`. Native FreeMoCap files are not directly imported by this CLI, and FreeMoCap itself is not automatically ground truth. Review its AGPL-3.0 licensing before incorporating software; review recording/data permissions separately. A single-camera 3D-shaped export is not proof of measured depth.
+
+**Pending:** no consented human dataset, manual-reference results or calibrated multi-camera comparison has been completed. The automated tests exercise synthetic code fixtures only. Do not present their passing results as motion-capture accuracy evidence.
 
 ## Example assets and limits
 
 The six-stage walkthrough is an illustrated journey, not a genuine recorded fitting.
 
-- **Footage (running only):** a 3-second clip (7:55–7:58) from *Orientation to Physical Efficiency Battery* (1986), Federal Law Enforcement Training Center — via the [Moving Image Archive](https://www.movingimagearchive.com/sources/orientation-to-physical-efficiency-battery-a4d3e5b5?clip=e9224f58-34ac-5ab8-9f9c-e5d5baed3804), originally published on the [Internet Archive](https://archive.org/details/gov.ntis.ava18914vnb1) and labelled public domain by both archives. Archival use implies no endorsement or consent; the runner's height is unknown and the clip is never analysed.
-- **Everything else is synthetic:** measurements, brief, direction concepts and the receipt template are fixtures, clearly labelled "not measured from this archive clip". The receipt says `Not run · no availability verified` — it shows what a real check reports, it does not simulate a verdict. The climbing example uses an inline illustration, not footage.
-- **Cost:** the walkthrough calls no APIs; the ~200 KB clip is served from `public/` so it only costs ordinary CDN bandwidth per visitor. Genuine saved research and stock outputs still require further assets and live verification.
+- **Footage (running only):** a 12-second AI-generated clip served from `public/examples/generated-runner.mp4`, produced once with [Seedance 1.5 Pro on fal.ai](https://fal.ai/models/fal-ai/bytedance/seedance/v1.5/pro/text-to-video) (fal lists the model for commercial use). Full generation details — request id, seed, input and media metadata — ship with the app at `public/examples/generated-runner-provenance.json`. The runner is synthetic and is not a real person; the clip is never analysed and is not evidence of gait accuracy or shoe fit.
+- **Everything else is synthetic:** measurements, brief, direction concepts and the receipt template are fixtures, clearly labelled "not measured from this generated clip". The receipt says `Not run · no availability verified` — it shows what a real check reports, it does not simulate a verdict. The climbing example uses an inline illustration, not footage.
+- **Cost:** the walkthrough calls no APIs; the ~1.6 MB clip is served from `public/` so it only costs ordinary CDN bandwidth per visitor — there is no paid call per view. One generation was approved and run once; the recorded figure ($0.31104) is a preflight unit-price estimate, not an actual billed amount. `FAL_KEY` lives server-only in `.env.local` (mode 600) and was needed solely to author the asset — the demo does not depend on fal at runtime. Genuine saved research and stock outputs still require further assets and live verification.
+- **Previous archive asset retained (not used in the walkthrough):** `public/examples/archival-runner.mp4` — a 3-second clip (7:55–7:58) from *Orientation to Physical Efficiency Battery* (1986), Federal Law Enforcement Training Center, via the [Moving Image Archive](https://www.movingimagearchive.com/sources/orientation-to-physical-efficiency-battery-a4d3e5b5?clip=e9224f58-34ac-5ab8-9f9c-e5d5baed3804) and originally published on the [Internet Archive](https://archive.org/details/gov.ntis.ava18914vnb1), labelled public domain by both archives.
 - Fixture and credit live in `lib/fitting/example.ts` (`EXAMPLE_FOOTAGE`).
 
 ## Solari cookbook patterns applied

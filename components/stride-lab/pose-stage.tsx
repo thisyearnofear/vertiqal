@@ -36,6 +36,7 @@ interface PoseStageProps {
   statusLabel: string | null
   onSnapshot: (snapshot: MovementSnapshot) => void
   onFile: (file: File) => void
+  onValidationFrame?: (frame: { timeSec: number; pose: Pose | null; width: number; height: number; snapshot: MovementSnapshot }) => void
   /** Measurement progress for a loaded clip: pips fill per event, then a lock banner plays once. */
   progress?: { events: number; target: number; ready: boolean }
 }
@@ -98,6 +99,7 @@ export function PoseStage({
   statusLabel,
   onSnapshot,
   onFile,
+  onValidationFrame,
   progress,
 }: PoseStageProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -153,6 +155,7 @@ export function PoseStage({
         lastVideoTime = time
         pose = session.poseAt(video)
         snapshot = tracker.update(time, pose, video.videoWidth, video.videoHeight)
+        onValidationFrame?.({ timeSec: time, pose, width: video.videoWidth, height: video.videoHeight, snapshot })
         needsRedraw = true
         const events = eventCount(snapshot)
         if (events !== lastEvents) {
@@ -197,7 +200,7 @@ export function PoseStage({
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [session, tracker, videoRef, onSnapshot, onKeyframe, onHero, themeKey])
+  }, [session, tracker, videoRef, onSnapshot, onKeyframe, onHero, onValidationFrame, themeKey])
 
   // Attract mode: like an arcade cabinet, the idle monitor demonstrates what it watches for.
   useEffect(() => {
