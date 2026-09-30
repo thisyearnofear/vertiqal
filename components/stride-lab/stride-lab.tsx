@@ -676,7 +676,9 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
 
       <div className="grid grid-cols-1 gap-5 pb-44 lg:grid-cols-[minmax(0,1fr)_280px] lg:pb-0">
         <div className="flex min-w-0 flex-col gap-5">
-          <NextStep step={nextStep} onAction={runNextAction} />
+          <div className="lg:hidden">
+            <NextStep step={nextStep} onAction={runNextAction} />
+          </div>
 
       <main className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         {example ? (
@@ -977,6 +979,8 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
           sport={sport}
           line={example ? exampleCompanion(sport, example.step) : mood === 'ready' && lockLine ? lockLine : nextStep.detail}
           stageLabel={example ? `Example ${example.step + 1} of ${EXAMPLE_STEP_COUNT}` : nextStep.title}
+          step={nextStep}
+          isExample={Boolean(example)}
           tuning={tuning}
           onToggleTuning={() => setTuning((t) => !t)}
           onPersona={changePersona}
