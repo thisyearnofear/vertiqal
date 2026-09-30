@@ -4,6 +4,7 @@ import { useId } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { FormaAvatar } from '@/components/forma/forma-avatar'
 import { FormaTuner } from '@/components/forma/forma-console'
+import type { NextStep } from '@/lib/fitting/session'
 import type { Sport } from '@/lib/metrics/readout'
 import type { Mood, Persona } from '@/lib/persona'
 import { cn } from '@/lib/utils'
@@ -14,13 +15,15 @@ interface FormaDockProps {
   sport: Sport
   line: string
   stageLabel: string
+  step: NextStep
+  isExample: boolean
   tuning: boolean
   onToggleTuning: () => void
   onPersona: (persona: Persona) => void
   action: { label: string; onClick: () => void } | null
 }
 
-export function FormaDock({ persona, mood, sport, line, stageLabel, tuning, onToggleTuning, onPersona, action }: FormaDockProps) {
+export function FormaDock({ persona, mood, sport, line, stageLabel, step, isExample, tuning, onToggleTuning, onPersona, action }: FormaDockProps) {
   const tunerId = useId()
   return (
     <aside
@@ -39,11 +42,23 @@ export function FormaDock({ persona, mood, sport, line, stageLabel, tuning, onTo
         <div className="flex min-w-0 flex-col gap-0.5 lg:order-2 lg:gap-1">
           <p className="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
             <span className="shrink-0">Forma</span>
-            <span className="min-w-0 truncate font-mono text-[0.65rem] normal-case tracking-normal opacity-80 lg:text-xs">{`· ${stageLabel}`}</span>
+            <span className="min-w-0 truncate font-mono text-[0.65rem] normal-case tracking-normal opacity-80 lg:hidden">{`· ${stageLabel}`}</span>
           </p>
-          <p role="status" className="line-clamp-2 text-pretty font-mono text-sm leading-snug text-foreground lg:line-clamp-none lg:text-lg">
+          <p role="status" className="line-clamp-2 text-pretty font-mono text-sm leading-snug text-foreground lg:hidden">
             {line}
           </p>
+          <div role="status" className="hidden flex-col gap-2 lg:flex">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
+              {isExample ? stageLabel : step.eyebrow}
+            </p>
+            <h2 className="text-base font-semibold leading-tight text-foreground">{step.title}</h2>
+            <p className="font-sans text-sm leading-relaxed text-muted-foreground">
+              {isExample ? line : step.detail}
+            </p>
+            {!isExample && line !== step.detail && (
+              <p className="font-mono text-xs leading-snug text-foreground">{line}</p>
+            )}
+          </div>
         </div>
         <button
           type="button"
