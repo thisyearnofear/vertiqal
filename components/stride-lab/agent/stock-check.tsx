@@ -66,7 +66,7 @@ function useReplay(sessionId: string | undefined) {
 export function StockProof({ data, productName }: { data: StockCheckData; productName: string }) {
   const replayUrl = useReplay(data.sessionId)
   const checkedAt = new Date(data.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  const source = data.source === 'live' ? 'Live UK browser' : data.source === 'cache' ? 'Cached UK check' : 'Shared live check'
+  const source = data.source === 'live' ? 'Live browser' : data.source === 'cache' ? 'Cached browser check' : 'Shared live check'
   return (
     <details className="text-lg leading-snug">
       <summary className="w-fit cursor-pointer opacity-80 hover:text-primary">{'+ See what Forma saw'}</summary>
@@ -87,6 +87,9 @@ export function StockProof({ data, productName }: { data: StockCheckData; produc
             />
           </a>
         )}
+        <p className="text-base uppercase leading-snug opacity-60">
+          {`// Observed page: ${data.finalUrl || data.productUrl} · HTTP ${data.httpStatus ?? 'none'}`}
+        </p>
         <p className="text-base uppercase leading-snug opacity-60">
           {`// ${source} · checked ${checkedAt} · ${data.egress} · ${(data.elapsedMs / 1000).toFixed(1)}s · session ${data.sessionId.slice(-6)}`}
           {replayUrl && (

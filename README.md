@@ -15,7 +15,7 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 3. **Confirms the brief before searching.** Movement cannot establish size, budget, goal, surface or comfort needs, so those shopper details are confirmed explicitly before a personal research run. Changing height or the pose provider invalidates a stale measurement.
 4. **Turns movement into fit requirements.** A gear agent (Grok via Vercel AI Gateway) builds a movement profile, then works through visible steps: research, live retailer stock, rider reports and athletes who wear the shoe. Each claim carries a citation checked against the publisher.
 5. **You choose how far to dig.** Search starts at Considered; **Look harder** moves to Deep and adds research and athlete evidence.
-6. **Asks before acting.** No live search starts until a real measurement and required brief are present. **Check my size** submits one explicit size to Solari's stealth UK browser; Grok reads the size controls, structured offers and a screenshot to decide whether that size is in stock. Checks are limited to approved retailers, authorized product targets and per-client quotas, with a short-lived per-instance cache and honest live/cached/shared labels. Each verdict comes with the screenshot and a session replay as proof. The older Browser Use basket check still exists as an agent tool. Both stop before checkout.
+6. **Asks before acting.** No live search starts until a real measurement and required brief are present. **Check my size** submits one explicit size to Solari's stealth browser with UK egress by default; Grok reads the size controls, structured offers and a screenshot to decide whether that size is in stock. Checks are limited to approved retailers, authorized product targets and per-client quotas, with a short-lived per-instance cache and honest live/cached/shared labels. Receipts include the observed URL and HTTP status, plus a screenshot and session replay when available; these show execution evidence, not proof of stock. The older Browser Use basket check still exists as an agent tool. Both stop before checkout.
 7. **Carries your fit elsewhere.** A signed **Fit Passport** lets any other shopping agent check a shoe against your profile, over REST or MCP. It is only shown when it matches the size in the decision form.
 8. **Hands off to WhatsApp and remembers you.** Your fitting and chosen pick land in WhatsApp through Wassist. A Grok reply agent answers follow-ups in your chosen Forma voice and can run live product searches. Once you've linked WhatsApp, a signed cookie remembers your number and last pick. The app then reads what you've said on WhatsApp since, so your next scan builds on it. You can send Forma a photo of worn soles or a sore spot and it reads the wear or the likely fit cause. About 12 days after you pick a shoe, Forma checks in once to ask how it's breaking in.
 9. **Lets you see yourself.** A **hero frame** card grades your best stride or reach into a shareable image, and the opt-in **See yourself in them** shows you wearing the top pick (FLUX Kontext), clearly labelled as an AI impression, not a fit check.
@@ -42,6 +42,18 @@ pnpm test:fitting # fitting-state and preference rules
 pnpm typecheck    # the real type gate: next.config ignores TS errors during build
 pnpm build
 ```
+
+## Solari cookbook patterns applied
+
+The stock-check browser work in `lib/agent/solari.ts` was reviewed against the pinned Solari cookbook examples:
+
+- [browser-stealth-proxy-ts](https://github.com/solari-sdk/solari-cookbook/tree/a435d2ac5ae87bdf9ee4f6c91f97da9501359560/examples/browser-stealth-proxy-ts) — the pre-existing stealth launch, GB residential egress and smart-proxy retry on bot walls match the documented configuration/lifecycle.
+- [browser-session-recording-py](https://github.com/solari-sdk/solari-cookbook/tree/a435d2ac5ae87bdf9ee4f6c91f97da9501359560/examples/browser-session-recording-py) — the pre-existing per-session recording, release-and-wait and replay-polling receipts (`/api/stock-check/replay`) match the documented configuration/lifecycle.
+- [browser-page-assertions-py](https://github.com/solari-sdk/solari-cookbook/tree/a435d2ac5ae87bdf9ee4f6c91f97da9501359560/examples/browser-page-assertions-py) — page verification in `lib/agent/stock-page.ts` was newly adapted from this example: after navigation, the final URL, HTTP status, `h1` identity, structured `Product` names and size controls are checked before the model judge is allowed to interpret the page. In-flight navigation to disallowed hosts is aborted via request routing, and a refused redirect invalidates the whole read.
+
+These patterns were reviewed and adapted; this project is not a cookbook fork, and the earlier stealth/recording implementation was not originally derived from it.
+
+Verification and limits: `inspectStockPage` in `lib/agent/stock-page.ts` is a conservative heuristic — matching headings provide identity evidence, not proof of product correctness or stock, and navigation, screenshot and replay evidence prove execution happened, not the verdict. The identity check can refuse a real product page (conservative by design) rather than assert stock on the wrong one. Tests cover the pure gate and a mock judge; the navigation/redirect interception has no live or browser QA yet. See `lib/fitting/fitting.test.ts` for the covered cases. Live end-to-end verification through the paid Solari API has not yet been run, and rate limits and caches are per-instance.
 
 ## Where things live
 
