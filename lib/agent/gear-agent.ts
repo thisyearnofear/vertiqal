@@ -3,6 +3,7 @@ import { ToolLoopAgent, tool, type InferAgentUIMessage, type ModelMessage } from
 import { z } from 'zod'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'
+import { issueStockToken } from './stock-token'
 import { searchCommunity, searchOpen, searchResearch, searchWeb } from './tavily'
 
 const requirement = z.object({
@@ -137,7 +138,9 @@ export const gearAgent = new ToolLoopAgent({
     recommendProducts: tool({
       description: 'Present exactly three recommended products to the shopper.',
       inputSchema: z.object({ picks: z.array(pick).length(3) }),
-      execute: async ({ picks }) => ({ picks }),
+      execute: async ({ picks }) => ({
+        picks: picks.map((p) => ({ ...p, stockToken: issueStockToken({ productName: p.name, productUrl: p.url }) })),
+      }),
     }),
   },
   // Derive the phase from the conversation (not stepNumber) so it survives the approval round-trip.

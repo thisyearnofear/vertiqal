@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import useSWR from 'swr'
 import type { StockCheck as StockCheckData } from '@/lib/agent/solari'
+import type { StockTarget } from '@/lib/fitting/stock'
 
 export type { StockCheckData }
 
@@ -17,13 +18,13 @@ const VERDICT_LINE: Record<StockCheckData['verdict'], string> = {
 export const stockLine = (data: StockCheckData, size: string) =>
   [VERDICT_LINE[data.verdict], data.sizeFound || size, data.price].filter(Boolean).join(' · ')
 
-type StockKey = readonly [string, string, string, string]
+type StockKey = readonly [string, string, string, string, string, number]
 
-async function postCheck([url, productName, productUrl, size]: StockKey) {
+async function postCheck([url, productName, productUrl, size, stockToken, attempt]: StockKey) {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ productName, productUrl, size }),
+    body: JSON.stringify({ productName, productUrl, size, stockToken, fresh: attempt > 0 }),
   })
   const body = await response.json()
   if (!response.ok) throw new Error(body.error ?? 'Stock check failed')
@@ -31,9 +32,9 @@ async function postCheck([url, productName, productUrl, size]: StockKey) {
 }
 
 /** Checks one size on one product page in a live UK browser. Keyed by size, so changing it re-checks. */
-export function useStockCheck(target: { productName: string; productUrl: string; size: string } | null) {
+export function useStockCheck(target: StockTarget | null, attempt: number) {
   const key = target?.size.trim()
-    ? (['/api/stock-check', target.productName, target.productUrl, target.size.trim()] as const)
+    ? (['/api/stock-check', target.productName, target.productUrl, target.size.trim(), target.stockToken, attempt] as const)
     : null
   return useSWR(key, postCheck, {
     revalidateOnFocus: false,
@@ -64,6 +65,8 @@ function useReplay(sessionId: string | undefined) {
 /** The receipt behind a stock verdict: what the browser saw, folded away until asked for. */
 export function StockProof({ data, productName }: { data: StockCheckData; productName: string }) {
   const replayUrl = useReplay(data.sessionId)
+  const checkedAt = new Date(data.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const source = data.source === 'live' ? 'Live UK browser' : data.source === 'cache' ? 'Cached UK check' : 'Shared live check'
   return (
     <details className="text-lg leading-snug">
       <summary className="w-fit cursor-pointer opacity-80 hover:text-primary">{'+ See what Forma saw'}</summary>
@@ -85,7 +88,7 @@ export function StockProof({ data, productName }: { data: StockCheckData; produc
           </a>
         )}
         <p className="text-base uppercase leading-snug opacity-60">
-          {`// Live UK browser · ${data.egress} · ${(data.elapsedMs / 1000).toFixed(1)}s · session ${data.sessionId.slice(-6)}`}
+          {`// ${source} · checked ${checkedAt} · ${data.egress} · ${(data.elapsedMs / 1000).toFixed(1)}s · session ${data.sessionId.slice(-6)}`}
           {replayUrl && (
             <>
               {' · '}

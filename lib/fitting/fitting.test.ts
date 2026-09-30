@@ -25,6 +25,8 @@ import { EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleMetrics, nextStep } from '.
 import { settleStream } from './camera.ts'
 import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
+import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
+import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
 import { frameQuality } from '../pose/framing.ts'
 
 const valid: PrefDraft = { size: 'UK 9', budgetPounds: '160', heightCm: '178', goal: 'Easy miles', surface: 'Road' }
@@ -205,14 +207,104 @@ test('example scripts: three steps per sport, synthetic fixture metrics, no prod
   assert.equal(nextStep(0, -1), 0)
 })
 
-test('stock target: draft edits never authorise a request', () => {
-  const pick = { name: 'Test Shoe', url: 'https://example.test/p' }
+test('stock target: draft edits never authorise a request and picks carry a server-issued token', () => {
+  const stockToken = issueStockToken({ productName: 'Test Shoe', productUrl: 'https://example.test/p' }, 'test-secret', 1_000)
+  const pick = { name: 'Test Shoe', url: 'https://example.test/p', stockToken }
   assert.equal(stockTargetFor(pick, null), null)
   assert.equal(stockTargetFor(pick, '  '), null)
-  assert.deepEqual(stockTargetFor(pick, 'UK 9'), { productName: 'Test Shoe', productUrl: pick.url, size: 'UK 9' })
+  assert.equal(stockTargetFor({ ...pick, stockToken: '' }, 'UK 9')?.stockToken, '', 'a missing token still reaches the server so it can return an explicit refusal')
+  assert.deepEqual(stockTargetFor(pick, 'UK 9'), { productName: 'Test Shoe', productUrl: pick.url, size: 'UK 9', stockToken })
+
+  const target = { productName: pick.name, productUrl: pick.url }
+  assert.equal(verifyStockToken(target, stockToken, 'test-secret', 2_000), true)
+  assert.equal(verifyStockToken({ ...target, productUrl: 'https://example.test/other' }, stockToken, 'test-secret', 2_000), false)
+  assert.equal(verifyStockToken(target, stockToken, 'test-secret', 1_000 + STOCK_TARGET_TTL_MS + 1), false, 'expired target tokens fail')
+  assert.equal(verifyStockToken(target, stockToken, 'other-secret', 2_000), false)
+
   assert.equal(draftDiffers('UK 9', 'UK 9'), false)
   assert.equal(draftDiffers('UK 9', 'UK 10'), true, 'new draft cannot show the old verdict as its own')
   assert.equal(lastCheckLabel('UK 9'), 'Last check: UK 9')
+})
+
+test('stock policy: approved retailer URLs are limited, canonicalised and cacheable', () => {
+  assert.equal(stockUrlAllowed('https://www.sportsshoes.com/product/shoe'), true)
+  assert.equal(stockUrlAllowed('https://sportsshoes.com.evil.example/product'), false)
+  assert.equal(stockUrlAllowed('http://sportsshoes.com/product'), false)
+  assert.equal(stockUrlAllowed('https://user:pass@sportsshoes.com/product'), false)
+  assert.equal(stockUrlAllowed('https://example.com/product', ['example.com']), true)
+  assert.deepEqual(extraStockHosts('one.example, two.example'), ['one.example', 'two.example'])
+
+  assert.equal(
+    stockTargetKey('https://www.sportsshoes.com/product/?utm_source=x&colour=blue#details', ' uk 9 '),
+    'sportsshoes.com/product?colour=blue#UK 9',
+  )
+  assert.equal(requestClientKey(new Request('https://vertiqal.test', { headers: { 'x-forwarded-for': '203.0.113.1, 10.0.0.1' } })), '203.0.113.1')
+
+  const limiter = createRateLimiter({ limit: 2, windowMs: 1_000 })
+  assert.equal(limiter('client', 100).allowed, true)
+  assert.equal(limiter('client', 200).allowed, true)
+  const blocked = limiter('client', 300)
+  assert.equal(blocked.allowed, false)
+  assert.equal(blocked.retryAfterSec, 1)
+  assert.equal(limiter('client', 1_101).allowed, true, 'a new window admits the client again')
+
+  const cache = createTtlCache<string>(1_000)
+  cache.set('target', 'result', 100)
+  assert.equal(cache.get('target', 999)?.value, 'result')
+  assert.equal(cache.get('target', 1_100), null, 'expired checks are not served')
+})
+
+test('stock runner: dedupes live checks, serves cache, and only bypasses on fresh requests', async () => {
+  const target = { productName: 'Test Shoe', productUrl: 'https://sportsshoes.com/product?utm_source=test', size: 'UK 9' }
+  const calls: string[] = []
+  const releases: Array<() => void> = []
+  const runner = createStockCheckRunner({
+    maxActive: 1,
+    check: (input) =>
+      new Promise<{ verdict: string; size: string }>((resolve) => {
+        calls.push(input.size)
+        releases.push(() => resolve({ verdict: 'in_stock', size: input.size }))
+      }),
+  })
+
+  const first = runner(target)
+  const shared = runner(target)
+  const busy = await runner({ ...target, size: 'UK 10' })
+  assert.equal(busy.status, 'busy', 'the concurrency cap protects a second live target')
+  releases[0]?.()
+  const firstResult = await first
+  const sharedResult = await shared
+  if (firstResult.status !== 'ok' || sharedResult.status !== 'ok') assert.fail('live check did not complete')
+  assert.equal(firstResult.source, 'live')
+  assert.equal(sharedResult.source, 'shared')
+  assert.equal(calls.length, 1)
+
+  const cached = await runner(target)
+  if (cached.status !== 'ok') assert.fail('cached check did not complete')
+  assert.equal(cached.source, 'cache')
+  assert.equal(calls.length, 1, 'the TTL cache avoids a second Solari session')
+
+  const fresh = runner(target, { fresh: true })
+  await Promise.resolve()
+  releases[1]?.()
+  const freshResult = await fresh
+  if (freshResult.status !== 'ok') assert.fail('fresh check did not complete')
+  assert.equal(freshResult.source, 'live')
+  assert.equal(calls.length, 2, 'check again deliberately bypasses the cache')
+})
+
+test('stock runner: blocked results are not cached', async () => {
+  let calls = 0
+  const runner = createStockCheckRunner({
+    check: async () => {
+      calls += 1
+      return { verdict: 'blocked' }
+    },
+  })
+  const target = { productName: 'Test Shoe', productUrl: 'https://sportsshoes.com/product', size: 'UK 9' }
+  await runner(target)
+  await runner(target)
+  assert.equal(calls, 2)
 })
 
 test('choice snapshot: UK 9 verified, draft UK 10 saves UK 10 unchecked, blank saves nothing', () => {

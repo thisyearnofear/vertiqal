@@ -19,7 +19,7 @@ lib/fitting (browser)         stage flow + confirmed brief: size, budget, calibr
 /api/agent                    gear agent (AI SDK + Grok 4.7), streams tool steps to the UI
   │  tools: buildGearProfile → research / stock / rider reports / athletes (Tavily) → recommendProducts
   ▼
-Picks ──▶ /api/stock-check     user-submitted size → Solari stealth browser (UK egress) → Grok verdict + screenshot
+Picks ──▶ /api/stock-check     signed product target + user-submitted size → retailer policy/rate limit/cache → Solari (UK egress) → Grok verdict + screenshot
      │                         └─▶ /api/stock-check/replay  polls for the session recording
      ├──▶ /api/basket/[runId]  agent-started Browser Use check, stops before checkout
      ├──▶ /api/passport        signed Fit Passport for the active fitting size → REST + /api/mcp for other agents
@@ -41,7 +41,7 @@ Measurement always comes from untouched frames. The hero card grade and try-on i
 - `session.ts` derives the visible stage, supplies the next-action rail, decides whether a measurement can submit, and plans a re-analysis or recapture when height/provider inputs change.
 - `prefs.ts` validates the required brief (size, budget, 120–220 cm height, goal and surface) before `/api/agent` runs. Foot width and niggles remain optional.
 - `example.ts` supplies the synthetic, clearly labelled walkthrough. Example mode cannot authorise research, stock, passport or WhatsApp calls.
-- `stock.ts` separates a typed draft size from the explicitly submitted size, so an old verdict or passport cannot be applied to a new size.
+- `stock.ts` separates a typed draft size from the explicitly submitted size and carries the server-issued product token, so an old verdict, passport or arbitrary URL cannot be applied to a new request.
 - `camera.ts` releases late `getUserMedia` streams that resolve after capture is stopped or superseded.
 
 ## API routes
@@ -53,7 +53,7 @@ Measurement always comes from untouched frames. The hero card grade and try-on i
 | `/api/voice` | POST | Grok TTS for Forma's spoken lines. |
 | `/api/pose/vlmrun` | GET, POST | GET reports whether the key is configured; POST refines keypoints for sampled frames. |
 | `/api/tryon` | POST | One-frame try-on impression via AI Gateway. Nothing is stored. |
-| `/api/stock-check` | POST | Solari stealth-browser check of one size on one product page. Returns verdict, evidence, screenshot and session id. |
+| `/api/stock-check` | POST | Solari stealth-browser check of one size on one signed, allowlisted product target. Applies an in-process per-client request window, active-check cap, in-flight dedupe and short result cache. Returns verdict, evidence, screenshot, source label and session id. |
 | `/api/stock-check/replay` | GET | Replay URL for a stock-check session (`?session=`). Returns `null` until the upload finishes. |
 | `/api/basket/[runId]` | GET | Status of a user-approved Browser Use basket check. |
 | `/api/member` | GET, POST, DELETE | Linked shopper (masked number, last pick, recent WhatsApp lines), record a pick, or forget. |
