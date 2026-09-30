@@ -47,7 +47,8 @@ export function DecisionPanel({
 }: DecisionPanelProps) {
   const [draft, setDraft] = useState(size)
   const [submitted, setSubmitted] = useState<string | null>(null)
-  const stock = useStockCheck(stockTargetFor(pick, submitted))
+  const [attempt, setAttempt] = useState(0)
+  const stock = useStockCheck(stockTargetFor(pick, submitted), attempt)
   const mismatched = draftDiffers(submitted, draft)
   const checking = submitted !== null && (stock.isLoading || stock.isValidating)
   const checkedData = submitted && !checking && !stock.error ? stock.data : undefined
@@ -68,15 +69,16 @@ export function DecisionPanel({
     const next = draft.trim()
     if (!next) return
     if (next === submitted) {
-      void stock.mutate()
+      setAttempt((a) => a + 1)
       return
     }
+    setAttempt(0)
     setSubmitted(next)
     onSizeCommit(next)
   }
 
   const retry = () => {
-    if (submitted) void stock.mutate()
+    if (submitted) setAttempt((a) => a + 1)
   }
 
   const recordChoice = () => {

@@ -1,28 +1,11 @@
 import 'server-only'
+import { RETAILER_DOMAINS } from './domains'
 
 export interface SearchHit {
   title: string
   url: string
   snippet: string
 }
-
-/** UK shops with direct product pages, so picks link to somewhere you can actually buy. */
-const RETAILER_DOMAINS = [
-  'sportsshoes.com',
-  'runnersneed.com',
-  'startfitness.co.uk',
-  'sportsdirect.com',
-  'prodirectsport.com',
-  'jdsports.co.uk',
-  'asics.com',
-  'brooksrunning.com',
-  'newbalance.co.uk',
-  'hoka.com',
-  'saucony.com',
-  'nike.com',
-  'adidas.co.uk',
-  'on.com',
-]
 
 /** Where runners and climbers actually talk about how shoes wear, fit and fail. */
 const COMMUNITY_DOMAINS = [

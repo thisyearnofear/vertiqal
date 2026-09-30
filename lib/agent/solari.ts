@@ -1,6 +1,6 @@
 import 'server-only'
 import { Output, generateText } from 'ai'
-import { Solari, type BrowserSession } from '@solarisdk/browser'
+import { Solari, type BrowserSession, type LaunchOptions } from '@solarisdk/browser'
 import { z } from 'zod'
 
 export const stockVerdictSchema = z.object({
@@ -23,6 +23,8 @@ export interface StockCheck extends StockVerdict {
   sessionId: string
   egress: string
   elapsedMs: number
+  checkedAt: string
+  source: 'live' | 'cache' | 'shared'
 }
 
 const COOKIE_BUTTONS = [
@@ -34,11 +36,30 @@ const COOKIE_BUTTONS = [
   'button:has-text("Accept")',
 ]
 
+const WORK_BUDGET_MS = 50_000
+const LAUNCH_TIMEOUT_MS = 15_000
+const PAGE_TIMEOUT_MS = 20_000
+const JUDGE_TIMEOUT_MS = 15_000
+const RELEASE_TIMEOUT_MS = 8_000
+const BOT_WALL = /checking your browser|verify you are human|are you a robot|captcha|access denied|unusual traffic|cloudflare/i
+
+async function within<T>(work: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), Math.max(1, timeoutMs))
+  })
+  try {
+    return await Promise.race([work, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** Pulls the three signals a stock check needs: structured offers, size controls, and visible copy. */
 async function readProductPage(browser: BrowserSession, url: string) {
   const page = await browser.newPage()
   await page.setViewportSize({ width: 1280, height: 860 })
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25_000 })
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 })
 
   for (const selector of COOKIE_BUTTONS) {
     const button = page.locator(selector).first()
@@ -47,8 +68,8 @@ async function readProductPage(browser: BrowserSession, url: string) {
       break
     }
   }
-  // Size pickers are usually hydrated client-side after DOMContentLoaded.
-  await page.waitForTimeout(2_000)
+  await page.waitForSelector('button, option, select, [data-size]', { timeout: 5_000 }).catch(() => {})
+  await page.waitForTimeout(1_000)
 
   const signals = await page.evaluate(() => {
     const offers: unknown[] = []
@@ -88,11 +109,15 @@ async function readProductPage(browser: BrowserSession, url: string) {
     }
   })
 
-  const image = await page.screenshot({ type: 'jpeg', quality: 55 }).catch(() => null)
-  return { ...signals, screenshot: image ? `data:image/jpeg;base64,${Buffer.from(image).toString('base64')}` : null }
+  const image = await page.screenshot({ type: 'jpeg', quality: 55, timeout: 5_000 }).catch(() => null)
+  return {
+    ...signals,
+    blocked: BOT_WALL.test(`${signals.title}\n${signals.text}`),
+    screenshot: image ? `data:image/jpeg;base64,${Buffer.from(image).toString('base64')}` : null,
+  }
 }
 
-async function judgeStock(input: { productName: string; size: string }, page: Awaited<ReturnType<typeof readProductPage>>) {
+async function judgeStock(input: { productName: string; size: string }, page: Awaited<ReturnType<typeof readProductPage>>, timeoutMs: number) {
   const { output } = await generateText({
     // Reading evidence off a page is extraction, not reasoning; the non-reasoning model is ~4x faster here.
     model: 'spacexai/grok-4.20-non-reasoning',
@@ -120,7 +145,7 @@ async function judgeStock(input: { productName: string; size: string }, page: Aw
       },
     ],
     output: Output.object({ schema: stockVerdictSchema }),
-    abortSignal: AbortSignal.timeout(30_000),
+    abortSignal: AbortSignal.timeout(Math.max(1, timeoutMs)),
   })
   return output
 }
@@ -137,7 +162,37 @@ export async function getReplayUrl(sessionId: string): Promise<string | null> {
     const replay = await solari.sessions.getReplayUrl(sessionId).catch(() => null)
     return replay?.url ?? null
   } finally {
-    await solari.close()
+    await within(solari.close(), RELEASE_TIMEOUT_MS, 'Solari client close').catch(() => {})
+  }
+}
+
+async function launchBrowser(solari: Solari, proxy: LaunchOptions['proxy'], timeoutMs: number) {
+  // A timed-out launch can still resolve server-side; close the late session rather than leaving it running.
+  const work = solari.launch({ stealth: true, proxy, recording: true, retries: 1 })
+  try {
+    return await within(work, timeoutMs, 'Solari browser launch')
+  } catch (error) {
+    void work.then((browser) => browser.close()).catch(() => {})
+    throw error
+  }
+}
+
+async function readPageSession(solari: Solari, productUrl: string, proxy: LaunchOptions['proxy'], deadline: number) {
+  const remaining = () => Math.max(1, deadline - Date.now())
+  // Stealth + UK residential egress so retailers serve the real UK page, not a bot wall. Recording is per-session opt-in.
+  const browser = await launchBrowser(solari, proxy, Math.min(LAUNCH_TIMEOUT_MS, remaining()))
+  const sessionId = browser.id
+  const egress = browser.proxy ? `${browser.proxy.country.toUpperCase()} ${browser.proxy.tier ?? 'residential'}` : 'direct'
+  try {
+    const page = await within(readProductPage(browser, productUrl), Math.min(PAGE_TIMEOUT_MS, remaining()), 'Retailer page read')
+    return {
+      page,
+      sessionId,
+      egress,
+      release: () => within(solari.sessions.releaseAndWait(sessionId), Math.min(RELEASE_TIMEOUT_MS, remaining()), 'Solari session release'),
+    }
+  } finally {
+    await within(browser.close(), Math.min(RELEASE_TIMEOUT_MS, remaining()), 'Solari browser close').catch(() => {})
   }
 }
 
@@ -146,32 +201,40 @@ export async function verifyStock(input: { productName: string; productUrl: stri
   if (!apiKey) throw new Error('SOLARI_API_KEY is not configured')
 
   const started = Date.now()
-  const solari = new Solari({ apiKey })
+  const deadline = started + WORK_BUDGET_MS
+  const solari = new Solari({ apiKey, timeoutMs: LAUNCH_TIMEOUT_MS })
   try {
-    // Stealth + UK residential egress so retailers serve the real UK page, not a bot wall. Recording is per-session opt-in.
-    const browser = await solari.launch({ stealth: true, proxy: { country: 'gb' }, recording: true, retries: 1 })
-    const sessionId = browser.id
-    const egress = browser.proxy ? `${browser.proxy.country.toUpperCase()} ${browser.proxy.tier ?? 'residential'}` : 'direct'
+    let run = await readPageSession(solari, input.productUrl, { country: 'gb' }, deadline)
 
-    let page: Awaited<ReturnType<typeof readProductPage>>
-    try {
-      page = await readProductPage(browser, input.productUrl)
-    } finally {
-      await browser.close()
+    if (run.page.blocked && deadline - Date.now() > 30_000) {
+      await run.release().catch(() => {})
+      const smartRun = await readPageSession(solari, input.productUrl, 'smart', deadline).catch(() => null)
+      if (smartRun) run = smartRun
     }
 
-    // Confirmed release starts the replay upload while Grok reads the page.
-    const [verdict] = await Promise.all([judgeStock(input, page), solari.sessions.releaseAndWait(sessionId).catch(() => {})])
+    const remaining = Math.max(1, deadline - Date.now())
+    const verdict = run.page.blocked
+      ? {
+          verdict: 'blocked' as const,
+          sizeFound: '',
+          price: '',
+          evidence: 'The retailer returned an access check or bot-protection page.',
+        }
+      : await judgeStock(input, run.page, Math.min(JUDGE_TIMEOUT_MS, remaining))
+
+    await run.release().catch(() => {})
     return {
       ...input,
       ...verdict,
-      pageTitle: page.title,
-      screenshot: page.screenshot,
-      sessionId,
-      egress,
+      pageTitle: run.page.title,
+      screenshot: run.page.screenshot,
+      sessionId: run.sessionId,
+      egress: run.egress,
       elapsedMs: Date.now() - started,
+      checkedAt: new Date(started).toISOString(),
+      source: 'live',
     }
   } finally {
-    await solari.close()
+    await within(solari.close(), RELEASE_TIMEOUT_MS, 'Solari client close').catch(() => {})
   }
 }
