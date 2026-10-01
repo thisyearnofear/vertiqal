@@ -12,9 +12,9 @@ import { cn } from '@/lib/utils'
 
 const LABEL = 'text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved'
 const PRIMARY =
-  'min-h-11 w-full whitespace-normal rounded-md border border-primary/60 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.15em] text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
+  'min-h-11 whitespace-normal rounded-md border border-primary bg-primary px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.15em] text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
 const SECONDARY =
-  'min-h-11 w-full whitespace-normal rounded-md border border-border px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.15em] text-foreground hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50'
+  'min-h-11 whitespace-normal rounded-md border border-border px-4 py-2 text-center text-xs font-semibold uppercase tracking-[0.15em] text-foreground hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50'
 
 interface FormaDockProps {
   persona: Persona
@@ -25,7 +25,14 @@ interface FormaDockProps {
   step: NextStep
   isExample: boolean
   observation?: ExampleObservation | null
-  media?: ReactNode
+  /** The stage already shows the primary action, so the strip and mobile bar leave it out. */
+  actionInStage?: boolean
+  /** When Forma is asking a brief question, it replaces the step copy and its answers render below. */
+  ask?: { eyebrow: string; prompt: string; controls: ReactNode } | null
+  /** Required brief answers so far. */
+  pips?: { done: number; total: number }
+  /** In-flow content under the strip, e.g. the brief sentence. */
+  footer?: ReactNode
   secondaryAction?: { label: string; onClick: () => void; disabled?: boolean; hint?: string }
   privacyLine?: string
   analysisSettings?: ReactNode
@@ -36,6 +43,17 @@ interface FormaDockProps {
   action: { label: string; onClick: () => void } | null
 }
 
+function Pips({ done, total }: { done: number; total: number }) {
+  return (
+    <span className="flex items-center gap-1" role="img" aria-label={`${done} of ${total} brief answers`}>
+      {Array.from({ length: total }, (_, i) => (
+        <span key={i} className={cn('h-1.5 w-3 rounded-full bg-foreground/20', i < done && 'bg-primary')} />
+      ))}
+    </span>
+  )
+}
+
+/** Forma's strip under the stage on desktop; the same element becomes a fixed bar at the bottom on mobile. */
 export function FormaDock({
   persona,
   mood,
@@ -45,7 +63,10 @@ export function FormaDock({
   step,
   isExample,
   observation,
-  media,
+  actionInStage = false,
+  ask,
+  pips,
+  footer,
   secondaryAction,
   privacyLine,
   analysisSettings,
@@ -58,27 +79,18 @@ export function FormaDock({
   const tunerId = useId()
   const hintId = useId()
   const hasOptions = Boolean(privacyLine || analysisSettings || exampleDetails || secondaryAction?.hint)
-
-  const tuneButton = (fullWidth: boolean) => (
-    <button
-      type="button"
-      aria-expanded={tuning}
-      aria-controls={tunerId}
-      aria-label={tuning ? 'Close Forma settings' : 'Tune Forma'}
-      onClick={onToggleTuning}
-      className={cn(
-        'flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-        fullWidth && 'w-full',
-      )}
-    >
-      {tuning ? <X className="size-4" aria-hidden /> : <SlidersHorizontal className="size-4" aria-hidden />}
-      <span className={fullWidth ? undefined : 'sr-only'}>{tuning ? 'Done' : 'Tune'}</span>
-    </button>
-  )
+  const showActions = !actionInStage && !ask && Boolean(action || secondaryAction)
 
   const actions = (source: 'desktop' | 'mobile') =>
-    (action || secondaryAction) && (
-      <div className={cn('grid gap-2', action && secondaryAction ? 'grid-cols-2' : 'grid-cols-1')}>
+    showActions && (
+      <div
+        className={cn(
+          'gap-2',
+          source === 'mobile'
+            ? cn('grid lg:hidden [&>button]:w-full', action && secondaryAction ? 'grid-cols-2' : 'grid-cols-1')
+            : 'hidden shrink-0 items-center lg:flex',
+        )}
+      >
         {action && (
           <button data-forma-action={source} type="button" onClick={action.onClick} className={PRIMARY}>
             {action.label}
@@ -98,88 +110,92 @@ export function FormaDock({
       </div>
     )
 
+  const eyebrow = ask ? ask.eyebrow : isExample ? 'Forma' : `Forma · ${step.eyebrow}`
+
   return (
-    <>
-      <aside aria-label="Forma" className="order-1 housing rounded-2xl p-3 lg:order-2 lg:sticky lg:top-6 lg:self-start lg:p-4">
-        {media}
-        <div className={cn('hidden flex-col gap-3 lg:flex', media && 'mt-3')}>
-          <div className="flex items-center gap-2.5">
-            <div className="screen flex size-14 shrink-0 items-center justify-center rounded-xl">
-              <FormaAvatar mood={mood} shape={persona.shape} className="size-12" />
-            </div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">Forma</p>
+    <div className="flex flex-col gap-2">
+      <div
+        role="region"
+        aria-label="Forma"
+        className="forma-bar flex flex-col gap-3 max-lg:fixed max-lg:inset-x-3 max-lg:bottom-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:z-40 max-lg:rounded-2xl max-lg:p-3 lg:border-t lg:border-dashed lg:border-border lg:pt-4"
+      >
+        <div className="flex items-center gap-3 lg:gap-4">
+          <div className="screen flex size-11 shrink-0 items-center justify-center rounded-xl lg:size-14">
+            <FormaAvatar mood={ask ? 'asking' : mood} shape={persona.shape} className="size-9 lg:size-12" />
           </div>
-          <div role="status" className="flex flex-col gap-2">
-            <p className={LABEL}>{isExample ? stageLabel : step.eyebrow}</p>
-            <h2 className="text-base font-semibold leading-tight text-foreground">{step.title}</h2>
-            <p className="font-sans text-sm leading-relaxed text-muted-foreground">{isExample ? line : step.detail}</p>
-            {!isExample && line !== step.detail && <p className="font-mono text-xs leading-snug text-foreground">{line}</p>}
-            {isExample && observation && (
-              <p className="font-mono text-xs leading-snug text-muted-foreground">{exampleObservationLine(observation)}</p>
+          <div role="status" className="flex min-w-0 flex-1 flex-col gap-0.5 lg:gap-1">
+            <p className={cn(LABEL, 'flex items-center gap-3')}>
+              <span className="min-w-0 truncate">
+                <span className="lg:hidden">{ask ? ask.eyebrow : `Forma · ${stageLabel}`}</span>
+                <span className="hidden lg:inline">{eyebrow}</span>
+              </span>
+              {pips && !isExample && <Pips done={pips.done} total={pips.total} />}
+            </p>
+            {ask ? (
+              <p className="text-pretty text-sm font-semibold leading-snug text-foreground lg:text-base">{ask.prompt}</p>
+            ) : (
+              <>
+                {!isExample && <p className="hidden text-base font-semibold leading-tight text-foreground lg:block">{step.title}</p>}
+                <p className="line-clamp-2 text-pretty font-mono text-sm leading-snug text-foreground lg:line-clamp-none lg:text-muted-foreground">
+                  {line}
+                </p>
+                {isExample && observation && (
+                  <p className="hidden font-mono text-xs leading-snug text-muted-foreground lg:block">{exampleObservationLine(observation)}</p>
+                )}
+              </>
             )}
           </div>
           {actions('desktop')}
-          {secondaryAction?.hint && (
-            <p id={hintId} className="sr-only">
-              {secondaryAction.hint}
-            </p>
-          )}
+          <button
+            type="button"
+            aria-expanded={tuning}
+            aria-controls={tunerId}
+            aria-label={tuning ? 'Close Forma settings' : 'Tune Forma'}
+            onClick={onToggleTuning}
+            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {tuning ? <X className="size-4" aria-hidden /> : <SlidersHorizontal className="size-4" aria-hidden />}
+          </button>
         </div>
-        <div className={cn('flex items-start gap-2', media && 'mt-3')}>
-          {hasOptions ? (
-            <details className="group min-w-0 flex-1">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                <span className={LABEL}>Options</span>
-                <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>
-                  +
-                </span>
-              </summary>
-              <div className="mt-2 flex flex-col gap-3">
-                {privacyLine && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{privacyLine}</p>}
-                {secondaryAction?.hint && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{secondaryAction.hint}</p>}
-                {exampleDetails}
-                {analysisSettings}
-              </div>
-            </details>
-          ) : (
-            <span className="flex-1" aria-hidden />
-          )}
-          <div className="hidden lg:block">{tuneButton(false)}</div>
-        </div>
-        <div
-          id={tunerId}
-          hidden={!tuning}
-          className="max-lg:fixed max-lg:inset-x-3 max-lg:z-50 max-lg:bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+9rem)]"
-        >
-          {tuning && (
-            <div className="housing overflow-y-auto rounded-2xl p-3 max-lg:max-h-[min(50vh,calc(100dvh-12rem))] lg:max-h-[60vh] lg:rounded-none lg:bg-transparent lg:p-0 lg:pt-3 lg:shadow-none">
-              <FormaTuner compact persona={persona} onChange={onPersona} sport={sport} />
-            </div>
-          )}
-        </div>
-      </aside>
+        {ask && <div className="lg:pl-[4.5rem]">{ask.controls}</div>}
+        {actions('mobile')}
+        {secondaryAction?.hint && (
+          <p id={hintId} className="sr-only">
+            {secondaryAction.hint}
+          </p>
+        )}
+      </div>
+
+      {footer}
+
+      {hasOptions && (
+        <details className="group">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+            <span className={LABEL}>Options</span>
+            <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>
+              +
+            </span>
+          </summary>
+          <div className="mt-2 flex flex-col gap-3">
+            {privacyLine && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{privacyLine}</p>}
+            {secondaryAction?.hint && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{secondaryAction.hint}</p>}
+            {exampleDetails}
+            {analysisSettings}
+          </div>
+        </details>
+      )}
 
       <div
-        aria-label="Forma"
-        className="housing fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 rounded-2xl p-3 lg:hidden"
+        id={tunerId}
+        hidden={!tuning}
+        className="max-lg:fixed max-lg:inset-x-3 max-lg:bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+9rem)] max-lg:z-50"
       >
-        <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2.5">
-          <div className="screen flex size-11 shrink-0 items-center justify-center rounded-xl">
-            <FormaAvatar mood={mood} shape={persona.shape} className="size-9" />
+        {tuning && (
+          <div className="housing overflow-y-auto rounded-2xl p-3 max-lg:max-h-[min(50vh,calc(100dvh-12rem))] lg:rounded-none lg:bg-transparent lg:p-0 lg:pt-2 lg:shadow-none">
+            <FormaTuner persona={persona} onChange={onPersona} sport={sport} />
           </div>
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <p className="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
-              <span className="shrink-0">Forma</span>
-              <span className="min-w-0 truncate font-mono text-[0.65rem] normal-case tracking-normal opacity-80">{`· ${stageLabel}`}</span>
-            </p>
-            <p role="status" className="line-clamp-2 text-pretty font-mono text-sm leading-snug text-foreground">
-              {line}
-            </p>
-          </div>
-          {tuneButton(false)}
-          {(action || secondaryAction) && <div className="col-span-3">{actions('mobile')}</div>}
-        </div>
+        )}
       </div>
-    </>
+    </div>
   )
 }

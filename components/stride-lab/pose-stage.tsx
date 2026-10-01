@@ -39,8 +39,10 @@ interface PoseStageProps {
   onValidationFrame?: (frame: { timeSec: number; pose: Pose | null; width: number; height: number; snapshot: MovementSnapshot }) => void
   /** Measurement progress for a loaded clip: pips fill per event, then a lock banner plays once. */
   progress?: { events: number; target: number; ready: boolean }
-  /** Tighter chrome for the docked inspector column. */
-  compact?: boolean
+  /** Primary call to action shown on the idle screen. */
+  idleAction?: ReactNode
+  /** Height setter shown as a boot line on the idle screen. */
+  heightControl?: ReactNode
 }
 
 const ENGINE_LINE: Record<EngineState, string> = {
@@ -103,7 +105,8 @@ export function PoseStage({
   onFile,
   onValidationFrame,
   progress,
-  compact = false,
+  idleAction,
+  heightControl,
 }: PoseStageProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -221,13 +224,15 @@ export function PoseStage({
       const w = container.clientWidth
       const h = container.clientHeight
       const t = still ? 0.2 : (now - start) / 1000
-      const groundY = 0.86
+      // Narrow screens stack the copy below the figure, so the figure moves up and shrinks.
+      const narrow = w < 640
+      const groundY = narrow ? 0.54 : 0.86
       ctx.clearRect(0, 0, w, h)
       if (sport === 'climbing') {
         const climb = attractClimb(t / CLIMB_MOVE_SEC, {
-          centerX: w < 640 ? 0.74 : 0.7,
-          height: w < 640 ? 0.5 : 0.62,
-          anchorY: 0.52,
+          centerX: narrow ? 0.68 : 0.7,
+          height: narrow ? 0.34 : 0.62,
+          anchorY: narrow ? 0.32 : 0.52,
           aspect: h / w,
         })
         ctx.save()
@@ -259,11 +264,11 @@ export function PoseStage({
       ctx.setLineDash([10, 14])
       ctx.lineDashOffset = t * 190
       ctx.beginPath()
-      ctx.moveTo(w * 0.56, groundY * h + 8)
+      ctx.moveTo(w * (narrow ? 0.4 : 0.56), groundY * h + 8)
       ctx.lineTo(w * 0.96, groundY * h + 8)
       ctx.stroke()
       ctx.restore()
-      const pose = attractPose(t, { centerX: w < 640 ? 0.78 : 0.74, height: w < 640 ? 0.5 : 0.62, groundY, aspect: h / w })
+      const pose = attractPose(t, { centerX: narrow ? 0.68 : 0.74, height: narrow ? 0.26 : 0.62, groundY, aspect: h / w })
       drawOverlay(ctx, { x: 0, y: 0, w, h }, pose, null, theme)
       if (!still) frame = requestAnimationFrame(draw)
     }
@@ -279,7 +284,7 @@ export function PoseStage({
   return (
     <div
       ref={containerRef}
-      className={cn('screen w-full', compact ? 'aspect-video' : 'aspect-[4/3] sm:aspect-video lg:aspect-[21/10]')}
+      className="screen aspect-[4/5] w-full sm:aspect-video lg:aspect-auto lg:h-[clamp(500px,66svh,620px)]"
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -308,28 +313,32 @@ export function PoseStage({
       {overlay && !dragging && <div className="absolute inset-0 z-10">{overlay}</div>}
 
       {idle && !dragging && (
-        <div
-          className={cn(
-            'absolute inset-0 z-10 flex animate-boot flex-col justify-between font-mono text-stage-foreground',
-            compact ? 'p-4' : 'p-5 md:p-10',
-          )}
-        >
-          {!compact && (
-            <div className="flex flex-col gap-1 text-base leading-snug phosphor md:text-xl">
-              <div className="hidden flex-col gap-1 sm:flex">
-                <BootLine index={0}>{`POSE ENGINE ........ ${ENGINE_LINE[engine]}`}</BootLine>
-                <BootLine index={1}>{`MODE .............. ${SPORTS[sport].label.toUpperCase()}`}</BootLine>
+        <div className="absolute inset-0 z-10 flex animate-boot flex-col justify-between p-5 font-mono text-stage-foreground md:p-10">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-1 text-sm leading-snug phosphor md:text-lg">
+                <p>{'VERTIQAL V-01 MOVEMENT ANALYSER'}</p>
+                <div className="hidden flex-col gap-1 sm:flex">
+                  <BootLine index={0}>{`POSE ENGINE ........ ${ENGINE_LINE[engine]}`}</BootLine>
+                  <BootLine index={1}>{`MODE .............. ${SPORTS[sport].label.toUpperCase()}`}</BootLine>
+                  <BootLine index={2}>{'SIGNAL ............ NONE'}</BootLine>
+                </div>
               </div>
+              <p className="max-w-32 shrink-0 text-right text-xs uppercase leading-snug tracking-wider opacity-60 sm:max-w-none">Illustration · not a video analysis</p>
             </div>
-          )}
-          <div className={compact ? 'flex w-full flex-col items-start gap-2' : 'flex w-3/5 flex-col items-start gap-3 md:w-1/2'}>
-            <p className={cn('leading-none phosphor', compact ? 'text-lg' : 'text-2xl md:text-4xl')}>READY FOR YOUR CLIP</p>
-            <p className={cn('text-pretty leading-snug phosphor', compact ? 'text-sm' : 'text-lg md:text-2xl')}>{PROMISE[sport]}</p>
-            {!compact && <p className="hidden text-pretty text-base leading-snug opacity-70 sm:block">{'> OR DROP A CLIP ON THIS SCREEN'}</p>}
+            {heightControl && <div className="mt-1 animate-type-in" style={{ animationDelay: '1.05s' }}>{heightControl}</div>}
           </div>
-          <p className="absolute bottom-3 right-4 text-xs uppercase tracking-wider opacity-60 md:bottom-4 md:right-6">
-            Illustration · not a video analysis
-          </p>
+          <div className="flex w-full flex-col items-start gap-3 sm:w-3/5 md:gap-4 lg:w-1/2">
+            <h2 className="text-balance text-3xl leading-[0.95] phosphor md:text-5xl xl:text-6xl">
+              YOUR BODY IS THE SEARCH QUERY
+              <span className="ml-2 inline-block animate-blink" aria-hidden>
+                {'█'}
+              </span>
+            </h2>
+            <p className="max-w-xl text-pretty text-base leading-snug phosphor md:text-xl">{PROMISE[sport]}</p>
+            {idleAction}
+            <p className="hidden text-pretty text-sm leading-snug opacity-70 sm:block">{'> OR DROP A SIDE-ON CLIP ON THIS SCREEN'}</p>
+          </div>
         </div>
       )}
 

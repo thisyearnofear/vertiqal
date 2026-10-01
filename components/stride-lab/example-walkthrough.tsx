@@ -125,7 +125,7 @@ export function ExampleWalkthrough({ sport, state, onState, onExit }: ExampleWal
         {step === 0 && (
           <div className="flex flex-col gap-3">
             <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-85">
-              {script.steps[0].body} Watch the motion panel while this short walkthrough shows observe, brief, directions, receipt and handoff.
+              {script.steps[0].body} Watch the screen above while this short walkthrough shows observe, brief, directions, receipt and handoff.
             </p>
           </div>
         )}
@@ -211,7 +211,7 @@ export function ExampleWalkthrough({ sport, state, onState, onExit }: ExampleWal
           <div className="flex flex-col gap-3 rounded-md border border-stage-foreground/30 p-4 font-sans">
             <p className="text-xl font-semibold leading-tight text-stage-foreground">Make this about your movement</p>
             <p className="max-w-2xl text-pretty text-sm leading-relaxed text-stage-foreground/75">
-              {script.steps[5].body} Upload a clip or film yourself from the motion panel — the example numbers stay synthetic; only your footage is measured.
+              {script.steps[5].body} Upload a clip or film yourself from the controls under the screen — the example numbers stay synthetic; only your footage is measured.
             </p>
           </div>
         )}
