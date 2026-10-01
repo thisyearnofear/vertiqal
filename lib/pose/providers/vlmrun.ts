@@ -70,10 +70,12 @@ export const vlmRunProvider: PoseProvider = {
   detail: 'MediaPipe timing + hosted keypoints on sampled frames',
   available: true,
   async load(): Promise<PoseSession> {
-    const check = await fetch('/api/pose/vlmrun')
-      .then((res) => res.json() as Promise<{ configured?: boolean }>)
-      .catch(() => ({ configured: false }))
-    const base = await mediapipeProvider.load()
+    const [check, base] = await Promise.all([
+      fetch('/api/pose/vlmrun')
+        .then((res) => res.json() as Promise<{ configured?: boolean }>)
+        .catch(() => ({ configured: false })),
+      mediapipeProvider.load(),
+    ])
     if (!check.configured) {
       return {
         poseAt: (video) => base.poseAt(video),
