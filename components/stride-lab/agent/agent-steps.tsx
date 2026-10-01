@@ -326,6 +326,18 @@ export function progressOf(messages: GearAgentUIMessage[]) {
   return steps
 }
 
+/** The pages the search has actually returned so far, newest last, for the "Forma is reading" tray. */
+export function readingOf(messages: GearAgentUIMessage[], max = 6) {
+  const pages: { url: string; host: string; title: string }[] = []
+  for (const part of messages.filter((m) => m.role === 'assistant').flatMap((m) => m.parts)) {
+    if ((part.type !== 'tool-searchProducts' && part.type !== 'tool-checkCommunity') || part.state !== 'output-available') continue
+    for (const hit of part.output.results) {
+      if (!pages.some((p) => p.url === hit.url)) pages.push({ url: hit.url, host: hostOf(hit.url), title: hit.title })
+    }
+  }
+  return pages.slice(-max)
+}
+
 export function AgentSteps({ messages }: { messages: GearAgentUIMessage[] }) {
   const parts = messages
     .filter((m) => m.role === 'assistant')

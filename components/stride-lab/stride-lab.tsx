@@ -4,6 +4,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useT
 import { Camera, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
 import { forgetBrief, saveBrief, savePersona } from '@/app/actions'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { EMPTY_NOTES, type FittingNotesState } from '@/lib/agent/fitting-notes'
 import { briefFromReadout, type ShopperPrefs } from '@/lib/agent/brief'
 import { nextDepth, type Depth } from '@/lib/agent/depth'
@@ -25,6 +26,7 @@ import { draftFromRemembered, rememberBrief, type RememberedBrief } from '@/lib/
 import { applyParsedBrief } from '@/lib/fitting/brief-parse'
 import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
 import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, visibilityFor, type ResetReason } from '@/lib/fitting/session'
+import { narrate, type NarrationAction, type StockPhase } from '@/lib/fitting/narration'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
 import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
 import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
@@ -34,6 +36,7 @@ import { createValidationRecorder, type ValidationCapture, type ValidationSource
 import { FormaDock } from '@/components/forma/forma-dock'
 import type { HeroFrame } from '@/lib/hero/frame'
 import { AgentPanel } from './agent/agent-panel'
+import { activityOf } from './agent/agent-steps'
 import { outputsOf, type ShoePick } from './agent/outputs'
 import { HeroCard } from './hero/hero-card'
 import { useGearAgent } from './agent/use-gear-agent'
@@ -121,7 +124,9 @@ export function StrideLab({
   // Settings belong to the phase they were opened in (setting up, or one results stage), so they close
   // by themselves once the fitting moves into results instead of riding along under the shortlist.
   const [tuningAt, setTuningAt] = useState<string | null>(null)
-  const [stockChecked, setStockChecked] = useState(false)
+  const [stock, setStock] = useState<{ phase: StockPhase; price: string | null }>({ phase: 'idle', price: null })
+  const [fallbackFrom, setFallbackFrom] = useState<string | null>(null)
+  const [bought, setBought] = useState(false)
   const [, startSaving] = useTransition()
   const [voiceOn, setVoiceOn] = useState(false)
   const [caption, setCaption] = useState<string | null>(null)
@@ -361,9 +366,22 @@ export function StrideLab({
 
   const choose = (pick: ShoePick | null) => {
     if (pick) trackStep('pick_chosen', { sport, retailer: pick.retailer })
-    setStockChecked(false)
+    setStock({ phase: 'idle', price: null })
+    setFallbackFrom(null)
+    setBought(false)
     setChoice(pick)
   }
+
+  // Sold out in the confirmed size: Forma moves to the next pick once and checks that instead.
+  const autoAdvance = useCallback(
+    (next: ShoePick) => {
+      setFallbackFrom(choice?.name ?? null)
+      setStock({ phase: 'idle', price: null })
+      setBought(false)
+      setChoice(next)
+    },
+    [choice],
+  )
 
   const changeSport = (next: Sport) => {
     if (next === sport) return
@@ -649,9 +667,24 @@ export function StrideLab({
     eventLabel: SPORTS[sport].events,
     missingPrefs: missingFields.length,
     needsRecapture,
-    stockChecked,
+    stockChecked: stock.phase !== 'idle' && stock.phase !== 'checking',
   })
-  const visible = visibilityFor(stage, { stockChecked })
+  const visible = visibilityFor(stage, { stockChecked: stock.phase !== 'idle' && stock.phase !== 'checking' })
+  const choiceIndex = choice ? picks.findIndex((p) => p.url === choice.url) : -1
+  const narration = example
+    ? null
+    : narrate({
+        stage,
+        sport,
+        activity: activityOf(agent.messages).label,
+        topPick: picks[0]?.name ?? null,
+        choice: choice ? { name: choice.name, retailer: choice.retailer } : null,
+        size: prefDraft.size,
+        stock,
+        fallbackFrom,
+        nextPick: !fallbackFrom && choice ? (picks.find((_, i) => i > choiceIndex) ?? picks.find((p) => p.url !== choice.url))?.name ?? null : null,
+        bought,
+      })
   const settingsScope = visible.denseStage ? stage : 'setup'
   const tuning = tuningAt === settingsScope
 
@@ -773,9 +806,24 @@ export function StrideLab({
     !example && submitReady && (stage === 'confirm' || (shopping && !question))
       ? { label: sentBrief ? 'Update search' : 'Find my shoes', onClick: submitSearch }
       : null
+  const narrationAct = (kind: NarrationAction) => {
+    const buyLink = () => [...document.querySelectorAll<HTMLAnchorElement>('[data-buy-link]')].find((a) => a.getClientRects().length > 0)
+    if (kind === 'buy' || kind === 'open') buyLink()?.click()
+    else if (kind === 'shortlist') choose(null)
+    else if (kind === 'whatsapp') {
+      const target = document.getElementById('forma-whatsapp')
+      target?.scrollIntoView({ block: 'center', behavior: prefersStill() ? 'auto' : 'smooth' })
+      target?.querySelector<HTMLElement>('input, button')?.focus({ preventScroll: true })
+    }
+  }
+
   const stripAction = example
     ? { label: 'Upload my clip', onClick: () => document.getElementById('clip-upload')?.click() }
-    : stage === 'confirm' && findShoesAction
+    : narration
+      ? narration.action
+        ? { label: narration.action.label, onClick: () => narrationAct(narration.action!.kind) }
+        : null
+      : stage === 'confirm' && findShoesAction
       ? findShoesAction
       : nextStep.action
         ? { label: nextStep.action.label, onClick: runNextAction }
@@ -1013,11 +1061,12 @@ export function StrideLab({
 
         <FormaDock
           persona={persona}
-          mood={mood}
+          mood={narration?.mood ?? mood}
           sport={sport}
-          line={example ? exampleCompanion(sport, example.step) : mood === 'ready' && lockLine ? lockLine : nextStep.detail}
-          stageLabel={example ? `Example ${example.step + 1} of ${EXAMPLE_STEP_COUNT}` : nextStep.title}
-          step={example ? { ...nextStep, title: stepTitle(sport, example.step) } : nextStep}
+          line={example ? exampleCompanion(sport, example.step) : narration ? narration.line : mood === 'ready' && lockLine ? lockLine : nextStep.detail}
+          stageLabel={example ? `Example ${example.step + 1} of ${EXAMPLE_STEP_COUNT}` : (narration?.title ?? nextStep.title)}
+          step={example ? { ...nextStep, title: stepTitle(sport, example.step) } : narration ? { ...nextStep, title: narration.title } : nextStep}
+          floating={visible.denseStage}
           isExample={Boolean(example)}
           observation={example && sport === 'running' ? exampleObservation : null}
           actionInStage={!example && stage === 'invite' && !clip && !live.stream}
@@ -1155,7 +1204,7 @@ export function StrideLab({
         />
       </section>
 
-      <main className="flex min-w-0 flex-col gap-4 pb-52 lg:pb-0">
+      <main className={cn('flex min-w-0 flex-col gap-4 pb-52', visible.denseStage ? 'lg:pb-40' : 'lg:pb-0')}>
         {!example && shopping && (
           <div id="forma-procurement" className="scroll-mt-6">
             <AgentPanel
@@ -1177,7 +1226,10 @@ export function StrideLab({
               }}
               onBriefField={focusBriefField}
               takeAway={visible.takeAway}
-              onStockSettled={setStockChecked}
+              onStock={setStock}
+              canFallBack={!fallbackFrom}
+              onAutoAdvance={autoAdvance}
+              onBought={() => setBought(true)}
             />
           </div>
         )}
@@ -1193,7 +1245,7 @@ export function StrideLab({
             )}
 
             {visible.validation && sport === 'running' && (clip || liveActive || captureStatus === 'ready') && (
-              <details className="group housing rounded-2xl p-4 md:p-5">
+              <details name="forma-panels" className="group housing rounded-2xl p-4 md:p-5">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                   <span className={LABEL}>Local validation</span>
                   <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>

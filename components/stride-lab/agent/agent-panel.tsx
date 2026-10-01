@@ -10,12 +10,13 @@ import type { Passport } from '@/lib/passport/schema'
 import { Button } from '@/components/ui/button'
 import type { Fitting } from '@/lib/wassist/fitting'
 import type { BriefField } from '../fitting-brief'
-import { AgentSteps, activityOf, progressOf } from './agent-steps'
+import { AgentSteps, activityOf, progressOf, readingOf } from './agent-steps'
 import { DecisionPanel } from './decision-panel'
 import { closingLineOf, outputsOf, type AgentOutputs, type ShoePick } from './outputs'
 import { usePassport } from './passport-card'
 import { Shortlist } from './shortlist'
 import { trackStep } from '@/lib/funnel'
+import type { StockPhase } from '@/lib/fitting/narration'
 import type { GearAgent } from './use-gear-agent'
 
 function passportFrom(brief: MovementBrief, prefs: ShopperPrefs, outputs: AgentOutputs): Passport {
@@ -90,7 +91,10 @@ interface AgentPanelProps {
   onBriefField: (field: BriefField) => void
   /** After the size check: WhatsApp, baseline and passport are offered. */
   takeAway: boolean
-  onStockSettled: (settled: boolean) => void
+  onStock: (stock: { phase: StockPhase; price: string | null }) => void
+  canFallBack: boolean
+  onAutoAdvance: (next: ShoePick) => void
+  onBought: () => void
 }
 
 export function AgentPanel({
@@ -109,13 +113,17 @@ export function AgentPanel({
   onSizeCommit,
   onBriefField,
   takeAway,
-  onStockSettled,
+  onStock,
+  canFallBack,
+  onAutoAdvance,
+  onBought,
 }: AgentPanelProps) {
   const { messages, status, error, sentBrief, prefs, busy } = agent
 
   const outputs = useMemo(() => outputsOf(messages), [messages])
   const activity = useMemo(() => activityOf(messages), [messages])
   const progress = useMemo(() => progressOf(messages), [messages])
+  const reading = useMemo(() => readingOf(messages), [messages])
   const headingRef = useRef<HTMLHeadingElement>(null)
   const hasOutputs = Boolean(outputs)
 
@@ -178,7 +186,25 @@ export function AgentPanel({
       <div className="screen screen-readable flex flex-col gap-6 p-5 font-mono md:p-8" aria-live="polite">
         <p className="text-lg leading-snug opacity-70">{`> YOUR NUMBERS · ${briefLine(sentBrief)}`}</p>
 
-        {!outputs && !error && (
+        {!outputs && !error && !busy && status === 'ready' && messages.some((m) => m.role === 'assistant') && (
+          <div className="flex flex-col gap-3">
+            <p className="text-xl uppercase leading-snug text-primary phosphor" role="status">
+              {"! FORMA COULDN'T SETTLE ON THREE DIFFERENT SHOES WITH REAL PRODUCT PAGES"}
+            </p>
+            <div className="flex flex-wrap gap-x-5 gap-y-3 text-lg leading-none">
+              <button type="button" onClick={onRetry} className={LINK}>
+                {'[ TRY AGAIN ]'}
+              </button>
+              {deeper && (
+                <button type="button" onClick={onLookHarder} className={LINK}>
+                  {'[ LOOK HARDER ]'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!outputs && !error && (busy || status !== 'ready' || !messages.some((m) => m.role === 'assistant')) && (
           <div className="flex flex-col gap-1">
             <p className="text-2xl uppercase leading-snug phosphor">
               {`> ${activity.label}`}
@@ -197,6 +223,22 @@ export function AgentPanel({
                   </li>
                 ))}
               </ol>
+            )}
+            {reading.length > 0 && (
+              <div className="mt-4 flex flex-col gap-2" aria-label="Pages Forma is reading">
+                <p className="text-base uppercase leading-none opacity-60">{'> Forma is reading'}</p>
+                <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {reading.map((page) => (
+                    <li
+                      key={page.url}
+                      className="flex min-w-0 animate-in flex-col gap-0.5 rounded-md border border-stage-foreground/25 bg-stage-foreground/5 px-3 py-2 fade-in slide-in-from-bottom-1 duration-500"
+                    >
+                      <span className="truncate text-sm uppercase opacity-60">{page.host}</span>
+                      <span className="line-clamp-2 font-sans text-sm leading-snug opacity-90">{page.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}
@@ -257,7 +299,10 @@ export function AgentPanel({
             onPinBaseline={onPinBaseline}
             baselinePinned={baselinePinned}
             takeAway={takeAway}
-            onSettled={onStockSettled}
+            onStock={onStock}
+            canFallBack={canFallBack}
+            onAutoAdvance={onAutoAdvance}
+            onBought={onBought}
           />
         )}
 
@@ -273,7 +318,7 @@ export function AgentPanel({
         )}
 
         {messages.length > 1 && (
-          <details className="border-t border-dashed border-stage-foreground/30 pt-4 text-lg leading-snug">
+          <details name="forma-panels" className="border-t border-dashed border-stage-foreground/30 pt-4 text-lg leading-snug">
             <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">
               {`+ How Forma decided · ${activity.steps} steps`}
             </summary>

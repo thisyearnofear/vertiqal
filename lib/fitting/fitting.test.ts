@@ -38,6 +38,7 @@ import { guardedStockVerdict, inspectStockPage, type StockPageEvidence } from '.
 import { frameQuality, usableKeypoint } from '../pose/framing.ts'
 import { GaitTracker, MIN_STRIKES_FOR_SIGNALS, cadenceFromStrikes } from '../metrics/gait.ts'
 import { modelKey, shortlistProblem } from '../agent/picks.ts'
+import { narrate, shortShoeName } from './narration.ts'
 import { ClimbTracker } from '../metrics/climb.ts'
 import { attractPose } from '../../components/stride-lab/attract-runner.ts'
 import type { Pose } from '../pose/types.ts'
@@ -192,6 +193,43 @@ test('visibility: each stage shows only what it needs', () => {
   }
   assert.equal(visibilityFor('decision', { stockChecked: true }).takeAway, true)
   assert.equal(visibilityFor('choose', { stockChecked: true }).takeAway, false, 'a stale check never leaks into choosing')
+})
+
+test('narration: one short line and at most one action per results moment', () => {
+  const base = {
+    stage: 'decision' as const,
+    sport: 'running' as const,
+    activity: null,
+    topPick: null,
+    choice: { name: "Hoka Speedgoat 6 Men's Trail Running Shoes", retailer: 'SportsShoes' },
+    size: 'UK 10',
+    stock: { phase: 'checking' as const, price: null },
+    fallbackFrom: null,
+    nextPick: 'Brooks Cascadia 19',
+    bought: false,
+  }
+  assert.equal(shortShoeName("Hoka Speedgoat 6 GORE-TEX Men's Trail Running Shoes"), 'Hoka Speedgoat 6 GORE-TEX')
+  assert.equal(narrate({ ...base, stage: 'invite' }), null, 'no narration before results')
+  assert.match(narrate({ ...base, stage: 'research', activity: 'Searching live stock' })!.line, /Searching live stock…/)
+  assert.match(narrate({ ...base, stage: 'choose', topPick: base.choice.name })!.line, /The Hoka Speedgoat 6 is my best fit/)
+  const checking = narrate(base)!
+  assert.match(checking.line, /Checking UK 10 is in stock at SportsShoes/)
+  assert.equal(checking.mood, 'working')
+  assert.equal(checking.action, null, 'nothing to decide while checking')
+  assert.match(narrate({ ...base, fallbackFrom: base.choice.name, choice: { name: 'Brooks Cascadia 19', retailer: 'SportsShoes' } })!.line, /gone for the Hoka Speedgoat 6\. Checking the Brooks Cascadia 19/)
+  const inStock = narrate({ ...base, stock: { phase: 'in_stock', price: '£135' } })!
+  assert.match(inStock.line, /UK 10, £135 at SportsShoes/)
+  assert.deepEqual(inStock.action, { kind: 'buy', label: 'Buy at SportsShoes' })
+  assert.equal(narrate({ ...base, stock: { phase: 'in_stock', price: null }, bought: true })!.action?.kind, 'whatsapp', 'the phone handoff is offered after buying')
+  const soldOut = narrate({ ...base, stock: { phase: 'unavailable', price: null } })!
+  assert.match(soldOut.line, /try the Brooks Cascadia 19 next/)
+  assert.equal(soldOut.action, null, 'Forma moves on by itself while a fallback is left')
+  assert.equal(narrate({ ...base, stock: { phase: 'unavailable', price: null }, nextPick: null })!.action?.kind, 'shortlist')
+  assert.equal(narrate({ ...base, stock: { phase: 'unsure', price: null } })!.action?.kind, 'open')
+  for (const phase of ['idle', 'checking', 'in_stock', 'unavailable', 'unsure', 'error'] as const) {
+    const line = narrate({ ...base, stock: { phase, price: '£135' } })!.line
+    assert.ok(line.split(/(?<=[.?!…])\s/).length <= 2, `${phase}: at most two sentences`)
+  }
 })
 
 test('frame quality checks whether the person, hips and both feet are visible', () => {
@@ -619,6 +657,16 @@ test('shortlist guard: rejects the same model twice, accepts three different sho
   assert.ok(shortlistProblem(sameUrl), 'two picks cannot share a product page')
   const ok = [p('Hoka Speedgoat 6', 'https://a.example/1'), p('Brooks Cascadia 19', 'https://a.example/2'), p('Saucony Xodus Ultra 3', 'https://a.example/3')]
   assert.equal(shortlistProblem(ok), null)
+  assert.equal(
+    modelKey("Hoka Speedgoat 6 GORE-TEX Men's Trail Running Shoes"),
+    modelKey("Hoka Speedgoat 6 Men's Trail Running Shoes"),
+    'a waterproof version is the same model',
+  )
+  assert.equal(modelKey('Brooks Ghost 16 GTX Wide'), modelKey('Brooks Ghost 16'))
+  const searched = ['https://www.a.example/1/', 'https://a.example/2?colour=red', 'https://a.example/3#reviews']
+  assert.equal(shortlistProblem(ok, searched), null, 'links match despite www, trailing slash, query or hash')
+  const review = [ok[0], ok[1], p('New Balance Hierro v9', 'https://www.runnersworld.com/hierro-v9-review')]
+  assert.match(shortlistProblem(review, searched) ?? '', /Hierro v9 has no product page/)
 })
 
 test('cadence: robust to hidden far foot, doubled contacts and stray detections', () => {
