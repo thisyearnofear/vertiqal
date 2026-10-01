@@ -90,7 +90,7 @@ const SHARED_STEPS = {
 export const EXAMPLE_SCRIPTS: Record<Sport, ExampleScript> = {
   running: {
     steps: [
-      { title: 'Load the example', body: 'AI-generated footage, served locally — nothing is uploaded or analysed.' },
+      { title: 'Load the example', body: 'AI-generated footage, served locally. The pose overlay runs on-device; example readings remain illustrative.' },
       { title: 'Observe movement', body: '' },
       SHARED_STEPS.brief,
       {

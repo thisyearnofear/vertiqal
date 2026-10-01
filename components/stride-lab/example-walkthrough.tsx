@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useReducedMotion } from 'motion/react'
-import { Camera, ChevronLeft, ChevronRight, Pause, Play, RotateCcw, Upload, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw, X } from 'lucide-react'
 import {
-  EXAMPLE_FOOTAGE,
   EXAMPLE_SCRIPTS,
   EXAMPLE_STEP_COUNT,
   EXAMPLE_STEP_MS,
@@ -13,7 +12,6 @@ import {
 } from '@/lib/fitting/example'
 import { SPORTS, type Sport } from '@/lib/metrics/readout'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { FittingRationale } from './fitting-rationale'
 
 export interface ExampleState {
@@ -27,11 +25,6 @@ interface ExampleWalkthroughProps {
   state: ExampleState
   onState: (state: ExampleState) => void
   onExit: () => void
-  onFilm: () => void
-  onUpload: () => void
-  canFilm: boolean
-  filmLabel: string
-  filmHint?: string
 }
 
 function ShoeSketch({ className }: { className?: string }) {
@@ -51,31 +44,10 @@ function ShoeSketch({ className }: { className?: string }) {
   )
 }
 
-function ClimberSketch({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 100 100" className={className} role="img" aria-label="Synthetic climber illustration — not measured footage">
-      <rect x="18" y="14" width="10" height="10" rx="2" fill="currentColor" fillOpacity={0.25} />
-      <rect x="66" y="30" width="10" height="10" rx="2" fill="currentColor" fillOpacity={0.25} />
-      <rect x="30" y="62" width="10" height="10" rx="2" fill="currentColor" fillOpacity={0.25} />
-      <rect x="72" y="76" width="10" height="10" rx="2" fill="currentColor" fillOpacity={0.25} />
-      <circle cx="48" cy="34" r="7" fill="currentColor" fillOpacity={0.2} stroke="currentColor" strokeWidth={2} />
-      <path
-        d="M48 42 L46 58 M48 46 L28 20 M48 46 L66 36 M46 58 L34 68 M46 58 L70 82"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={3}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUpload, canFilm, filmLabel, filmHint }: ExampleWalkthroughProps) {
+export function ExampleWalkthrough({ sport, state, onState, onExit }: ExampleWalkthroughProps) {
   const script = EXAMPLE_SCRIPTS[sport]
   const { step, playing, concept } = state
   const still = useReducedMotion() ?? false
-  const videoRef = useRef<HTMLVideoElement>(null)
   const lastStep = step >= EXAMPLE_STEP_COUNT - 1
 
   useEffect(() => {
@@ -86,16 +58,17 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
     return () => window.clearInterval(timer)
   }, [playing, still, lastStep, step, state, onState])
 
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    if (playing && !still) void video.play().catch(() => {})
-    else video.pause()
-  }, [playing, still, step])
-
   const metrics = exampleMetrics(sport)
   const selected = script.concepts[concept] ?? script.concepts[0]
   const field = 'bg-stage p-3 text-lg uppercase leading-none'
+  const stageHeadline = [
+    'See movement become a fitting',
+    'What movement can tell us',
+    script.steps[2].title,
+    script.steps[3].title,
+    script.steps[4].title,
+    'Make this about your movement',
+  ][step] ?? script.steps[step].title
 
   return (
     <section id="example-walkthrough" aria-labelledby="example-heading" className="housing scroll-mt-6 flex flex-col gap-5 rounded-2xl p-4 md:p-6">
@@ -106,7 +79,7 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
             Illustrative fitting · These are not your measurements
           </p>
           <h2 id="example-heading" tabIndex={-1} className="text-balance text-xl font-semibold text-foreground focus-visible:outline-none">
-            {`Example ${SPORTS[sport].label.toLowerCase()} walkthrough`}
+            {stageHeadline}
           </h2>
           <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
             {sport === 'running'
@@ -114,10 +87,14 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
               : 'Synthetic movement example. Not analysed from a real clip; no live products or stock checked.'}
           </p>
         </div>
-        <Button variant="outline" size="lg" className="h-10 px-4" onClick={onExit}>
-          <X aria-hidden />
+        <button
+          type="button"
+          onClick={onExit}
+          className="flex min-h-11 items-center gap-1.5 rounded-md border border-stage-foreground/30 px-4 font-mono text-sm uppercase leading-none text-stage-foreground underline-offset-4 hover:bg-stage-foreground hover:text-stage focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <X className="size-4" aria-hidden />
           Close example
-        </Button>
+        </button>
       </div>
 
       <div className="screen screen-readable flex flex-col gap-6 p-5 font-mono md:p-8" aria-live="polite">
@@ -145,57 +122,19 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
           </div>
         </div>
 
-        {step <= 1 && (
-          <div className="flex flex-col gap-2">
-            {sport === 'running' ? (
-              <>
-                <video
-                  ref={videoRef}
-                  src={EXAMPLE_FOOTAGE.src}
-                  poster={EXAMPLE_FOOTAGE.poster}
-                  aria-label="AI-generated runner illustration; not real-person movement analysis"
-                  muted
-                  playsInline
-                  controls
-                  loop
-                  className="aspect-video max-h-72 w-full rounded-md bg-stage-foreground/10 object-cover"
-                />
-                <p className="text-base uppercase leading-snug opacity-60">
-                  {`Loaded locally · example footage · ${EXAMPLE_FOOTAGE.credit} · ${EXAMPLE_FOOTAGE.range}`}
-                </p>
-                <p className="font-sans text-xs leading-relaxed opacity-60">
-                  This runner is AI-generated. The example measurements are fixtures, not measurements of this clip.
-                </p>
-                <details className="font-sans text-xs opacity-70">
-                  <summary className="cursor-pointer underline decoration-dotted underline-offset-4">Source &amp; rights</summary>
-                  <p className="mt-1 leading-relaxed">
-                    {'Model '}
-                    <a className="underline" href={EXAMPLE_FOOTAGE.sourceUrl} target="_blank" rel="noreferrer">
-                      Seedance 1.5 Pro on fal.ai
-                    </a>
-                    {' · '}
-                    <a className="underline" href={EXAMPLE_FOOTAGE.provenanceUrl} target="_blank" rel="noreferrer">
-                      generation details
-                    </a>
-                    {`. ${EXAMPLE_FOOTAGE.rights} Not proof of real-person gait or shoe fit.`}
-                  </p>
-                </details>
-              </>
-            ) : (
-              <>
-                <ClimberSketch className="max-h-64 w-full max-w-sm self-center text-stage-foreground" />
-                <p className="text-base uppercase leading-snug opacity-60">Loaded locally · synthetic illustration · no footage</p>
-              </>
-            )}
+        {step === 0 && (
+          <div className="flex flex-col gap-3">
+            <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-85">
+              {script.steps[0].body} Watch the motion panel while this short walkthrough shows observe, brief, directions, receipt and handoff.
+            </p>
           </div>
-        )}
-
-        {step === 0 && script.steps[0].body && (
-          <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-85">{script.steps[0].body}</p>
         )}
 
         {step === 1 && (
           <div className="flex flex-col gap-4">
+            <p className="w-fit rounded-md border border-stage-foreground/40 bg-stage-foreground/10 px-3 py-1.5 font-mono text-sm uppercase leading-none">
+              Illustrative readings — not extracted from this clip
+            </p>
             <dl className="grid gap-px overflow-hidden rounded-md border border-stage-foreground/25 bg-stage-foreground/25 sm:grid-cols-2">
               {metrics.map((m) => (
                 <div key={m.label} className="flex items-baseline justify-between gap-2 bg-stage p-3">
@@ -204,12 +143,6 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
                 </div>
               ))}
             </dl>
-            <p className="font-sans text-sm leading-relaxed opacity-75">
-              {sport === 'running'
-                ? 'Illustrative measurements · not measured from this generated clip.'
-                : 'Illustrative measurements · not measured from a real clip.'}{' '}
-              In a real fitting these numbers come from your footage.
-            </p>
             <FittingRationale requirements={script.rationale} />
           </div>
         )}
@@ -231,27 +164,27 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
         {step === 3 && (
           <div className="flex flex-col gap-5">
             <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-85">{script.steps[3].body}</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {script.concepts.map((item, i) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  aria-pressed={concept === i}
-                  onClick={() => onState({ ...state, concept: i, playing: false })}
-                  className={cn(
-                    'flex flex-col items-start gap-2 rounded-md border p-3 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                    concept === i ? 'border-stage-foreground/80 bg-stage-foreground/10' : 'border-stage-foreground/25',
-                  )}
-                >
-                  <ShoeSketch className="h-14 w-full text-stage-foreground/80" />
-                  <span className="text-lg uppercase leading-tight">
-                    {i === 0 ? `${item.label} · primary` : item.label}
-                  </span>
-                  <span className="font-sans text-xs leading-relaxed opacity-70">{item.tradeoff}</span>
-                </button>
-              ))}
+            <div className="flex flex-col gap-3 rounded-md border border-stage-foreground/60 bg-stage-foreground/10 p-4">
+              <ShoeSketch className="h-16 w-full text-stage-foreground/80" />
+              <p className="text-xl uppercase leading-tight">{`${selected.label} · ${concept === 0 ? 'Starting direction' : 'Selected direction'}`}</p>
+              <p className="font-sans text-sm leading-relaxed opacity-75">{selected.tradeoff}</p>
             </div>
-            <FittingRationale requirements={script.rationale} />
+            <div role="group" aria-label="Alternative directions" className="grid gap-3 sm:grid-cols-2">
+              {script.concepts
+                .map((item, i) => ({ item, i }))
+                .filter(({ i }) => i !== concept)
+                .map(({ item, i }) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => onState({ ...state, concept: i, playing: false })}
+                    className="flex flex-col items-start gap-1.5 rounded-md border border-stage-foreground/25 p-3 text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    <span className="text-base uppercase leading-tight">{item.label}</span>
+                    <span className="font-sans text-xs leading-relaxed opacity-70">{item.tradeoff}</span>
+                  </button>
+                ))}
+            </div>
             <p className="font-sans text-sm leading-relaxed opacity-75">{script.conceptsNote}</p>
           </div>
         )}
@@ -259,38 +192,27 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
         {step === 4 && (
           <div className="flex flex-col gap-4">
             <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-85">{script.steps[4].body}</p>
-            <div className="flex flex-col gap-2 rounded-md border border-stage-foreground/30 p-4">
-              <p className="text-lg uppercase leading-snug text-stage-foreground/80">{'Not run · no availability verified'}</p>
-              <div className="grid gap-px overflow-hidden rounded-md border border-stage-foreground/25 bg-stage-foreground/25 sm:grid-cols-2">
-                <p className={field}>{`Target: ${selected.label}`}</p>
-                <p className={field}>{`Submitted size: ${script.brief.size}`}</p>
-                <p className={cn(field, 'opacity-70')}>{'Observed page: Not captured'}</p>
-                <p className={cn(field, 'opacity-70')}>{'HTTP: Not captured'}</p>
-              </div>
+            <div className="flex flex-col gap-3 rounded-md border border-stage-foreground/30 p-4">
+              <p className="text-base uppercase leading-snug text-stage-foreground/80">{'Template — not a completed stock check'}</p>
+              <dl className="flex flex-col gap-2 font-sans text-sm leading-relaxed opacity-85">
+                <div><dt className="font-semibold">Submitted size</dt><dd className="opacity-80">{`Exact size you asked Forma to check against the observed controls — here ${script.brief.size}.`}</dd></div>
+                <div><dt className="font-semibold">Observed URL</dt><dd className="opacity-80">The page actually checked for {selected.label.toLowerCase()}, recorded so you can verify it.</dd></div>
+                <div><dt className="font-semibold">Check time</dt><dd className="opacity-80">When the observation ran, so stale receipts are obvious.</dd></div>
+                <div><dt className="font-semibold">Screenshot &amp; replay</dt><dd className="opacity-80">Visual evidence of the check when available — execution evidence, not a guarantee of stock.</dd></div>
+              </dl>
               <p className="font-sans text-sm leading-relaxed opacity-75">
-                A real check would include a screenshot and session replay when available — none exist here because nothing was run.
+                Nothing was run for this example, so no page, time or verdict exists to show.
               </p>
             </div>
           </div>
         )}
 
         {step === 5 && (
-          <div className="flex flex-col gap-4 rounded-md border border-stage-foreground/30 p-4 font-sans">
-            <div className="flex flex-col gap-1">
-              <p className="text-base font-semibold text-stage-foreground">Make it your fitting</p>
-              <p className="text-pretty text-sm leading-relaxed text-stage-foreground/75">{script.steps[5].body}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button size="lg" className="h-10 px-4 text-sm" onClick={onUpload}>
-                <Upload aria-hidden />
-                Upload my clip
-              </Button>
-              <Button variant="outline" size="lg" className="h-10 px-4 text-sm" onClick={onFilm} disabled={!canFilm} title={filmHint}>
-                <Camera aria-hidden />
-                {filmLabel}
-              </Button>
-            </div>
-            {filmHint && <p className="text-xs leading-relaxed text-stage-foreground/70">{filmHint}</p>}
+          <div className="flex flex-col gap-3 rounded-md border border-stage-foreground/30 p-4 font-sans">
+            <p className="text-xl font-semibold leading-tight text-stage-foreground">Make this about your movement</p>
+            <p className="max-w-2xl text-pretty text-sm leading-relaxed text-stage-foreground/75">
+              {script.steps[5].body} Upload a clip or film yourself from the motion panel — the example numbers stay synthetic; only your footage is measured.
+            </p>
           </div>
         )}
 
@@ -311,7 +233,7 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
               className="flex items-center gap-1 rounded-sm px-1 underline decoration-dotted underline-offset-4 phosphor hover:bg-stage-foreground hover:text-stage focus-visible:outline-none"
             >
               <Pause className="size-4" aria-hidden />
-              {'PAUSE'}
+              {'PAUSE WALKTHROUGH'}
             </button>
           ) : (
             <button
@@ -320,7 +242,7 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, onFilm, onUp
               className="flex items-center gap-1 rounded-sm px-1 underline decoration-dotted underline-offset-4 phosphor hover:bg-stage-foreground hover:text-stage focus-visible:outline-none"
             >
               <Play className="size-4" aria-hidden />
-              {lastStep ? 'REPLAY' : 'PLAY'}
+              {lastStep ? 'REPLAY' : 'PLAY WALKTHROUGH'}
             </button>
           )}
           {still && lastStep && (

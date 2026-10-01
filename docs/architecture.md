@@ -40,9 +40,17 @@ Measurement always comes from untouched frames. The hero card grade and try-on i
 
 - `session.ts` derives the visible stage, supplies the next-action rail, decides whether a measurement can submit, and plans a re-analysis or recapture when height/provider inputs change.
 - `prefs.ts` validates the required brief (size, budget, 120–220 cm height, goal and surface) before `/api/agent` runs. Foot width and niggles remain optional.
-- `example.ts` supplies the synthetic, clearly labelled six-stage walkthrough (AI-generated running clip fixture plus synthetic measurements, brief, concepts and an un-run receipt template; see README for attribution). Example mode cannot authorise research, stock, passport or WhatsApp calls.
+- `example.ts` supplies the synthetic, clearly labelled six-stage walkthrough (AI-generated running clip fixture plus synthetic measurements, brief, concepts and an un-run receipt template; see README for attribution). The running example draws a local 2D pose overlay over the generated clip — at most 12 fps while it plays and the tab is visible — but reports framing only and never touches measurements, hosted providers or TTS. Example mode cannot authorise research, stock, passport or WhatsApp calls.
 - `stock.ts` separates a typed draft size from the explicitly submitted size and carries the server-issued product token, so an old verdict, passport or arbitrary URL cannot be applied to a new request.
 - `camera.ts` releases late `getUserMedia` streams that resolve after capture is stopped or superseded.
+
+## Workspace and example tracking
+
+`components/stride-lab/stride-lab.tsx` keeps the fitting flow in the main content — walkthrough, brief, readouts and research results — while `components/forma/forma-dock.tsx` hosts the motion view, upload/capture controls and next-step actions in a sticky dock on desktop. On mobile the motion panel stays in the page, with a separate fixed compact Forma/action bar at the bottom.
+
+`example-observer.tsx` renders the synthetic example media. For running it tracks a framing-only MediaPipe session on the generated clip: a session borrowed from the provider picker is never disposed by the observer, while a separately loaded owned session is disposed on teardown (and late resolutions are disposed without reporting ready). Scheduling lives in `lib/pose/example-scheduler.ts`: an injected clock makes the first eligible frame infer immediately and enforces the minimum interval afterwards; at most one frame callback is ever pending, cancel/dispose invalidates the outstanding callback by token so a stale invocation cannot infer or reschedule, and an inference error stops the loop and reports `unavailable`. Document visibility and intersection observers gate the loop independently — hiding the tab or scrolling the panel away pauses the clip and tracking, overlay toggling updates the reported status through the same sync path, and nothing auto-resumes playback.
+
+Observation output is status plus framing booleans only; it never feeds the trackers, the validation recorder or the agent, and media controls are independent of walkthrough progression.
 
 ## Local motion validation
 
