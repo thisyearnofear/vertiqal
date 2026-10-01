@@ -12,7 +12,7 @@ Status: **plan, not implemented.** As of 2026-10-01 vertiqal has no revenue path
 | `/api/vision`, `/api/brief` | Grok vision / text | None |
 | `/api/voice` | Grok TTS per spoken line | None (240-char cap) |
 | `/api/pose/vlmrun` | VLM Run keypoint refinement | None beyond key presence |
-| `/api/wassist/webhook` | Grok reply agent (≤3 steps, may search) per inbound WhatsApp message | Webhook token |
+| `/api/wassist/webhook` | Grok reply agent (≤3 steps, may search) per inbound WhatsApp message | Webhook token + per-phone daily reply cap, 25/24h (per instance); cost logged via `paid_call` |
 | `/api/wassist/checkin` | Daily cron, one message per eligible shopper | `CRON_SECRET` |
 | `/api/mcp`, `/api/passport/*/fit` | Fit checks (no model calls) | Signed tokens |
 

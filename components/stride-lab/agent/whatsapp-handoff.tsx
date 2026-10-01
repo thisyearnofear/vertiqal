@@ -11,14 +11,16 @@ import type { Fitting, HandoffResult } from '@/lib/wassist/fitting'
 import { MEMBER_KEY } from '../use-member'
 
 const POLL_MS = 3000
+/** Matches LINK_TTL_MS in lib/wassist/link.ts (that module is server-side; keep in sync). */
+const LINK_WINDOW_MS = 10 * 60_000
 /** Sentinel target: send to the number the server already knows from the member cookie. */
 const LINKED = 'linked'
 
-async function requestHandoff([, target, , fitting]: readonly [string, string, number, Fitting]): Promise<HandoffResult> {
+async function requestHandoff([, target, , link, fitting]: readonly [string, string, number, string | null, Fitting]): Promise<HandoffResult> {
   const res = await fetch('/api/wassist/handoff', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone: target === LINKED ? undefined : target, fitting }),
+    body: JSON.stringify({ phone: target === LINKED ? undefined : target, link: link ?? undefined, fitting }),
   })
   const body = await res.json()
   if (!res.ok) throw new Error(body.error ?? 'WhatsApp handoff failed')
@@ -33,16 +35,24 @@ export function WhatsAppHandoff({ fitting, member }: { fitting: Fitting; member:
   const [useOther, setUseOther] = useState(false)
   const [target, setTarget] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [link, setLink] = useState<string | null>(null)
+  const [startedAt, setStartedAt] = useState(0)
+  const [timedOut, setTimedOut] = useState(false)
   const [sent, setSent] = useState<Extract<HandoffResult, { status: 'sent' }> | null>(null)
 
-  const key = target && !sent ? (['wassist-handoff', target, attempt, fitting] as const) : null
+  const key = target && !sent && !timedOut ? (['wassist-handoff', target, attempt, link, fitting] as const) : null
   const { data, error } = useSWR(key, requestHandoff, {
-    refreshInterval: (latest) => (latest?.status === 'awaiting-link' ? POLL_MS : 0),
+    refreshInterval: (latest) =>
+      (latest?.status === 'awaiting-link' || latest?.status === 'awaiting-code') && Date.now() - startedAt < LINK_WINDOW_MS
+        ? POLL_MS
+        : 0,
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     shouldRetryOnError: false,
     dedupingInterval: POLL_MS - 500,
     onSuccess: (result) => {
+      if (result.status === 'awaiting-code') setLink(result.link)
+      if (result.status === 'expired' || Date.now() - startedAt >= LINK_WINDOW_MS) setTimedOut(true)
       if (result.status !== 'sent') return
       trackStep('whatsapp_sent', { linked: target === LINKED })
       setSent(result)
@@ -51,6 +61,10 @@ export function WhatsAppHandoff({ fitting, member }: { fitting: Fitting; member:
   })
 
   const send = (to: string) => {
+    setSent(null)
+    setLink(null)
+    setTimedOut(false)
+    setStartedAt(Date.now())
     setTarget(to)
     setAttempt((n) => n + 1)
   }
@@ -77,6 +91,72 @@ export function WhatsAppHandoff({ fitting, member }: { fitting: Fitting; member:
           OPEN THE CHAT
           <ArrowUpRight className="size-4" aria-hidden />
         </a>
+      </div>
+    )
+  }
+
+  if (target && (timedOut || data?.status === 'expired')) {
+    return (
+      <div className="flex flex-col gap-3 rounded-md border border-stage-foreground/40 p-4 md:p-5">
+        <p className="text-xl leading-snug text-primary phosphor">{'> THAT CODE EXPIRED'}</p>
+        <p className="max-w-md font-sans text-base leading-relaxed opacity-85">
+          Link codes last 10 minutes. Start again to get a fresh one — your fitting is still here.
+        </p>
+        <button
+          type="button"
+          onClick={() => send(target)}
+          className="w-fit text-lg leading-none underline decoration-dotted underline-offset-4 phosphor hover:text-primary"
+        >
+          {'[ TRY AGAIN ]'}
+        </button>
+      </div>
+    )
+  }
+
+  if (target && data?.status === 'awaiting-code') {
+    return (
+      <div className="flex flex-col gap-5 rounded-md border-2 border-dashed border-primary p-4 md:flex-row md:items-center md:p-5">
+        <a
+          href={data.sendUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open WhatsApp to send the link code"
+          className="w-fit shrink-0 rounded-md bg-stage-foreground p-2.5 text-stage shadow-[0_0_28px_-4px_var(--stage-foreground)]"
+        >
+          <QRCodeSVG value={data.sendUrl} size={132} fgColor="currentColor" bgColor="transparent" marginSize={0} />
+        </a>
+        <div className="flex flex-col gap-2">
+          <p className="text-xl leading-snug text-primary phosphor">{'> SEND THIS CODE FROM YOUR PHONE'}</p>
+          <p className="text-3xl tracking-[0.2em] phosphor">{data.code}</p>
+          <p className="max-w-md font-sans text-base leading-relaxed opacity-85">
+            {`Send this code from ${shown} so we know it's your phone. It expires in 10 minutes.`}
+          </p>
+          <a
+            href={data.sendUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-fit items-center gap-1 text-lg leading-none underline decoration-dotted underline-offset-4 phosphor hover:text-primary"
+          >
+            {'[ OPEN WHATSAPP AND SEND ]'}
+            <ArrowUpRight className="size-4" aria-hidden />
+          </a>
+          <p className="text-lg leading-none opacity-70">
+            {'  LISTENING FOR THE CODE '}
+            <span className="animate-blink" aria-hidden>
+              {'█'}
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setTarget(null)
+              setUseOther(true)
+            }}
+            className="w-fit text-lg leading-none underline decoration-dotted underline-offset-4 opacity-70 hover:opacity-100"
+          >
+            {'[ USE A DIFFERENT NUMBER ]'}
+          </button>
+        </div>
       </div>
     )
   }

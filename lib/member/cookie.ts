@@ -14,6 +14,8 @@ const MAX_AGE = 60 * 60 * 24 * 365
 const memberSchema = z.object({
   phone: z.string().regex(/^\d{8,15}$/),
   last: lastChoiceSchema.nullable(),
+  /** Set only after the shopper proved phone possession with a link code; cookies written before that lack it. */
+  verifiedAt: z.string().max(40).optional(),
 })
 
 export type Member = z.infer<typeof memberSchema>
@@ -45,6 +47,12 @@ const OPTIONS = { path: '/', sameSite: 'none', secure: true, httpOnly: true } as
 
 export async function readMember() {
   return decode((await cookies()).get(MEMBER_COOKIE)?.value)
+}
+
+/** Members whose phone was verified by a link code; legacy cookies are treated as guests. */
+export async function readVerifiedMember() {
+  const member = await readMember()
+  return member?.verifiedAt ? member : null
 }
 
 export async function writeMember(member: Member) {

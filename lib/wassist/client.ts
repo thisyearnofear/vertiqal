@@ -61,6 +61,9 @@ export function isValidWebhookToken(token: string | null) {
   return given.length === expected.length && timingSafeEqual(given, expected)
 }
 
+/** Signs the phone-link codes issued by the handoff route; derived from the API key like the webhook token. */
+export const linkKey = () => createHmac('sha256', apiKey()).update('forma-link-code').digest()
+
 const digits = (s: string) => s.replace(/\D/g, '')
 
 /**

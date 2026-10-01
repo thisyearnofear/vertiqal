@@ -29,6 +29,7 @@ import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './
 import { draftFromRemembered, parseRememberedBrief, rememberBrief, type RememberedBrief } from './remembered-brief.ts'
 import { applyParsedBrief, briefParseSchema } from './brief-parse.ts'
 import { SAMPLE_BRIEFS, agentRequestSchema, briefToPrompt } from '../agent/brief.ts'
+import { LINK_TTL_MS, isLinkCodeMessage, issueLinkToken, newLinkCode, readLinkToken, transcriptHasCode } from '../wassist/link.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
@@ -778,6 +779,45 @@ test('agent request schema accepts a real brief and prefs, rejects bad input', (
   reject((b) => { (b.prefs as { notes: string[] }).notes = Array(13).fill('note') }, 'more than 12 notes must be rejected')
   reject((b) => { (b.prefs as { notes: string[] }).notes = ['x'.repeat(1001)] }, 'oversized note must be rejected')
   reject((b) => { (b.brief as { metrics: unknown[] }).metrics = [] }, 'empty metrics must be rejected')
+})
+
+test('wassist link: codes use the unambiguous alphabet and a fixed shape', () => {
+  const code = newLinkCode()
+  assert.match(code, /^FORMA-[A-Z2-9]{6}$/)
+  assert.doesNotMatch(code.slice(6), /[01IOL]/, 'code part uses only the unambiguous alphabet')
+  let i = 0
+  const fixed = newLinkCode(() => i++ % 32)
+  assert.equal(fixed, 'FORMA-ABCDEF')
+})
+
+test('wassist link: token round-trips and rejects tampering, expiry and wrong keys', () => {
+  const key = Buffer.from('test-key')
+  const other = Buffer.from('other-key')
+  const now = 1_700_000_000_000
+  const token = issueLinkToken(key, { phone: '447700900123', code: 'FORMA-ABC123', now })
+  assert.deepEqual(readLinkToken(key, token, now + 60_000), { phone: '447700900123', code: 'FORMA-ABC123' })
+  assert.equal(readLinkToken(other, token, now + 60_000), null, 'wrong key must fail')
+  assert.equal(readLinkToken(key, `${token.slice(0, -2)}xx`, now), null, 'tampered signature must fail')
+  const [body] = token.split('.')
+  const tampered = `${Buffer.from(JSON.stringify({ p: '449999999999', c: 'FORMA-ABC123', t: now })).toString('base64url')}.${token.split('.')[1]}`
+  assert.equal(readLinkToken(key, tampered, now), null, 'tampered payload must fail')
+  assert.equal(readLinkToken(key, `${body}.`, now), null, 'missing signature must fail')
+  assert.equal(readLinkToken(key, 'not-a-token', now), null)
+  assert.equal(readLinkToken(key, token, now + LINK_TTL_MS + 1), null, 'expired token must fail')
+  assert.equal(readLinkToken(key, token, now - 120_000), null, 'future-dated token must fail')
+})
+
+test('wassist link: transcript matching needs a SHOPPER line and a whole token', () => {
+  const code = 'FORMA-ABC123'
+  assert.equal(transcriptHasCode(`SHOPPER: ${code}`, code), true)
+  assert.equal(transcriptHasCode(`SHOPPER: here is ${code.toLowerCase()} thanks`, code), true)
+  assert.equal(transcriptHasCode(`FORMA: send me ${code}`, code), false, 'FORMA lines must not count')
+  assert.equal(transcriptHasCode(`SHOPPER: ${code}X`, code), false, 'a longer token must not match')
+  assert.equal(transcriptHasCode(`SHOPPER: FORMA-ABC123\nFORMA: hi`, code), true)
+  assert.equal(transcriptHasCode('SHOPPER: hello', code), false)
+  assert.equal(isLinkCodeMessage('  forma-abc123 '), true)
+  assert.equal(isLinkCodeMessage('my code is FORMA-ABC123'), false, 'extra words mean a real reply is needed')
+  assert.equal(isLinkCodeMessage('FORMA-ABC12'), false)
 })
 
 test('brief flow: optional answers, back navigation and height helpers', () => {
