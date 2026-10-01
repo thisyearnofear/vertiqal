@@ -50,6 +50,42 @@ function angleAt(a: Point, b: Point, c: Point) {
 const mean = (values: number[]) =>
   values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : null
 
+/** Plausible running cadence. Outside this band the estimate is reported as not measured. */
+export const CADENCE_MIN_SPM = 130
+export const CADENCE_MAX_SPM = 230
+/** Contacts closer than this are one contact seen twice (e.g. the pose model swapped left/right labels). */
+const SAME_CONTACT_SEC = 0.2
+
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+/**
+ * Steps per minute from contacts on either foot, using the median interval so a missed or extra
+ * contact barely moves it. When contacts alternate feet, each interval is one step. Side-on, the far
+ * foot is often hidden: when contacts come from one foot, each interval is a whole stride, i.e. two
+ * steps. Anything outside the plausible running band is null rather than a confident wrong number.
+ */
+export function cadenceFromStrikes(strikes: { timeSec: number; side: Side }[]): number | null {
+  const kept: { timeSec: number; side: Side }[] = []
+  for (const strike of [...strikes].sort((a, b) => a.timeSec - b.timeSec)) {
+    const last = kept[kept.length - 1]
+    if (!last || strike.timeSec - last.timeSec >= SAME_CONTACT_SEC) kept.push(strike)
+  }
+  if (kept.length < 4) return null
+  const pairs = kept.slice(1).map((s, i) => ({ dt: s.timeSec - kept[i].timeSec, alternates: s.side !== kept[i].side }))
+  const alternating = pairs.filter((p) => p.alternates)
+  const steps = alternating.length * 2 >= pairs.length
+  const intervals = (steps ? alternating : pairs.filter((p) => !p.alternates)).map((p) => p.dt)
+  if (!intervals.length) return null
+  const m = median(intervals)
+  if (m <= 0) return null
+  const spm = (steps ? 60 : 120) / m
+  return spm >= CADENCE_MIN_SPM && spm <= CADENCE_MAX_SPM ? spm : null
+}
+
 export class GaitTracker {
   private heightCm: number
   private lastTime = -Infinity
@@ -207,11 +243,7 @@ export class GaitTracker {
   }
 
   private cadence() {
-    const strikes = this.windowStrikes
-    if (strikes.length < 4) return null
-    const span = strikes[strikes.length - 1].timeSec - strikes[0].timeSec
-    if (span <= 0) return null
-    return ((strikes.length - 1) / span) * 60
+    return cadenceFromStrikes(this.windowStrikes)
   }
 }
 

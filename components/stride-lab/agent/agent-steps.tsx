@@ -265,11 +265,12 @@ function renderPart(part: Part, key: string) {
     }
 
     case 'tool-recommendProducts': {
-      const picks = part.state === 'output-available' ? part.output.picks : null
+      const output = part.state === 'output-available' ? part.output : null
+      const picks = output && output.picks.length > 0 ? output.picks : null
       return (
         <Step
           key={key}
-          title={picks ? 'Shortlisted three shoes' : 'Comparing options'}
+          title={picks ? 'Shortlisted three shoes' : output ? 'Caught a repeated shoe · re-picking' : 'Comparing options'}
           state={isPending(part.state) ? 'pending' : 'done'}
         >
           {picks && (
@@ -307,6 +308,22 @@ export function activityOf(messages: GearAgentUIMessage[]) {
     .filter((p) => p.type in ACTIVITY)
   const last = steps.at(-1)
   return { label: last ? ACTIVITY[last.type] : 'Reading your measurements', steps: steps.length }
+}
+
+/** The search as a short checklist: each kind of step once, in order, ticked when all its calls finished. */
+export function progressOf(messages: GearAgentUIMessage[]) {
+  const steps: { label: string; done: boolean; count: number }[] = []
+  for (const part of messages.filter((m) => m.role === 'assistant').flatMap((m) => m.parts)) {
+    if (!(part.type in ACTIVITY)) continue
+    const label = ACTIVITY[part.type]
+    const done = 'state' in part && (part.state === 'output-available' || part.state === 'output-error')
+    const existing = steps.find((s) => s.label === label)
+    if (existing) {
+      existing.count++
+      existing.done = existing.done && done
+    } else steps.push({ label, done, count: 1 })
+  }
+  return steps
 }
 
 export function AgentSteps({ messages }: { messages: GearAgentUIMessage[] }) {

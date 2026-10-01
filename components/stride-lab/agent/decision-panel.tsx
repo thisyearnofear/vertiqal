@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowUpRight, Pin, RotateCcw } from 'lucide-react'
 import { buttonVariants, Button } from '@/components/ui/button'
 import type { MovementBrief } from '@/lib/agent/brief'
@@ -34,6 +34,10 @@ interface DecisionPanelProps {
   /** Pins today's measurements so a re-film in the new shoes shows what changed. Absent for sample runs. */
   onPinBaseline?: () => void
   baselinePinned: boolean
+  /** Offer WhatsApp, baseline and passport (only once a size check has finished). */
+  takeAway: boolean
+  /** Reports whether a size check has finished, so the rest of the page can reveal what comes next. */
+  onSettled: (settled: boolean) => void
 }
 
 export function DecisionPanel({
@@ -49,6 +53,8 @@ export function DecisionPanel({
   member,
   onPinBaseline,
   baselinePinned,
+  takeAway,
+  onSettled,
 }: DecisionPanelProps) {
   const [draft, setDraft] = useState(size)
   const [submitted, setSubmitted] = useState<string | null>(null)
@@ -63,6 +69,24 @@ export function DecisionPanel({
   const index = picks.findIndex((p) => p.url === pick.url)
   const nextPick = picks.find((_, i) => i > index) ?? picks.find((p) => p.url !== pick.url)
   const price = data && submitted === draft.trim() ? data.price || pick.price : pick.price
+  const settled = Boolean(submitted && !checking && (checkedData || stock.error))
+  const resultRef = useRef<HTMLDivElement>(null)
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    onSettled(settled)
+    if (settled) resultRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [settled, onSettled])
+
+  // A visible clock while the browser check runs; it takes tens of seconds and gives no partial progress.
+  useEffect(() => {
+    if (!checking) return
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [checking])
+  const elapsed = checking && startedAt ? Math.max(0, Math.round((now - startedAt) / 1000)) : 0
+
   const snapshot = choiceSnapshot({
     draft,
     submitted,
@@ -73,6 +97,8 @@ export function DecisionPanel({
     e.preventDefault()
     const next = draft.trim()
     if (!next) return
+    setStartedAt(Date.now())
+    setNow(Date.now())
     if (next === submitted) {
       setAttempt((a) => a + 1)
       return
@@ -83,7 +109,10 @@ export function DecisionPanel({
   }
 
   const retry = () => {
-    if (submitted) setAttempt((a) => a + 1)
+    if (!submitted) return
+    setStartedAt(Date.now())
+    setNow(Date.now())
+    setAttempt((a) => a + 1)
   }
 
   const recordChoice = () => {
@@ -149,17 +178,24 @@ export function DecisionPanel({
           )}
         </form>
 
-        <div className="flex flex-col gap-2" aria-live="polite">
+        <div ref={resultRef} className="flex scroll-mt-6 flex-col gap-2" aria-live="polite">
           {!submitted ? (
-            <p className="text-xl uppercase leading-snug opacity-70">{'UNCHECKED · SUBMIT A SIZE TO CHECK AVAILABILITY'}</p>
-          ) : checking ? (
-            <p className="flex items-center gap-2 text-xl uppercase leading-snug opacity-85">
-              <span className="led" data-state="busy" aria-hidden />
-              {`Checking ${submitted} at ${pick.retailer} right now`}
-              <span className="animate-blink" aria-hidden>
-                {'█'}
-              </span>
+            <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-80">
+              {`Forma opens ${pick.retailer} in a real browser from the UK, finds the ${draft.trim() || 'size'} button and reads whether it can be selected. It takes about 30–60 seconds, and nothing is bought.`}
             </p>
+          ) : checking ? (
+            <div className="flex flex-col gap-1">
+              <p className="flex items-center gap-2 text-xl uppercase leading-snug opacity-85">
+                <span className="led" data-state="busy" aria-hidden />
+                {`Checking ${submitted} at ${pick.retailer} · ${elapsed}s`}
+                <span className="animate-blink" aria-hidden>
+                  {'█'}
+                </span>
+              </p>
+              <p className="font-sans text-sm leading-relaxed opacity-70">
+                A real browser is loading the product page, confirming it is this shoe and reading the size buttons. You&apos;ll get a screenshot of what it saw.
+              </p>
+            </div>
           ) : stock.error ? (
             <p className="text-xl uppercase leading-snug text-primary phosphor">{`! Couldn't check stock: ${stock.error.message}`}</p>
           ) : data ? (
@@ -206,35 +242,40 @@ export function DecisionPanel({
         </div>
       </div>
 
-      {choiceFitting && <WhatsAppHandoff fitting={choiceFitting} member={member} />}
+      {takeAway && (
+        <div className="flex flex-col gap-6 border-t border-dashed border-stage-foreground/30 pt-5">
+          <p className="text-xl uppercase leading-none phosphor">{'> TAKE IT WITH YOU'}</p>
+          {choiceFitting && <WhatsAppHandoff fitting={choiceFitting} member={member} />}
 
-      {onPinBaseline && (
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <p className="max-w-xl text-pretty font-sans text-base leading-relaxed opacity-80">
-            {`Film again after a few sessions in them and Forma compares your movement across the two clips — nothing says the shoes caused any change. This session only; nothing is stored.`}
-          </p>
-          <button type="button" onClick={onPinBaseline} disabled={baselinePinned} className={cn(LINK, 'shrink-0 disabled:no-underline')}>
-            {baselinePinned ? '■ TODAY IS YOUR BASELINE' : (
-              <span className="inline-flex items-center gap-1.5">
-                <Pin className="size-4" aria-hidden />
-                {'[ PIN TODAY AS MY BASELINE ]'}
-              </span>
-            )}
-          </button>
+          {onPinBaseline && (
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="max-w-xl text-pretty font-sans text-base leading-relaxed opacity-80">
+                {`Film again after a few sessions in them and Forma compares your movement across the two clips — nothing says the shoes caused any change. This session only; nothing is stored.`}
+              </p>
+              <button type="button" onClick={onPinBaseline} disabled={baselinePinned} className={cn(LINK, 'shrink-0 disabled:no-underline')}>
+                {baselinePinned ? '■ TODAY IS YOUR BASELINE' : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Pin className="size-4" aria-hidden />
+                    {'[ PIN TODAY AS MY BASELINE ]'}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+
+          {passport &&
+            (passportCurrent ? (
+              <details className="text-lg leading-snug">
+                <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ Your fit passport, for other shops and AI assistants'}</summary>
+                <div className="mt-4">
+                  <PassportCard passport={passport} />
+                </div>
+              </details>
+            ) : draft.trim() ? (
+              <p className="text-lg leading-snug opacity-70">{'Check this size to update your fit passport.'}</p>
+            ) : null)}
         </div>
       )}
-
-      {passport &&
-        (passportCurrent ? (
-          <details className="text-lg leading-snug">
-            <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ Your fit passport, for other shops and AI assistants'}</summary>
-            <div className="mt-4">
-              <PassportCard passport={passport} />
-            </div>
-          </details>
-        ) : draft.trim() ? (
-          <p className="text-lg leading-snug opacity-70">{'Check this size to update your fit passport.'}</p>
-        ) : null)}
     </div>
   )
 }

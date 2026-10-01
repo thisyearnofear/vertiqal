@@ -24,7 +24,7 @@ import { REQUIRED_QUESTIONS, answeredCount, nextQuestion, previousQuestion, ques
 import { draftFromRemembered, rememberBrief, type RememberedBrief } from '@/lib/fitting/remembered-brief'
 import { applyParsedBrief } from '@/lib/fitting/brief-parse'
 import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
-import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
+import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, visibilityFor, type ResetReason } from '@/lib/fitting/session'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
 import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
 import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
@@ -118,7 +118,10 @@ export function StrideLab({
   const [playing, setPlaying] = useState(true)
   const [baseline, setBaseline] = useState<Baseline | null>(null)
   const [persona, setPersona] = useState(initialPersona)
-  const [tuning, setTuning] = useState(false)
+  // Settings belong to the phase they were opened in (setting up, or one results stage), so they close
+  // by themselves once the fitting moves into results instead of riding along under the shortlist.
+  const [tuningAt, setTuningAt] = useState<string | null>(null)
+  const [stockChecked, setStockChecked] = useState(false)
   const [, startSaving] = useTransition()
   const [voiceOn, setVoiceOn] = useState(false)
   const [caption, setCaption] = useState<string | null>(null)
@@ -358,6 +361,7 @@ export function StrideLab({
 
   const choose = (pick: ShoePick | null) => {
     if (pick) trackStep('pick_chosen', { sport, retailer: pick.retailer })
+    setStockChecked(false)
     setChoice(pick)
   }
 
@@ -645,7 +649,11 @@ export function StrideLab({
     eventLabel: SPORTS[sport].events,
     missingPrefs: missingFields.length,
     needsRecapture,
+    stockChecked,
   })
+  const visible = visibilityFor(stage, { stockChecked })
+  const settingsScope = visible.denseStage ? stage : 'setup'
+  const tuning = tuningAt === settingsScope
 
   const stageIdle = !example && !clip && !live.stream
   const askingBrief = !example && !liveActive && (stage === 'capture' || stage === 'confirm')
@@ -885,7 +893,7 @@ export function StrideLab({
               progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
               lockedMetrics={lockedMetrics}
               provisional={provisional}
-              dense={shopping}
+              dense={visible.denseStage}
               idleAction={
                 <button
                   type="button"
@@ -1042,7 +1050,7 @@ export function StrideLab({
             ) : undefined
           }
           tuning={tuning}
-          onToggleTuning={() => setTuning((t) => !t)}
+          onToggleTuning={() => setTuningAt((at) => (at === settingsScope ? null : settingsScope))}
           onPersona={changePersona}
           action={stripAction}
           pips={example ? undefined : { done: answeredCount(prefDraft, notes), total: REQUIRED_QUESTIONS.length }}
@@ -1101,7 +1109,8 @@ export function StrideLab({
                   notes={notes}
                   active={question}
                   onPick={askQuestion}
-                  remembered={remembered ? { onForget: forgetRemembered } : undefined}
+                  compact={!visible.briefExtras}
+                  remembered={remembered && visible.briefExtras ? { onForget: forgetRemembered } : undefined}
                   trailing={
                     shopping && findShoesAction ? (
                       <Button size="sm" onClick={findShoesAction.onClick}>
@@ -1115,6 +1124,7 @@ export function StrideLab({
                     {filledNote}
                   </p>
                 )}
+                {visible.briefExtras && (
                 <details className="group">
                   <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                     Show all fields
@@ -1138,6 +1148,7 @@ export function StrideLab({
                     />
                   </div>
                 </details>
+                )}
               </div>
             )
           }
@@ -1165,6 +1176,8 @@ export function StrideLab({
                 setConfirmedPrefs((p) => (p ? { ...p, size } : p))
               }}
               onBriefField={focusBriefField}
+              takeAway={visible.takeAway}
+              onStockSettled={setStockChecked}
             />
           </div>
         )}
@@ -1173,13 +1186,13 @@ export function StrideLab({
           <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} />
         ) : (
           <>
-            {!shopping && readout.events > 0 && (
+            {visible.readout && readout.events > 0 && (
               <div className="housing rounded-2xl p-4 md:p-5">
                 <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
               </div>
             )}
 
-            {sport === 'running' && (clip || liveActive || captureStatus === 'ready') && (
+            {visible.validation && sport === 'running' && (clip || liveActive || captureStatus === 'ready') && (
               <details className="group housing rounded-2xl p-4 md:p-5">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                   <span className={LABEL}>Local validation</span>
@@ -1224,7 +1237,7 @@ export function StrideLab({
           </>
         )}
 
-        {choice && hero && (
+        {choice && hero && visible.takeAway && (
           <div id="hero-frame" className="scroll-mt-6">
             <HeroCard frame={hero} readout={panelReadout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
           </div>

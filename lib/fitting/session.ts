@@ -38,6 +38,7 @@ export function nextStepFor(state: {
   eventLabel: string
   missingPrefs: number
   needsRecapture: boolean
+  stockChecked?: boolean
 }): NextStep {
   if (state.example) {
     return {
@@ -112,29 +113,63 @@ export function nextStepFor(state: {
     }
   }
 
+  // From here the results panel below owns the actions; the strip only says where you are.
   if (state.stage === 'research') {
     return {
-      eyebrow: 'Step 3 of 3 · Compare',
+      eyebrow: 'Step 3 of 3 · Search',
       title: 'Forma is searching',
-      detail: 'Recommendations are being checked against your measurements and confirmed brief.',
-      action: { kind: 'results', label: 'View progress' },
+      detail: 'Checking live stock, rider reports and your numbers. Results land just below.',
+      action: null,
     }
   }
 
   if (state.stage === 'choose') {
     return {
-      eyebrow: 'Step 3 of 3 · Compare',
-      title: 'Review the starting point',
-      detail: 'Check the evidence, compare alternatives, then pick a shoe to verify your size.',
-      action: { kind: 'results', label: 'Review recommendations' },
+      eyebrow: 'Step 3 of 3 · Choose',
+      title: 'Pick one of the three',
+      detail: 'Choosing one lets Forma check your size is actually in stock.',
+      action: null,
     }
   }
 
+  return state.stockChecked
+    ? {
+        eyebrow: 'Step 3 of 3 · Done',
+        title: 'Buy it, or take it with you',
+        detail: 'Open the retailer, or send the fitting to WhatsApp for later.',
+        action: null,
+      }
+    : {
+        eyebrow: 'Step 3 of 3 · Decide',
+        title: 'Check your size is in stock',
+        detail: 'Forma opens the retailer page and reads your size button. Nothing is bought.',
+        action: null,
+      }
+}
+
+export interface Visibility {
+  /** The movement screen shrinks once results are the focus. */
+  denseStage: boolean
+  /** Optional brief extras (+ width, + niggles, a sentence, remembered answers, all fields). */
+  briefExtras: boolean
+  /** The full gait readout card under the screen. */
+  readout: boolean
+  /** Local validation recording tools. */
+  validation: boolean
+  /** Extras offered after the size check: WhatsApp, baseline, passport, hero frame and try-on. */
+  takeAway: boolean
+}
+
+/** One place that decides what each stage shows, so earlier and later stages can't leak in. */
+export function visibilityFor(stage: FittingStage, state: { stockChecked: boolean }): Visibility {
+  const results = stage === 'research' || stage === 'choose' || stage === 'decision'
+  const measuring = stage === 'capture' || stage === 'confirm'
   return {
-    eyebrow: 'Step 3 of 3 · Decide',
-    title: 'Check the exact size',
-    detail: 'Only a submitted size is checked. Open the retailer after reviewing the result.',
-    action: { kind: 'results', label: 'Review stock check' },
+    denseStage: results,
+    briefExtras: !results,
+    readout: measuring,
+    validation: measuring,
+    takeAway: stage === 'decision' && state.stockChecked,
   }
 }
 
