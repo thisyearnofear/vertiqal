@@ -11,7 +11,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "test:fitting": "node --test lib/fitting/fitting.test.ts",
-    "test:pose": "node --test lib/pose/validation.test.ts",
+    "test:pose": "node --test lib/pose/validation.test.ts lib/pose/example-observation.test.ts lib/pose/example-scheduler.test.ts",
     "validate:motion": "node lib/pose/validation-cli.ts",
     "prepare": "husky"
   },

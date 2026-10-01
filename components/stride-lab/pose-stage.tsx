@@ -39,6 +39,8 @@ interface PoseStageProps {
   onValidationFrame?: (frame: { timeSec: number; pose: Pose | null; width: number; height: number; snapshot: MovementSnapshot }) => void
   /** Measurement progress for a loaded clip: pips fill per event, then a lock banner plays once. */
   progress?: { events: number; target: number; ready: boolean }
+  /** Tighter chrome for the docked inspector column. */
+  compact?: boolean
 }
 
 const ENGINE_LINE: Record<EngineState, string> = {
@@ -101,6 +103,7 @@ export function PoseStage({
   onFile,
   onValidationFrame,
   progress,
+  compact = false,
 }: PoseStageProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -276,7 +279,7 @@ export function PoseStage({
   return (
     <div
       ref={containerRef}
-      className="screen aspect-[4/3] w-full sm:aspect-video lg:aspect-[21/10]"
+      className={cn('screen w-full', compact ? 'aspect-video' : 'aspect-[4/3] sm:aspect-video lg:aspect-[21/10]')}
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -305,17 +308,24 @@ export function PoseStage({
       {overlay && !dragging && <div className="absolute inset-0 z-10">{overlay}</div>}
 
       {idle && !dragging && (
-        <div className="absolute inset-0 z-10 flex animate-boot flex-col justify-between p-5 font-mono text-stage-foreground md:p-10">
-          <div className="flex flex-col gap-1 text-base leading-snug phosphor md:text-xl">
-            <div className="hidden flex-col gap-1 sm:flex">
-              <BootLine index={0}>{`POSE ENGINE ........ ${ENGINE_LINE[engine]}`}</BootLine>
-              <BootLine index={1}>{`MODE .............. ${SPORTS[sport].label.toUpperCase()}`}</BootLine>
+        <div
+          className={cn(
+            'absolute inset-0 z-10 flex animate-boot flex-col justify-between font-mono text-stage-foreground',
+            compact ? 'p-4' : 'p-5 md:p-10',
+          )}
+        >
+          {!compact && (
+            <div className="flex flex-col gap-1 text-base leading-snug phosphor md:text-xl">
+              <div className="hidden flex-col gap-1 sm:flex">
+                <BootLine index={0}>{`POSE ENGINE ........ ${ENGINE_LINE[engine]}`}</BootLine>
+                <BootLine index={1}>{`MODE .............. ${SPORTS[sport].label.toUpperCase()}`}</BootLine>
+              </div>
             </div>
-          </div>
-          <div className={'flex w-3/5 flex-col items-start gap-3 md:w-1/2'}>
-            <p className="text-2xl leading-none phosphor md:text-4xl">READY FOR YOUR CLIP</p>
-            <p className="text-pretty text-lg leading-snug phosphor md:text-2xl">{PROMISE[sport]}</p>
-            <p className="hidden text-pretty text-base leading-snug opacity-70 sm:block">{'> OR DROP A CLIP ON THIS SCREEN'}</p>
+          )}
+          <div className={compact ? 'flex w-full flex-col items-start gap-2' : 'flex w-3/5 flex-col items-start gap-3 md:w-1/2'}>
+            <p className={cn('leading-none phosphor', compact ? 'text-lg' : 'text-2xl md:text-4xl')}>READY FOR YOUR CLIP</p>
+            <p className={cn('text-pretty leading-snug phosphor', compact ? 'text-sm' : 'text-lg md:text-2xl')}>{PROMISE[sport]}</p>
+            {!compact && <p className="hidden text-pretty text-base leading-snug opacity-70 sm:block">{'> OR DROP A CLIP ON THIS SCREEN'}</p>}
           </div>
           <p className="absolute bottom-3 right-4 text-xs uppercase tracking-wider opacity-60 md:bottom-4 md:right-6">
             Illustration · not a video analysis

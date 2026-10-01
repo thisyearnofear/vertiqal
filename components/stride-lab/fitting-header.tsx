@@ -14,16 +14,12 @@ interface FittingHeaderProps {
 
 export function FittingHeader({ sport, onSport }: FittingHeaderProps) {
   return (
-    <header className="housing flex flex-col gap-3 rounded-2xl px-5 py-4 md:px-7">
-      <p className="font-mono text-4xl leading-none tracking-wider text-foreground engraved">vertiqal</p>
-
-      <div className="flex flex-col gap-1">
-        <h1 className="text-balance text-xl font-semibold leading-tight text-foreground lg:text-2xl">
+    <header className="housing flex flex-col gap-3 rounded-2xl px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <p className="font-mono text-2xl leading-none tracking-wider text-foreground engraved lg:text-3xl">vertiqal</p>
+        <h1 className="text-balance text-base font-semibold leading-tight text-foreground lg:text-lg">
           Find shoes for how you move.
         </h1>
-        <p className="max-w-xl text-pretty text-sm leading-relaxed text-muted-foreground">
-          {'Your body is the search query. Film a short clip, confirm your brief, and Forma sources shoes that fit the way you actually move.'}
-        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
