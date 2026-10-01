@@ -42,6 +42,7 @@
   --animate-lock-banner: lock-banner 2.6s ease-out both;
   --animate-lock-flash: lock-flash 0.8s ease-out both;
   --animate-roll-in: roll-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-hud-in: hud-in 0.5s ease-out 2.2s both;
   --animate-pip: pip 0.35s ease-out both;
 }
 
@@ -250,6 +251,18 @@
   }
 }
 
+/* The locked-metrics strip fades in after the lock banner gets out of the way. */
+@keyframes hud-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Odometer-style settle for readout digits when measurements lock. */
 @keyframes roll-in {
   from {
@@ -282,6 +295,7 @@
   .animate-boot,
   .animate-type-in,
   .animate-lock-flash,
+  .animate-hud-in,
   .animate-roll-in,
   .animate-pip {
     animation: none;

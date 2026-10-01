@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
 import { Camera, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
-import { savePersona } from '@/app/actions'
+import { forgetBrief, saveBrief, savePersona } from '@/app/actions'
 import { Button } from '@/components/ui/button'
 import { EMPTY_NOTES, type FittingNotesState } from '@/lib/agent/fitting-notes'
 import { briefFromReadout, type ShopperPrefs } from '@/lib/agent/brief'
@@ -20,6 +20,7 @@ import {
   type PrefField,
 } from '@/lib/fitting/prefs'
 import { REQUIRED_QUESTIONS, answeredCount, nextQuestion, previousQuestion, questionPrompt, type BriefQuestion } from '@/lib/fitting/brief-flow'
+import { draftFromRemembered, rememberBrief, type RememberedBrief } from '@/lib/fitting/remembered-brief'
 import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
 import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
@@ -68,7 +69,7 @@ const ANNOUNCED_MOODS = new Set<Mood>(['pleased', 'asking', 'working', 'sad'])
 const EMPTY_FRAME: FrameQuality = { person: false, hips: false, feet: false }
 const LABEL = 'text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved'
 const PRIVACY_LINE =
-  'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them.'
+  'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them. Your confirmed brief answers — never niggles, never video — are remembered in a cookie on this browser for next time.'
 
 const scrollToSection = (id: string) => {
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -85,22 +86,27 @@ const isTyping = (target: EventTarget | null) =>
 
 const prefersStill = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export function StrideLab({ initialPersona, initialMember }: { initialPersona: Persona; initialMember: MemberView }) {
+export function StrideLab({
+  initialPersona,
+  initialMember,
+  initialBrief,
+}: {
+  initialPersona: Persona
+  initialMember: MemberView
+  initialBrief: RememberedBrief | null
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [clip, setClip] = useState<Clip | null>(null)
-  const [sport, setSport] = useState<Sport>(initialMember.last?.sport ?? 'running')
+  const [remembered, setRemembered] = useState<RememberedBrief | null>(initialBrief)
+  const initialSport = initialMember.last?.sport ?? 'running'
+  const [sport, setSport] = useState<Sport>(initialSport)
   const [providerId, setProviderId] = useState(POSE_PROVIDERS[0].id)
   const [sessionState, setSessionState] = useState<SessionState>({ status: 'loading' })
   const [providerStatus, setProviderStatus] = useState<string | null>(null)
-  const [prefDraft, setPrefDraft] = useState<PrefDraft>({
-    size: initialMember.last?.size ?? '',
-    budgetPounds: '',
-    heightCm: '',
-    goal: '',
-    surface: '',
-  })
-  const [calibrationCm, setCalibrationCm] = useState(FALLBACK_HEIGHT_CM)
-  const [tracker, setTracker] = useState(() => createTracker(initialMember.last?.sport ?? 'running', FALLBACK_HEIGHT_CM))
+  const [initialDraft] = useState(() => draftFromRemembered(initialBrief, initialSport, initialMember.last?.size ?? null))
+  const [prefDraft, setPrefDraft] = useState<PrefDraft>(initialDraft)
+  const [calibrationCm, setCalibrationCm] = useState(() => parseHeightCm(initialDraft.heightCm) ?? FALLBACK_HEIGHT_CM)
+  const [tracker, setTracker] = useState(() => createTracker(initialSport, parseHeightCm(initialDraft.heightCm) ?? FALLBACK_HEIGHT_CM))
   const [snapshot, setSnapshot] = useState<MovementSnapshot | null>(null)
   const recorderRef = useRef<ReturnType<typeof createValidationRecorder> | null>(null)
   const [captureStatus, setCaptureStatus] = useState<'idle' | 'recording' | 'ready'>('idle')
@@ -116,7 +122,12 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   const [caption, setCaption] = useState<string | null>(null)
   const [keyframes, setKeyframes] = useState<Keyframe[]>([])
   const [hero, setHero] = useState<HeroFrame | null>(null)
-  const [notes, setNotes] = useState<FittingNotesState>(EMPTY_NOTES)
+  const [notes, setNotes] = useState<FittingNotesState>(() => ({
+    ...EMPTY_NOTES,
+    goal: initialDraft.goal,
+    surface: initialDraft.surface,
+    width: initialBrief?.width ?? '',
+  }))
   const [lockLine, setLockLine] = useState<string | null>(null)
   const [choice, setChoice] = useState<ShoePick | null>(null)
   const [example, setExample] = useState<ExampleState | null>(null)
@@ -229,25 +240,29 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   }, [])
 
   const resetSession = useCallback(
-    (reason: ResetReason) => {
+    (reason: ResetReason, targetSport: Sport = sport) => {
       agent.reset()
       live.clear()
       setChoice(null)
       setConfirmedPrefs(null)
       setAttempted(false)
       if (clearsBaseline(reason)) setBaseline(null)
+      const saved = reason === 'sport' || reason === 'start-fresh' ? remembered?.bySport[targetSport] : undefined
       if (reason === 'sport' || reason === 'start-fresh') {
-        setPrefDraft((d) => ({ ...d, goal: '', surface: '' }))
+        setPrefDraft((d) => ({ ...d, goal: saved?.goal ?? '', surface: saved?.surface ?? '' }))
         setSkipped(new Set())
       }
       setActiveQuestion(null)
-      setNotes((current) => notesAfterReset(reason, current))
+      setNotes((current) => {
+        const next = notesAfterReset(reason, current)
+        return saved ? { ...next, goal: saved.goal, surface: saved.surface } : next
+      })
       setLockedReadout(null)
       setCaption(null)
       clearValidationCapture()
       setCaptureSource('unclassified')
     },
-    [agent, live, clearValidationCapture],
+    [agent, live, clearValidationCapture, remembered, sport],
   )
 
   const currentAnalysisHeight = analysisHeight(prefDraft).heightCm
@@ -325,7 +340,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
 
   const changeSport = (next: Sport) => {
     if (next === sport) return
-    resetSession('sport')
+    resetSession('sport', next)
     setExample(null)
     setExampleObservation(null)
     releaseClip()
@@ -562,6 +577,9 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     if (!submitReady || !lockedReadout) return
     const prefs = buildPrefs(depth)
     if (!prefs) return
+    const next = rememberBrief(remembered, prefDraft, notes, sport)
+    setRemembered(next)
+    startSaving(() => saveBrief(next))
     setConfirmedPrefs(prefs)
     setChoice(null)
     agent.send(briefFromReadout(lockedReadout), prefs)
@@ -679,6 +697,13 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
 
   const heroPicks = choice ? [choice, ...picks.filter((p) => p.url !== choice.url)] : picks
   const panelReadout = lockedReadout ?? readout
+  const lockedMetrics = measuredReady
+    ? panelReadout.metrics.map((m) => ({ label: m.label, value: m.value === null || m.value === undefined ? '--' : m.value.toFixed(0), unit: m.unit }))
+    : undefined
+  const forgetRemembered = () => {
+    setRemembered(null)
+    startSaving(() => forgetBrief())
+  }
 
   return (
     <div
@@ -780,6 +805,8 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
               onFile={loadFile}
               onValidationFrame={onValidationFrame}
               progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
+              lockedMetrics={lockedMetrics}
+              dense={shopping}
               idleAction={
                 <button
                   type="button"
@@ -910,23 +937,6 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
               : undefined
           }
           privacyLine={PRIVACY_LINE}
-          exampleDetails={
-            example && sport === 'running' ? (
-              <div className="flex flex-col gap-1 font-sans text-xs leading-relaxed text-muted-foreground">
-                <p>{`${EXAMPLE_FOOTAGE.credit} · ${EXAMPLE_FOOTAGE.range}`}</p>
-                <p>
-                  <a className="underline" href={EXAMPLE_FOOTAGE.sourceUrl} target="_blank" rel="noreferrer">
-                    Seedance 1.5 Pro on fal.ai
-                  </a>
-                  {' · '}
-                  <a className="underline" href={EXAMPLE_FOOTAGE.provenanceUrl} target="_blank" rel="noreferrer">
-                    generation details
-                  </a>
-                  {`. ${EXAMPLE_FOOTAGE.rights} Not proof of real-person gait or shoe fit.`}
-                </p>
-              </div>
-            ) : undefined
-          }
           analysisSettings={
             !example ? (
               <ProviderPicker
@@ -966,7 +976,23 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
               : null
           }
           footer={
-            example ? undefined : (
+            example ? (
+              sport === 'running' ? (
+                <div className="flex flex-col gap-1 px-1 font-sans text-xs leading-relaxed text-muted-foreground">
+                  <p>{`${EXAMPLE_FOOTAGE.credit} · ${EXAMPLE_FOOTAGE.range}`}</p>
+                  <p>
+                    <a className="underline" href={EXAMPLE_FOOTAGE.sourceUrl} target="_blank" rel="noreferrer">
+                      Seedance 1.5 Pro on fal.ai
+                    </a>
+                    {' · '}
+                    <a className="underline" href={EXAMPLE_FOOTAGE.provenanceUrl} target="_blank" rel="noreferrer">
+                      generation details
+                    </a>
+                    {`. ${EXAMPLE_FOOTAGE.rights} Not proof of real-person gait or shoe fit.`}
+                  </p>
+                </div>
+              ) : undefined
+            ) : (
               <div className="flex flex-col gap-1 px-1">
                 <BriefSentence
                   sport={sport}
@@ -974,6 +1000,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                   notes={notes}
                   active={question}
                   onPick={askQuestion}
+                  remembered={remembered ? { onForget: forgetRemembered } : undefined}
                   trailing={
                     shopping && findShoesAction ? (
                       <Button size="sm" onClick={findShoesAction.onClick}>
@@ -1040,13 +1067,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
           <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} />
         ) : (
           <>
-            {measuredReady && !shopping && readout.events > 0 && (
-              <div className="housing rounded-2xl p-4 md:p-5">
-                <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
-              </div>
-            )}
-
-            {!measuredReady && !shopping && readout.events > 0 && (
+            {!shopping && readout.events > 0 && (
               <div className="housing rounded-2xl p-4 md:p-5">
                 <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
               </div>

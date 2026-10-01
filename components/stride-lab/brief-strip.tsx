@@ -203,10 +203,12 @@ interface BriefSentenceProps {
   active: BriefQuestion | null
   onPick: (q: BriefQuestion) => void
   trailing?: ReactNode
+  /** When set, the sentence was pre-filled from last time and can be forgotten. */
+  remembered?: { onForget: () => void }
 }
 
 /** The confirmed brief as one editable sentence; every blank reopens its question in the Forma strip. */
-export function BriefSentence({ sport, draft, notes, active, onPick, trailing }: BriefSentenceProps) {
+export function BriefSentence({ sport, draft, notes, active, onPick, trailing, remembered }: BriefSentenceProps) {
   const budget = parseBudgetPounds(draft.budgetPounds)
   const height = parseHeightCm(draft.heightCm)
   const blank = (question: BriefQuestion, value: string | null, empty: string) => (
@@ -256,6 +258,14 @@ export function BriefSentence({ sport, draft, notes, active, onPick, trailing }:
         )}
         {trailing}
       </div>
+      {remembered && (
+        <p className="w-full text-xs leading-relaxed text-muted-foreground">
+          {'From your last fitting · '}
+          <button type="button" onClick={remembered.onForget} className={extra}>
+            Forget saved answers
+          </button>
+        </p>
+      )}
     </div>
   )
 }

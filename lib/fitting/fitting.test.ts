@@ -26,6 +26,7 @@ import { EXAMPLE_FOOTAGE, EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleCompanion,
 import { settleStream } from './camera.ts'
 import { UK_SIZES, answeredCount, feetInches, isAnswered, nextQuestion, previousQuestion, stepHeight } from './brief-flow.ts'
 import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
+import { draftFromRemembered, parseRememberedBrief, rememberBrief, type RememberedBrief } from './remembered-brief.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
@@ -632,6 +633,72 @@ test('brief flow: asks required questions in order and skips what is answered or
   assert.equal(nextQuestion({ draft: valid, notes: EMPTY_NOTES, skipped: none, heightOnScreen: false }), null)
   assert.equal(answeredCount(valid, EMPTY_NOTES), 5)
   assert.equal(answeredCount({ ...valid, heightCm: '90', budgetPounds: '0' }, EMPTY_NOTES), 3, 'invalid height and budget are not answers')
+})
+
+test('remembered brief: parse rejects garbage, oversized fields and invalid JSON', () => {
+  assert.equal(parseRememberedBrief(undefined), null)
+  assert.equal(parseRememberedBrief(''), null)
+  assert.equal(parseRememberedBrief('not json{'), null)
+  assert.equal(parseRememberedBrief('"a string"'), null)
+  assert.equal(parseRememberedBrief(JSON.stringify({ size: 'UK 9' })), null, 'missing required fields')
+  const oversized = {
+    size: 'UK 9 with a very long trailing string',
+    budgetPounds: '160',
+    heightCm: '178',
+    width: 'wide',
+    bySport: {},
+  }
+  assert.equal(parseRememberedBrief(JSON.stringify(oversized)), null)
+  assert.equal(
+    parseRememberedBrief(JSON.stringify({ ...oversized, size: 'UK 9', width: 'enormous' })),
+    null,
+    'width must be a known foot width',
+  )
+  const good: RememberedBrief = {
+    size: 'UK 9',
+    budgetPounds: '160',
+    heightCm: '178',
+    width: '',
+    bySport: { running: { goal: 'Easy miles', surface: 'Road' } },
+  }
+  assert.deepEqual(parseRememberedBrief(JSON.stringify(good)), good)
+})
+
+test('remembered brief: saves confirmed answers per sport and never stores niggles', () => {
+  const previous: RememberedBrief = {
+    size: 'UK 8',
+    budgetPounds: '120',
+    heightCm: '170',
+    width: '',
+    bySport: { climbing: { goal: 'Hard bouldering', surface: 'Indoor walls' } },
+  }
+  const draft: PrefDraft = { size: 'UK 9', budgetPounds: '160', heightCm: '178', goal: 'Easy miles', surface: 'Road' }
+  const notes = { ...EMPTY_NOTES, width: 'wide' as const, niggles: 'sore shins', goal: 'Easy miles', surface: 'Road' }
+  const next = rememberBrief(previous, draft, notes, 'running')
+  assert.equal(next.size, 'UK 9')
+  assert.equal(next.budgetPounds, '160')
+  assert.equal(next.heightCm, '178')
+  assert.equal(next.width, 'wide')
+  assert.deepEqual(next.bySport.running, { goal: 'Easy miles', surface: 'Road' })
+  assert.deepEqual(next.bySport.climbing, { goal: 'Hard bouldering', surface: 'Indoor walls' }, 'the other sport survives')
+  assert.equal(JSON.stringify(next).includes('sore shins'), false, 'niggles are never persisted')
+  assert.equal('niggles' in next, false)
+})
+
+test('remembered brief: drafts fall back to member size and blank goal/surface for an unremembered sport', () => {
+  const brief: RememberedBrief = {
+    size: '',
+    budgetPounds: '160',
+    heightCm: '178',
+    width: 'narrow',
+    bySport: { running: { goal: 'Easy miles', surface: 'Road' } },
+  }
+  const running = draftFromRemembered(brief, 'running', 'UK 10')
+  assert.deepEqual(running, { size: 'UK 10', budgetPounds: '160', heightCm: '178', goal: 'Easy miles', surface: 'Road' })
+  const climbing = draftFromRemembered(brief, 'climbing', 'UK 10')
+  assert.deepEqual(climbing, { size: 'UK 10', budgetPounds: '160', heightCm: '178', goal: '', surface: '' })
+  assert.deepEqual(draftFromRemembered(null, 'running', 'UK 10'), { size: 'UK 10', budgetPounds: '', heightCm: '', goal: '', surface: '' })
+  assert.equal(draftFromRemembered(null, 'running', null).size, '')
 })
 
 test('brief flow: optional answers, back navigation and height helpers', () => {
