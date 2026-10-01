@@ -36,7 +36,6 @@ interface FormaDockProps {
   secondaryAction?: { label: string; onClick: () => void; disabled?: boolean; hint?: string }
   privacyLine?: string
   analysisSettings?: ReactNode
-  exampleDetails?: ReactNode
   tuning: boolean
   onToggleTuning: () => void
   onPersona: (persona: Persona) => void
@@ -70,7 +69,6 @@ export function FormaDock({
   secondaryAction,
   privacyLine,
   analysisSettings,
-  exampleDetails,
   tuning,
   onToggleTuning,
   onPersona,
@@ -78,7 +76,6 @@ export function FormaDock({
 }: FormaDockProps) {
   const tunerId = useId()
   const hintId = useId()
-  const hasOptions = Boolean(privacyLine || analysisSettings || exampleDetails || secondaryAction?.hint)
   const showActions = !actionInStage && !ask && Boolean(action || secondaryAction)
 
   const actions = (source: 'desktop' | 'mobile') =>
@@ -150,7 +147,7 @@ export function FormaDock({
             type="button"
             aria-expanded={tuning}
             aria-controls={tunerId}
-            aria-label={tuning ? 'Close Forma settings' : 'Tune Forma'}
+            aria-label={tuning ? 'Close Forma settings' : 'Forma settings'}
             onClick={onToggleTuning}
             className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           >
@@ -168,31 +165,21 @@ export function FormaDock({
 
       {footer}
 
-      {hasOptions && (
-        <details className="group">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-            <span className={LABEL}>Options</span>
-            <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>
-              +
-            </span>
-          </summary>
-          <div className="mt-2 flex flex-col gap-3">
-            {privacyLine && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{privacyLine}</p>}
-            {secondaryAction?.hint && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{secondaryAction.hint}</p>}
-            {exampleDetails}
-            {analysisSettings}
-          </div>
-        </details>
-      )}
-
       <div
         id={tunerId}
         hidden={!tuning}
         className="max-lg:fixed max-lg:inset-x-3 max-lg:bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+9rem)] max-lg:z-50"
       >
         {tuning && (
-          <div className="housing overflow-y-auto rounded-2xl p-3 max-lg:max-h-[min(50vh,calc(100dvh-12rem))] lg:rounded-none lg:bg-transparent lg:p-0 lg:pt-2 lg:shadow-none">
+          <div className="housing flex flex-col gap-3 overflow-y-auto rounded-2xl p-3 max-lg:max-h-[min(50vh,calc(100dvh-12rem))] lg:rounded-none lg:bg-transparent lg:p-0 lg:pt-2 lg:shadow-none">
             <FormaTuner persona={persona} onChange={onPersona} sport={sport} />
+            {(privacyLine || secondaryAction?.hint || analysisSettings) && (
+              <div className="flex flex-col gap-3 border-t border-dashed border-border pt-3">
+                {privacyLine && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{privacyLine}</p>}
+                {secondaryAction?.hint && <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{secondaryAction.hint}</p>}
+                {analysisSettings}
+              </div>
+            )}
           </div>
         )}
       </div>

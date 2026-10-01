@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { StrideLab } from '@/components/stride-lab/stride-lab'
+import { BRIEF_COOKIE, parseRememberedBrief } from '@/lib/fitting/remembered-brief'
 import { readMember, viewOf } from '@/lib/member/cookie'
 import { PERSONA_COOKIE, parsePersona } from '@/lib/persona'
 
@@ -8,7 +9,11 @@ export default async function Page() {
   const member = viewOf(await readMember())
   return (
     <div id="fitting">
-      <StrideLab initialPersona={parsePersona(store.get(PERSONA_COOKIE)?.value)} initialMember={member} />
+      <StrideLab
+        initialPersona={parsePersona(store.get(PERSONA_COOKIE)?.value)}
+        initialMember={member}
+        initialBrief={parseRememberedBrief(store.get(BRIEF_COOKIE)?.value)}
+      />
     </div>
   )
 }
