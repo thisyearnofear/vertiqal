@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { briefLine, type MovementBrief, type ShopperPrefs } from '@/lib/agent/brief'
 import { DEPTHS, addedLayers, type Depth } from '@/lib/agent/depth'
@@ -15,6 +15,7 @@ import { DecisionPanel } from './decision-panel'
 import { closingLineOf, outputsOf, type AgentOutputs, type ShoePick } from './outputs'
 import { usePassport } from './passport-card'
 import { Shortlist } from './shortlist'
+import { trackStep } from '@/lib/funnel'
 import type { GearAgent } from './use-gear-agent'
 
 function passportFrom(brief: MovementBrief, prefs: ShopperPrefs, outputs: AgentOutputs): Passport {
@@ -37,6 +38,40 @@ function passportFrom(brief: MovementBrief, prefs: ShopperPrefs, outputs: AgentO
 
 const LINK =
   'rounded-sm px-1 underline decoration-dotted underline-offset-4 phosphor hover:bg-stage-foreground hover:text-stage focus-visible:bg-stage-foreground focus-visible:text-stage focus-visible:outline-none'
+
+const FEEDBACK_REASONS = ['Wrong type of shoe', 'Over budget', "Don't trust the sizing", 'Already tried these', 'Something else']
+
+/** One-tap quality signal on the shortlist; sent once, then replaced with a thanks line. */
+function ShortlistFeedback({ sport, depth }: { sport: Sport; depth: Depth }) {
+  const [declined, setDeclined] = useState(false)
+  const [done, setDone] = useState(false)
+
+  const send = (verdict: 'yes' | 'no', reason?: string) => {
+    if (done) return
+    setDone(true)
+    trackStep('shortlist_feedback', reason ? { sport, depth, verdict, reason } : { sport, depth, verdict })
+  }
+
+  if (done) return <p className="text-base uppercase leading-snug opacity-60">{'// Thanks — that helps Forma get better.'}</p>
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-lg leading-none">
+      <span className="opacity-60">{'DOES THIS SHORTLIST LOOK RIGHT?'}</span>
+      <button type="button" onClick={() => send('yes')} className={LINK}>
+        {'[ LOOKS RIGHT ]'}
+      </button>
+      <button type="button" onClick={() => setDeclined(true)} className={LINK}>
+        {'[ NOT REALLY ]'}
+      </button>
+      {declined &&
+        FEEDBACK_REASONS.map((reason) => (
+          <button key={reason} type="button" onClick={() => send('no', reason)} className={LINK}>
+            {`[ ${reason.toUpperCase()} ]`}
+          </button>
+        ))}
+    </div>
+  )
+}
 
 interface AgentPanelProps {
   agent: GearAgent
@@ -149,7 +184,9 @@ export function AgentPanel({
               }}
             />
             {!busy && (
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-dashed border-stage-foreground/30 pt-4 text-lg leading-none">
+              <div className="flex flex-col gap-4 border-t border-dashed border-stage-foreground/30 pt-4">
+                <ShortlistFeedback key={messages[0]?.id} sport={sport} depth={ranDepth} />
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-lg leading-none">
                 <span className="opacity-60">{'NOT QUITE?'}</span>
                 <button type="button" onClick={() => onBriefField('budget')} className={LINK}>
                   {'[ ADJUST BUDGET ]'}
@@ -170,6 +207,7 @@ export function AgentPanel({
                     {'[ LOOK HARDER ]'}
                   </button>
                 )}
+              </div>
               </div>
             )}
           </>

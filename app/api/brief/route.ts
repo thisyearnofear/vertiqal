@@ -2,6 +2,7 @@ import { Output, generateText } from 'ai'
 import { z } from 'zod'
 import { INTAKE_OPTIONS } from '@/lib/agent/fitting-notes'
 import { briefParseSchema } from '@/lib/fitting/brief-parse'
+import { logCost } from '@/lib/cost-log'
 
 export const maxDuration = 30
 
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: 'Bad request' }, { status: 400 })
   const { kind, sport } = parsed.data
 
+  const started = Date.now()
   try {
     if (kind === 'text') {
       const { output } = await generateText({
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
         output: Output.object({ schema: briefParseSchema(sport) }),
         abortSignal: AbortSignal.timeout(20_000),
       })
+      logCost('paid_call', { route: 'brief', ok: true, ms: Date.now() - started, kind, sport })
       return Response.json(output)
     }
 
@@ -60,8 +63,10 @@ export async function POST(request: Request) {
       output: Output.object({ schema: surfaceSchema(sport) }),
       abortSignal: AbortSignal.timeout(20_000),
     })
+    logCost('paid_call', { route: 'brief', ok: true, ms: Date.now() - started, kind, sport })
     return Response.json(output)
   } catch (error) {
+    logCost('paid_call', { route: 'brief', ok: false, ms: Date.now() - started, kind, sport })
     return Response.json({ error: error instanceof Error ? error.message : 'Brief reading failed' }, { status: 502 })
   }
 }

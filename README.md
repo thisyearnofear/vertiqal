@@ -30,9 +30,13 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 | Tavily | Live retailer, research, community and athlete search. |
 | Solari | Stealth browser with UK residential egress for size and stock checks, with screenshot and session replay receipts. |
 | Browser Use | User-approved basket availability checks (agent tool). |
-| Vercel Analytics | Funnel events only — `sample_started`, `film_started`, `clip_uploaded`, `measurements_locked`, `shopping_started`, `pick_chosen`, `buy_clicked`, `whatsapp_sent` — carrying sport/retailer flags, no PII. |
+| Vercel Analytics | Funnel events only — `sample_started`, `film_started`, `clip_uploaded`, `measurements_locked`, `shopping_started`, `pick_chosen`, `buy_clicked`, `whatsapp_sent`, `shortlist_feedback`, `limit_hit` — carrying sport/retailer flags, no PII. |
 | Wassist | WhatsApp handoff (Bring Your Own Agent), reply webhook and the conversation transcript that serves as shopper memory. |
 | Next.js 16 + AI SDK | App, route handlers, tool-calling agent. |
+
+## Monetisation and costs
+
+There is no revenue path yet; every fitting is free and costs money in model, search and browser calls. The plan — free-stage cost controls first, then affiliate commission on Buy, then B2B fit data once measurement accuracy is validated — lives in [docs/monetisation.md](docs/monetisation.md).
 
 ## Run locally
 

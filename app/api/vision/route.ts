@@ -1,6 +1,7 @@
 import { Output, generateText } from 'ai'
 import { z } from 'zod'
 import { visionFindingSchema } from '@/lib/agent/fitting-notes'
+import { logCost } from '@/lib/cost-log'
 
 export const maxDuration = 60
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: 'Send 1–3 JPEG, PNG or WebP images as data URLs' }, { status: 400 })
   const { kind, sport, images, measurements } = parsed.data
 
+  const started = Date.now()
   try {
     const { output } = await generateText({
       model: 'spacexai/grok-4.7',
@@ -48,8 +50,10 @@ export async function POST(request: Request) {
       output: Output.object({ schema: visionFindingSchema }),
       abortSignal: AbortSignal.timeout(50_000),
     })
+    logCost('paid_call', { route: 'vision', ok: true, ms: Date.now() - started, kind, sport, images: images.length })
     return Response.json(output)
   } catch (error) {
+    logCost('paid_call', { route: 'vision', ok: false, ms: Date.now() - started, kind, sport, images: images.length })
     return Response.json({ error: error instanceof Error ? error.message : 'Vision analysis failed' }, { status: 502 })
   }
 }

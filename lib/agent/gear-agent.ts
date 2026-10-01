@@ -1,5 +1,5 @@
 import 'server-only'
-import { ToolLoopAgent, tool, type InferAgentUIMessage, type ModelMessage } from 'ai'
+import { ToolLoopAgent, stepCountIs, tool, type InferAgentUIMessage, type ModelMessage } from 'ai'
 import { z } from 'zod'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'
@@ -71,6 +71,8 @@ function promptTextOf(messages: ModelMessage[]) {
 export const gearAgent = new ToolLoopAgent({
   model: 'spacexai/grok-4.7',
   instructions: INSTRUCTIONS,
+  // Deepest legit run is ~8 steps (research → profile → 2 searches → community + athletes → recommend → final text).
+  stopWhen: stepCountIs(10),
   tools: {
     checkEvidence: tool({
       description:

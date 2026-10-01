@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import useSWR from 'swr'
 import type { StockCheck as StockCheckData } from '@/lib/agent/solari'
 import type { StockTarget } from '@/lib/fitting/stock'
+import { trackStep } from '@/lib/funnel'
 
 export type { StockCheckData }
 
@@ -26,6 +27,7 @@ async function postCheck([url, productName, productUrl, size, stockToken, attemp
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ productName, productUrl, size, stockToken, fresh: attempt > 0 }),
   })
+  if (response.status === 429) trackStep('limit_hit', { route: 'stock-check' })
   const body = await response.json()
   if (!response.ok) throw new Error(body.error ?? 'Stock check failed')
   return body as StockCheckData

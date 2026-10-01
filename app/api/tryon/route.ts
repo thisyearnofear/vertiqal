@@ -1,5 +1,6 @@
 import { generateImage } from 'ai'
 import { z } from 'zod'
+import { logCost } from '@/lib/cost-log'
 
 export const maxDuration = 60
 
@@ -27,13 +28,16 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: 'Send one JPEG, PNG or WebP frame and a shoe name' }, { status: 400 })
 
   const { image, shoe, sport } = parsed.data
+  const started = Date.now()
   try {
     const { image: result } = await generateImage({
       model: TRYON_MODEL,
       prompt: { images: [image.slice(image.indexOf(',') + 1)], text: promptFor(shoe, sport) },
     })
+    logCost('paid_call', { route: 'tryon', ok: true, ms: Date.now() - started, sport })
     return Response.json({ image: `data:${result.mediaType};base64,${result.base64}`, model: TRYON_MODEL })
   } catch (error) {
+    logCost('paid_call', { route: 'tryon', ok: false, ms: Date.now() - started, sport })
     const message = error instanceof Error ? error.message : 'Image generation failed'
     return Response.json({ error: message.slice(0, 200) }, { status: 502 })
   }
