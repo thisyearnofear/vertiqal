@@ -10,6 +10,8 @@ export type FunnelStep =
   | 'pick_chosen'
   | 'buy_clicked'
   | 'whatsapp_sent'
+  | 'shortlist_feedback'
+  | 'limit_hit'
 
 export function trackStep(step: FunnelStep, props: Record<string, string | number | boolean> = {}) {
   track(step, props)

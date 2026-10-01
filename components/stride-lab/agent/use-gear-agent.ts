@@ -37,7 +37,7 @@ export function useGearAgent() {
       setSentBrief(brief)
       setPrefs(nextPrefs)
       setMessages([])
-      void sendMessage({ text: briefToPrompt(brief, nextPrefs) })
+      void sendMessage({ text: briefToPrompt(brief, nextPrefs) }, { body: { brief, prefs: nextPrefs } })
     },
     [sendMessage, setMessages],
   )

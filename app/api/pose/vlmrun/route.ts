@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { KEYPOINT_NAMES, type KeypointName, type Pose } from '@/lib/pose/types'
+import { logCost } from '@/lib/cost-log'
 
 export const maxDuration = 60
 
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Expected a JPEG data URL under 600 KB' }, { status: 400 })
 
+  const started = Date.now()
   const upstream = await fetch(ENDPOINT, {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
@@ -93,9 +95,13 @@ export async function POST(request: Request) {
     signal: AbortSignal.timeout(55_000),
   }).catch((error: Error) => error)
 
-  if (upstream instanceof Error) return Response.json({ error: upstream.message }, { status: 504 })
+  if (upstream instanceof Error) {
+    logCost('paid_call', { route: 'pose-vlmrun', ok: false, ms: Date.now() - started })
+    return Response.json({ error: upstream.message }, { status: 504 })
+  }
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '')
+    logCost('paid_call', { route: 'pose-vlmrun', ok: false, ms: Date.now() - started, upstream: upstream.status })
     return Response.json({ error: `VLM Run ${upstream.status}: ${detail.slice(0, 200)}` }, { status: 502 })
   }
 
@@ -113,7 +119,10 @@ export async function POST(request: Request) {
     })
     .pipe(responseSchema)
     .safeParse(content)
-  if (!json.success) return Response.json({ error: 'VLM Run returned no usable keypoints' }, { status: 502 })
+  if (!json.success) {
+    logCost('paid_call', { route: 'pose-vlmrun', ok: false, ms: Date.now() - started })
+    return Response.json({ error: 'VLM Run returned no usable keypoints' }, { status: 502 })
+  }
 
   const pose: Pose = {}
   for (const { label, xy, confidence } of json.data.keypoints) {
@@ -122,5 +131,6 @@ export async function POST(request: Request) {
     if (!name || !Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) continue
     pose[name] = { x, y, score: confidence ?? 0.9 }
   }
+  logCost('paid_call', { route: 'pose-vlmrun', ok: true, ms: Date.now() - started, keypoints: Object.keys(pose).length })
   return Response.json({ pose })
 }
