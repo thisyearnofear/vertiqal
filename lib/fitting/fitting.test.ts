@@ -28,6 +28,7 @@ import { UK_SIZES, answeredCount, feetInches, isAnswered, nextQuestion, previous
 import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
 import { draftFromRemembered, parseRememberedBrief, rememberBrief, type RememberedBrief } from './remembered-brief.ts'
 import { applyParsedBrief, briefParseSchema } from './brief-parse.ts'
+import { SAMPLE_BRIEFS, agentRequestSchema, briefToPrompt } from '../agent/brief.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
@@ -753,6 +754,30 @@ test('brief parse: schema rejects out-of-range budget and unlisted options', () 
   assert.equal(schema.safeParse({ ...base, budgetPounds: 5000 }).success, false)
   assert.equal(schema.safeParse({ ...base, goal: 'Easy miles' }).success, false, 'running goal is not a climbing goal')
   assert.equal(schema.safeParse({ ...base, goal: 'Hard bouldering', surface: 'Indoor walls' }).success, true)
+})
+
+test('agent request schema accepts a real brief and prefs, rejects bad input', () => {
+  const prefs = { size: 'UK 9', budget: '£160', heightCm: 178, voice: 'coach', depth: 'deep', notes: ['Goal: easy miles'] }
+  const parsed = agentRequestSchema.safeParse({ brief: SAMPLE_BRIEFS.running, prefs })
+  assert.equal(parsed.success, true)
+  if (parsed.success) {
+    assert.match(briefToPrompt(parsed.data.brief, parsed.data.prefs), /^Depth: deep$/m)
+  }
+
+  const ok = { brief: SAMPLE_BRIEFS.climbing, prefs }
+  const reject = (patch: (body: Record<string, unknown>) => void, why: string) => {
+    const body = JSON.parse(JSON.stringify(ok))
+    patch(body)
+    assert.equal(agentRequestSchema.safeParse(body).success, false, why)
+  }
+  reject((b) => { (b.brief as { events: number }).events = 2 }, 'events below MIN_EVENTS must be rejected')
+  reject((b) => { (b.brief as { events: number }).events = 501 }, 'events above the cap must be rejected')
+  reject((b) => { (b.prefs as { depth: string }).depth = 'max' }, 'unknown depth must be rejected')
+  reject((b) => { (b.prefs as { budget: string }).budget = 'lots' }, 'non-£ budget must be rejected')
+  reject((b) => { (b.prefs as { heightCm: number }).heightCm = 90 }, 'height below range must be rejected')
+  reject((b) => { (b.prefs as { notes: string[] }).notes = Array(13).fill('note') }, 'more than 12 notes must be rejected')
+  reject((b) => { (b.prefs as { notes: string[] }).notes = ['x'.repeat(1001)] }, 'oversized note must be rejected')
+  reject((b) => { (b.brief as { metrics: unknown[] }).metrics = [] }, 'empty metrics must be rejected')
 })
 
 test('brief flow: optional answers, back navigation and height helpers', () => {

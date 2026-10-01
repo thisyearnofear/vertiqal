@@ -1,5 +1,8 @@
+import { z } from 'zod'
 import type { Readout, Sport } from '@/lib/metrics/readout'
-import { VOICE_PROFILE, type Voice } from '../persona.ts'
+import { MIN_EVENTS } from '../metrics/readout.ts'
+import { VOICES, VOICE_PROFILE, type Voice } from '../persona.ts'
+import { HEIGHT_MAX_CM, HEIGHT_MIN_CM } from '../fitting/prefs.ts'
 import type { Depth } from './depth'
 
 export interface BriefMetric {
@@ -24,6 +27,35 @@ export interface ShopperPrefs {
   /** Intake answers and Grok vision findings from the fitting notes panel. */
   notes?: string[]
 }
+
+/** What /api/agent accepts: the server builds the prompt, so the brief and prefs are validated, bounded and free of chat history. */
+export const agentRequestSchema = z.object({
+  brief: z.object({
+    sport: z.enum(['running', 'climbing']),
+    events: z.number().int().min(MIN_EVENTS).max(500),
+    metrics: z
+      .array(
+        z.object({
+          label: z.string().max(40),
+          value: z.number().finite().nullable(),
+          unit: z.string().max(12),
+        }),
+      )
+      .min(1)
+      .max(8),
+    signals: z.array(z.string().max(200)).max(8),
+  }),
+  prefs: z.object({
+    size: z.string().min(1).max(20),
+    budget: z.string().regex(/^£\d{1,4}$/),
+    heightCm: z.number().int().min(HEIGHT_MIN_CM).max(HEIGHT_MAX_CM),
+    voice: z.enum(VOICES),
+    depth: z.enum(['quick', 'considered', 'deep']),
+    notes: z.array(z.string().max(1000)).max(12).optional(),
+  }),
+})
+
+export type AgentRequest = z.infer<typeof agentRequestSchema>
 
 export function briefFromReadout(readout: Readout): MovementBrief {
   return {
