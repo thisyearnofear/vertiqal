@@ -180,6 +180,7 @@ export function AgentPanel({
             key={choice.url}
             pick={choice}
             picks={outputs.picks}
+            brief={sentBrief}
             sport={sport}
             size={confirmedSize}
             onSizeCommit={onSizeCommit}

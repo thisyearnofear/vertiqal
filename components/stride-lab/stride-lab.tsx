@@ -8,6 +8,7 @@ import { EMPTY_NOTES, type FittingNotesState } from '@/lib/agent/fitting-notes'
 import { briefFromReadout, type ShopperPrefs } from '@/lib/agent/brief'
 import { nextDepth, type Depth } from '@/lib/agent/depth'
 import { cueFor } from '@/lib/coach'
+import { trackStep } from '@/lib/funnel'
 import { memberContext, type MemberView } from '@/lib/member/schema'
 import {
   FALLBACK_HEIGHT_CM,
@@ -289,6 +290,7 @@ export function StrideLab({
     releaseClip()
     restartAnalysis(sport, entered)
     live.start(CAPTURE_SECONDS[sport])
+    trackStep('film_started', { sport })
   }
 
   const lastCue = useRef<{ id: string; at: number } | null>(null)
@@ -314,11 +316,13 @@ export function StrideLab({
       })
       setPlaying(true)
       restartAnalysis(sport, currentAnalysisHeight)
+      trackStep('clip_uploaded', { sport })
     },
     [sport, currentAnalysisHeight, restartAnalysis, resetSession],
   )
 
   const showExample = () => {
+    trackStep('sample_started', { sport })
     resetSession('example')
     releaseClip()
     restartAnalysis(sport, currentAnalysisHeight)
@@ -345,9 +349,17 @@ export function StrideLab({
   }
 
   const shopping = Boolean(agent.sentBrief)
+  const trackShopping = useEffectEvent(() => trackStep('shopping_started', { sport }))
   useEffect(() => {
-    if (shopping) requestAnimationFrame(() => scrollToSection('forma-procurement'))
+    if (!shopping) return
+    trackShopping()
+    requestAnimationFrame(() => scrollToSection('forma-procurement'))
   }, [shopping])
+
+  const choose = (pick: ShoePick | null) => {
+    if (pick) trackStep('pick_chosen', { sport, retailer: pick.retailer })
+    setChoice(pick)
+  }
 
   const changeSport = (next: Sport) => {
     if (next === sport) return
@@ -454,6 +466,7 @@ export function StrideLab({
   const lockMeasurement = useEffectEvent((final: Readout) => {
     const line = lockedLine(persona.voice, final.metrics)
     setLockLine(line)
+    trackStep('measurements_locked', { sport, source: clip ? 'clip' : 'camera' })
     if (line) void speak(line)
     setLockedReadout(final)
     if (!clip || recorderRef.current) return
@@ -1124,7 +1137,7 @@ export function StrideLab({
               sport={sport}
               member={member}
               choice={choice}
-              onChoose={setChoice}
+              onChoose={choose}
               onPinBaseline={measuredReady ? () => setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today' }) : undefined}
               baselinePinned={Boolean(baseline)}
               deeper={deeper}
