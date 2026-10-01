@@ -5,6 +5,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { QRCodeSVG } from 'qrcode.react'
 import { ArrowUpRight, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { trackStep } from '@/lib/funnel'
 import type { MemberView } from '@/lib/member/schema'
 import type { Fitting, HandoffResult } from '@/lib/wassist/fitting'
 import { MEMBER_KEY } from '../use-member'
@@ -43,6 +44,7 @@ export function WhatsAppHandoff({ fitting, member }: { fitting: Fitting; member:
     dedupingInterval: POLL_MS - 500,
     onSuccess: (result) => {
       if (result.status !== 'sent') return
+      trackStep('whatsapp_sent', { linked: target === LINKED })
       setSent(result)
       void mutate(MEMBER_KEY)
     },
