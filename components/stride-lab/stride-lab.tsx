@@ -21,6 +21,7 @@ import {
 } from '@/lib/fitting/prefs'
 import { REQUIRED_QUESTIONS, answeredCount, nextQuestion, previousQuestion, questionPrompt, type BriefQuestion } from '@/lib/fitting/brief-flow'
 import { draftFromRemembered, rememberBrief, type RememberedBrief } from '@/lib/fitting/remembered-brief'
+import { applyParsedBrief } from '@/lib/fitting/brief-parse'
 import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
 import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
@@ -69,7 +70,7 @@ const ANNOUNCED_MOODS = new Set<Mood>(['pleased', 'asking', 'working', 'sad'])
 const EMPTY_FRAME: FrameQuality = { person: false, hips: false, feet: false }
 const LABEL = 'text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved'
 const PRIVACY_LINE =
-  'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them. Your confirmed brief answers — never niggles, never video — are remembered in a cookie on this browser for next time.'
+  'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them. Your confirmed brief answers — never niggles, never video — are remembered in a cookie on this browser for next time. Typed sentences and the clip surface guess go to Grok only when you press those buttons.'
 
 const scrollToSection = (id: string) => {
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -137,6 +138,13 @@ export function StrideLab({
   const [attempted, setAttempted] = useState(false)
   const [activeQuestion, setActiveQuestion] = useState<BriefQuestion | null>(null)
   const [skipped, setSkipped] = useState<ReadonlySet<BriefQuestion>>(new Set())
+  const [describeState, setDescribeState] = useState<{ pending: boolean; error: string | null }>({ pending: false, error: null })
+  const [filledNote, setFilledNote] = useState<string | null>(null)
+  const [surfaceGuess, setSurfaceGuess] = useState<{ pending: boolean; suggestion: string | null; message: string | null }>({
+    pending: false,
+    suggestion: null,
+    message: null,
+  })
   const agent = useGearAgent()
   const speak = useVoice(voiceOn)
   const { member, forget } = useMember(initialMember)
@@ -261,6 +269,9 @@ export function StrideLab({
       setCaption(null)
       clearValidationCapture()
       setCaptureSource('unclassified')
+      setDescribeState({ pending: false, error: null })
+      setFilledNote(null)
+      setSurfaceGuess({ pending: false, suggestion: null, message: null })
     },
     [agent, live, clearValidationCapture, remembered, sport],
   )
@@ -656,6 +667,60 @@ export function StrideLab({
     setActiveQuestion(null)
   }
 
+  const submitDescribe = async (text: string) => {
+    setDescribeState({ pending: true, error: null })
+    try {
+      const res = await fetch('/api/brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'text', sport, text }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data) throw new Error(data?.error ?? 'Forma could not read that')
+      const applied = applyParsedBrief(prefDraft, notes, data)
+      if (applied.filled.length > 0 || applied.notes.current !== notes.current) {
+        updateDraft(applied.draft)
+        updateNotes(applied.notes)
+        setActiveQuestion(null)
+        const note =
+          applied.filled.length > 0
+            ? `Filled ${applied.filled.join(', ')} from what you wrote — tap any to change.`
+            : 'Noted your current shoe — tap any field to change.'
+        setFilledNote(note)
+        window.setTimeout(() => setFilledNote((n) => (n === note ? null : n)), 9000)
+      } else {
+        setActiveQuestion(null)
+        setFilledNote("Couldn't find anything to fill — try naming your size or budget.")
+        window.setTimeout(() => setFilledNote(null), 9000)
+      }
+      setDescribeState({ pending: false, error: null })
+    } catch (error) {
+      setDescribeState({ pending: false, error: error instanceof Error ? error.message : 'Forma could not read that' })
+    }
+  }
+
+  const guessSurface = async () => {
+    const frame = keyframes[0]
+    if (!frame || surfaceGuess.pending || example) return
+    setSurfaceGuess({ pending: true, suggestion: null, message: null })
+    try {
+      const res = await fetch('/api/brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'surface', sport, image: frame.dataUrl }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data) throw new Error(data?.error ?? 'Could not read the still')
+      setSurfaceGuess({
+        pending: false,
+        suggestion: data.surface ?? null,
+        message: data.surface ? null : "Couldn't tell from the clip.",
+      })
+    } catch (error) {
+      setSurfaceGuess({ pending: false, suggestion: null, message: error instanceof Error ? error.message : 'Could not read the still' })
+    }
+  }
+
   const personalFilm = () => {
     if (example) setExample(null)
     if (enteredHeight === null) {
@@ -806,6 +871,7 @@ export function StrideLab({
               onValidationFrame={onValidationFrame}
               progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
               lockedMetrics={lockedMetrics}
+              provisional={provisional}
               dense={shopping}
               idleAction={
                 <button
@@ -970,6 +1036,13 @@ export function StrideLab({
                       onSkip={() => skipQuestion(question)}
                       onBack={previousQuestion(question) ? () => setActiveQuestion(previousQuestion(question)) : null}
                       onClose={() => setActiveQuestion(null)}
+                      onAsk={askQuestion}
+                      describe={{ pending: describeState.pending, error: describeState.error, onSubmit: submitDescribe }}
+                      surfaceGuess={
+                        keyframes.length > 0
+                          ? { pending: surfaceGuess.pending, suggestion: surfaceGuess.suggestion, message: surfaceGuess.message, onGuess: guessSurface }
+                          : undefined
+                      }
                     />
                   ),
                 }
@@ -1009,6 +1082,11 @@ export function StrideLab({
                     ) : undefined
                   }
                 />
+                {filledNote && (
+                  <p role="status" className="text-xs leading-relaxed text-muted-foreground">
+                    {filledNote}
+                  </p>
+                )}
                 <details className="group">
                   <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                     Show all fields

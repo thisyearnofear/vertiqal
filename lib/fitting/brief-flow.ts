@@ -2,7 +2,7 @@ import type { FittingNotesState } from '../agent/fitting-notes'
 import type { Sport } from '../metrics/readout'
 import { FALLBACK_HEIGHT_CM, HEIGHT_MAX_CM, HEIGHT_MIN_CM, parseBudgetPounds, parseHeightCm, type PrefDraft } from './prefs.ts'
 
-export type BriefQuestion = 'height' | 'goal' | 'surface' | 'size' | 'budget' | 'width' | 'niggles'
+export type BriefQuestion = 'height' | 'goal' | 'surface' | 'size' | 'budget' | 'width' | 'niggles' | 'describe'
 
 /** Asked in this order; height first because it calibrates every distance. */
 export const REQUIRED_QUESTIONS = ['height', 'goal', 'surface', 'size', 'budget'] as const satisfies readonly BriefQuestion[]
@@ -27,6 +27,8 @@ export function isAnswered(question: BriefQuestion, draft: PrefDraft, notes: Fit
       return Boolean(notes.width)
     case 'niggles':
       return Boolean(notes.niggles.trim())
+    case 'describe':
+      return false
   }
 }
 
@@ -70,6 +72,10 @@ export function questionPrompt(question: BriefQuestion, sport: Sport): string {
       return 'How wide are your feet?'
     case 'niggles':
       return 'Anything that hurts or rubs?'
+    case 'describe':
+      return sport === 'running'
+        ? 'Tell me in a sentence — what do you run in now, what size, what budget?'
+        : 'Tell me in a sentence — what do you climb in now, what size, what budget?'
   }
 }
 
