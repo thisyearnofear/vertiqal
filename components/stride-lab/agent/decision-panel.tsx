@@ -14,7 +14,8 @@ import type { Fitting } from '@/lib/wassist/fitting'
 import { FitReceipt } from './fit-receipt'
 import type { ShoePick } from './outputs'
 import { PassportCard } from './passport-card'
-import { StockProof, stockLine, useStockCheck } from './stock-check'
+import { BrowserPeek, StockProof, stockLine, useStockCheck } from './stock-check'
+import type { StockPhase } from '@/lib/fitting/narration'
 import { WhatsAppHandoff } from './whatsapp-handoff'
 
 const LINK = 'w-fit text-lg leading-none underline decoration-dotted underline-offset-4 opacity-70 hover:opacity-100 hover:text-primary'
@@ -36,8 +37,13 @@ interface DecisionPanelProps {
   baselinePinned: boolean
   /** Offer WhatsApp, baseline and passport (only once a size check has finished). */
   takeAway: boolean
-  /** Reports whether a size check has finished, so the rest of the page can reveal what comes next. */
-  onSettled: (settled: boolean) => void
+  /** Reports where the size check is, so Forma can narrate it and the page can reveal what comes next. */
+  onStock: (stock: { phase: StockPhase; price: string | null }) => void
+  /** Forma may move on to the next pick by itself once (when this one is sold out in the size). */
+  canFallBack: boolean
+  onAutoAdvance: (next: ShoePick) => void
+  /** The shopper opened the retailer. */
+  onBought: () => void
 }
 
 export function DecisionPanel({
@@ -54,10 +60,16 @@ export function DecisionPanel({
   onPinBaseline,
   baselinePinned,
   takeAway,
-  onSettled,
+  onStock,
+  canFallBack,
+  onAutoAdvance,
+  onBought,
 }: DecisionPanelProps) {
   const [draft, setDraft] = useState(size)
-  const [submitted, setSubmitted] = useState<string | null>(null)
+  // Running: the street size is already confirmed in the brief, so the check starts as soon as the shoe
+  // is picked. Climbing shoes are sized down from street size, so the shopper enters the shop's size.
+  const autoCheck = sport === 'running' && Boolean(size.trim())
+  const [submitted, setSubmitted] = useState<string | null>(() => (autoCheck ? size.trim() : null))
   const [attempt, setAttempt] = useState(0)
   const stock = useStockCheck(stockTargetFor(pick, submitted), attempt)
   const mismatched = draftDiffers(submitted, draft)
@@ -71,13 +83,37 @@ export function DecisionPanel({
   const price = data && submitted === draft.trim() ? data.price || pick.price : pick.price
   const settled = Boolean(submitted && !checking && (checkedData || stock.error))
   const resultRef = useRef<HTMLDivElement>(null)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [startedAt, setStartedAt] = useState<number | null>(() => (autoCheck ? Date.now() : null))
   const [now, setNow] = useState(() => Date.now())
+  const phase: StockPhase = !submitted
+    ? 'idle'
+    : checking
+      ? 'checking'
+      : stock.error
+        ? 'error'
+        : !data
+          ? 'idle'
+          : available
+            ? 'in_stock'
+            : unavailable
+              ? 'unavailable'
+              : 'unsure'
+  const verdictPrice = data?.price || null
 
   useEffect(() => {
-    onSettled(settled)
+    onStock({ phase, price: verdictPrice })
+  }, [phase, verdictPrice, onStock])
+
+  useEffect(() => {
     if (settled) resultRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [settled, onSettled])
+  }, [settled])
+
+  // Sold out in the confirmed size: Forma says so, then moves on to the next pick by itself, once.
+  useEffect(() => {
+    if (phase !== 'unavailable' || !canFallBack || !nextPick) return
+    const id = window.setTimeout(() => onAutoAdvance(nextPick), 2500)
+    return () => window.clearTimeout(id)
+  }, [phase, canFallBack, nextPick, onAutoAdvance])
 
   // A visible clock while the browser check runs; it takes tens of seconds and gives no partial progress.
   useEffect(() => {
@@ -117,6 +153,7 @@ export function DecisionPanel({
 
   const recordChoice = () => {
     trackStep('buy_clicked', { sport, retailer: pick.retailer, verified: available })
+    onBought()
     if (!member.linked || !snapshot) return
     void fetch('/api/member', {
       method: 'POST',
@@ -148,6 +185,17 @@ export function DecisionPanel({
           {'[ BACK TO SHORTLIST ]'}
         </button>
       </div>
+
+      <BrowserPeek
+        url={pick.url}
+        retailer={pick.retailer}
+        size={submitted}
+        checking={checking}
+        elapsed={elapsed}
+        data={checkedData}
+        error={submitted && !checking ? stock.error : undefined}
+        attempt={attempt}
+      />
 
       <FitReceipt brief={brief} />
 
@@ -227,6 +275,7 @@ export function DecisionPanel({
               href={pick.url}
               target="_blank"
               rel="noreferrer"
+              data-buy-link
               onClick={recordChoice}
               className={cn(buttonVariants({ size: 'lg', variant: unavailable ? 'outline' : 'default' }), 'h-11 px-5 text-base')}
             >
@@ -245,7 +294,15 @@ export function DecisionPanel({
       {takeAway && (
         <div className="flex flex-col gap-6 border-t border-dashed border-stage-foreground/30 pt-5">
           <p className="text-xl uppercase leading-none phosphor">{'> TAKE IT WITH YOU'}</p>
-          {choiceFitting && <WhatsAppHandoff fitting={choiceFitting} member={member} />}
+          {choiceFitting && (
+            <div id="forma-whatsapp" className="scroll-mt-24">
+              <WhatsAppHandoff fitting={choiceFitting} member={member} />
+            </div>
+          )}
+
+          <details name="forma-panels" className="text-lg leading-snug">
+            <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ More: fit passport · baseline for next time'}</summary>
+            <div className="mt-4 flex flex-col gap-6">
 
           {onPinBaseline && (
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -274,6 +331,8 @@ export function DecisionPanel({
             ) : draft.trim() ? (
               <p className="text-lg leading-snug opacity-70">{'Check this size to update your fit passport.'}</p>
             ) : null)}
+            </div>
+          </details>
         </div>
       )}
     </div>

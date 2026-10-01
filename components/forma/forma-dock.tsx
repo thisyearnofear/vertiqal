@@ -40,6 +40,8 @@ interface FormaDockProps {
   onToggleTuning: () => void
   onPersona: (persona: Persona) => void
   action: { label: string; onClick: () => void } | null
+  /** Results stages: Forma follows the shopper down the page on desktop too, as on mobile. */
+  floating?: boolean
 }
 
 function Pips({ done, total }: { done: number; total: number }) {
@@ -73,6 +75,7 @@ export function FormaDock({
   onToggleTuning,
   onPersona,
   action,
+  floating = false,
 }: FormaDockProps) {
   const tunerId = useId()
   const hintId = useId()
@@ -114,7 +117,13 @@ export function FormaDock({
       <div
         role="region"
         aria-label="Forma"
-        className="forma-bar flex flex-col gap-3 max-lg:fixed max-lg:inset-x-3 max-lg:bottom-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:z-40 max-lg:rounded-2xl max-lg:p-3 lg:border-t lg:border-dashed lg:border-border lg:pt-4"
+        data-floating={floating || undefined}
+        className={cn(
+          'forma-bar flex flex-col gap-3 max-lg:fixed max-lg:inset-x-3 max-lg:bottom-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:z-40 max-lg:rounded-2xl max-lg:p-3',
+          floating
+            ? 'lg:fixed lg:bottom-4 lg:left-1/2 lg:z-40 lg:w-[min(calc(100%-2rem),64rem)] lg:-translate-x-1/2 lg:rounded-2xl lg:p-3 lg:animate-in lg:fade-in lg:slide-in-from-bottom-2'
+            : 'lg:border-t lg:border-dashed lg:border-border lg:pt-4',
+        )}
       >
         <div className="flex items-center gap-3 lg:gap-4">
           <div className="screen flex size-11 shrink-0 items-center justify-center rounded-xl lg:size-14">
@@ -168,10 +177,18 @@ export function FormaDock({
       <div
         id={tunerId}
         hidden={!tuning}
-        className="max-lg:fixed max-lg:inset-x-3 max-lg:bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+9rem)] max-lg:z-50"
+        className={cn(
+          'max-lg:fixed max-lg:inset-x-3 max-lg:bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+9rem)] max-lg:z-50',
+          floating && 'lg:fixed lg:bottom-28 lg:left-1/2 lg:z-50 lg:w-[min(calc(100%-2rem),64rem)] lg:-translate-x-1/2',
+        )}
       >
         {tuning && (
-          <div className="housing flex flex-col gap-3 overflow-y-auto rounded-2xl p-3 max-lg:max-h-[min(50vh,calc(100dvh-12rem))] lg:rounded-none lg:bg-transparent lg:p-0 lg:pt-2 lg:shadow-none">
+          <div
+            className={cn(
+              'housing flex flex-col gap-3 overflow-y-auto rounded-2xl p-3 max-lg:max-h-[min(50vh,calc(100dvh-12rem))]',
+              floating ? 'lg:max-h-[min(60vh,calc(100dvh-10rem))]' : 'lg:rounded-none lg:bg-transparent lg:p-0 lg:pt-2 lg:shadow-none',
+            )}
+          >
             <FormaTuner persona={persona} onChange={onPersona} sport={sport} />
             {(privacyLine || secondaryAction?.hint || analysisSettings) && (
               <div className="flex flex-col gap-3 border-t border-dashed border-border pt-3">

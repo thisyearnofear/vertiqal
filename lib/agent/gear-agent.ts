@@ -45,7 +45,7 @@ Keep any text between tool calls to one short sentence, in the requested voice.
 - searchProducts: specific queries for current models that fit the profile, favouring UK retailers with product pages (not review roundups).
 - checkCommunity (considered and deep): name the 3–5 strongest candidates. Drop or demote a candidate if riders consistently report a problem relevant to this shopper.
 - checkAthletes (deep): the same top 3 candidates. Call it in the same step as checkCommunity when both are offered.
-- recommendProducts: exactly 3 picks, each a different model, best fit first. Only use URLs from searchProducts results; never invent or edit URLs. Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
+- recommendProducts: exactly 3 picks, each a different model (a GORE-TEX, wide or gender version is the same model), best fit first. Only use product-page URLs from searchProducts results, never review or forum links from other tools; never invent or edit URLs. Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
 - Finish with one short sentence, in the requested voice, inviting the shopper to choose one. Forma checks their size is in stock once they choose, so never send them off to a retailer yourself.
 
 If the brief mentions a previous fitting or things they told Forma on WhatsApp, treat this as a returning customer: build on what they chose last time and what they said since (e.g. if they reported a problem with that shoe, steer away from it and say why).
@@ -62,6 +62,19 @@ type ToolName =
   | 'checkAthletes'
   | 'recommendProducts'
 
+/** Every link the product search returned so far in this run. */
+function productUrlsIn(messages: ModelMessage[]) {
+  return messages.flatMap((m) =>
+    m.role === 'tool'
+      ? m.content.flatMap((p) => {
+          if (p.type !== 'tool-result' || p.toolName !== 'searchProducts' || p.output.type !== 'json') return []
+          const results = (p.output.value as { results?: { url?: unknown }[] } | null)?.results ?? []
+          return results.flatMap((r) => (typeof r.url === 'string' ? [r.url] : []))
+        })
+      : [],
+  )
+}
+
 function promptTextOf(messages: ModelMessage[]) {
   const first = messages.find((m) => m.role === 'user')
   if (!first) return ''
@@ -73,7 +86,8 @@ export const gearAgent = new ToolLoopAgent({
   model: 'spacexai/grok-4.7',
   instructions: INSTRUCTIONS,
   // Deepest legit run is ~8 steps (research → profile → 2 searches → community + athletes → recommend → final text).
-  stopWhen: stepCountIs(10),
+  // Room for one rejected shortlist plus one extra search and a corrected pick.
+  stopWhen: stepCountIs(12),
   tools: {
     checkEvidence: tool({
       description:
@@ -141,8 +155,8 @@ export const gearAgent = new ToolLoopAgent({
     recommendProducts: tool({
       description: 'Present exactly three recommended products to the shopper.',
       inputSchema: z.object({ picks: z.array(pick).length(3) }),
-      execute: async ({ picks }) => {
-        const problem = shortlistProblem(picks)
+      execute: async ({ picks }, { messages }) => {
+        const problem = shortlistProblem(picks, productUrlsIn(messages))
         if (problem) return { picks: [], error: problem }
         return { picks: picks.map((p) => ({ ...p, stockToken: issueStockToken({ productName: p.name, productUrl: p.url }) })) }
       },
@@ -176,7 +190,12 @@ export const gearAgent = new ToolLoopAgent({
             typeof (p.output.value as { error?: unknown } | null)?.error === 'string',
         ),
     )
-    if (rejectedShortlist && count('recommendProducts') < 2) return only('recommendProducts')
+    if (rejectedShortlist && count('recommendProducts') < 2) {
+      // Let Forma fetch the replacement it promises (one extra product search), then re-pick.
+      return count('searchProducts') <= DEPTHS[depth].searches
+        ? { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[], toolChoice: 'required' as const }
+        : only('recommendProducts')
+    }
     if (!count('recommendProducts')) {
       if (count('searchProducts') < DEPTHS[depth].searches) return only('searchProducts')
       const context: ToolName[] = []

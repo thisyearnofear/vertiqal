@@ -101,7 +101,7 @@
   }
   /* Forma's bar floats on small screens and sits flat inside the stage panel on large ones. */
   @media (width >= 64rem) {
-    .forma-bar {
+    .forma-bar:not([data-floating]) {
       background: none;
       box-shadow: none;
     }
