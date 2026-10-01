@@ -21,6 +21,7 @@ import {
   notesAfterReset,
   remeasurePlan,
   stageOf,
+  visibilityFor,
 } from './session.ts'
 import { EXAMPLE_FOOTAGE, EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleCompanion, exampleMetrics, nextStep } from './example.ts'
 import { settleStream } from './camera.ts'
@@ -35,7 +36,8 @@ import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHo
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
 import { guardedStockVerdict, inspectStockPage, type StockPageEvidence } from '../agent/stock-page.ts'
 import { frameQuality, usableKeypoint } from '../pose/framing.ts'
-import { GaitTracker, MIN_STRIKES_FOR_SIGNALS } from '../metrics/gait.ts'
+import { GaitTracker, MIN_STRIKES_FOR_SIGNALS, cadenceFromStrikes } from '../metrics/gait.ts'
+import { modelKey, shortlistProblem } from '../agent/picks.ts'
 import { ClimbTracker } from '../metrics/climb.ts'
 import { attractPose } from '../../components/stride-lab/attract-runner.ts'
 import type { Pose } from '../pose/types.ts'
@@ -161,8 +163,35 @@ test('next step follows the real fitting state without pretending the example is
   assert.match(nextStepFor({ ...base, stage: 'capture', capture: 'done', events: 2 }).detail, /Film again/)
   assert.deepEqual(nextStepFor({ ...base, stage: 'capture', capture: 'error' }).action, { kind: 'upload', label: 'Upload a clip' })
   assert.equal(nextStepFor({ ...base, stage: 'confirm', missingPrefs: 2 }).action?.kind, 'brief')
-  assert.equal(nextStepFor({ ...base, stage: 'research' }).action?.kind, 'results')
-  assert.equal(nextStepFor({ ...base, stage: 'decision' }).action?.label, 'Review stock check')
+  assert.equal(nextStepFor({ ...base, stage: 'research' }).action, null, 'the results panel owns actions once searching')
+  assert.equal(nextStepFor({ ...base, stage: 'choose' }).action, null)
+  assert.match(nextStepFor({ ...base, stage: 'decision' }).title, /size is in stock/)
+  assert.match(nextStepFor({ ...base, stage: 'decision', stockChecked: true }).title, /take it with you/)
+})
+
+test('visibility: each stage shows only what it needs', () => {
+  const unchecked = { stockChecked: false }
+  const invite = visibilityFor('invite', unchecked)
+  assert.equal(invite.denseStage, false)
+  assert.equal(invite.briefExtras, true)
+  assert.equal(invite.readout, false)
+  assert.equal(invite.takeAway, false)
+  for (const stage of ['capture', 'confirm'] as const) {
+    const v = visibilityFor(stage, unchecked)
+    assert.equal(v.readout, true, `${stage} shows the readout`)
+    assert.equal(v.validation, true)
+    assert.equal(v.briefExtras, true)
+  }
+  for (const stage of ['research', 'choose', 'decision'] as const) {
+    const v = visibilityFor(stage, unchecked)
+    assert.equal(v.denseStage, true, `${stage} shrinks the screen`)
+    assert.equal(v.briefExtras, false, `${stage} collapses the brief`)
+    assert.equal(v.readout, false)
+    assert.equal(v.validation, false)
+    assert.equal(v.takeAway, false, `${stage} hides take-away extras before a size check`)
+  }
+  assert.equal(visibilityFor('decision', { stockChecked: true }).takeAway, true)
+  assert.equal(visibilityFor('choose', { stockChecked: true }).takeAway, false, 'a stale check never leaks into choosing')
 })
 
 test('frame quality checks whether the person, hips and both feet are visible', () => {
@@ -578,6 +607,38 @@ test('gait tracker: a pose gap keeps past strikes but fabricates no contact', ()
     snap = tracker.update(t, attractPose(t, ATTRACT_OPTS), FRAME_W, FRAME_H)
   }
   assert.equal(snap.totalStrikes, before, 'no strike can be detected until ankle history refills')
+})
+
+test('shortlist guard: rejects the same model twice, accepts three different shoes', () => {
+  const p = (name: string, url: string) => ({ name, url })
+  assert.equal(modelKey("HOKA Speedgoat 6 Men's"), modelKey('Hoka Speedgoat 6'))
+  assert.notEqual(modelKey('Hoka Speedgoat 6'), modelKey('Hoka Speedgoat 5'), 'versions are different models')
+  const dup = [p('Hoka Speedgoat 6', 'https://a.example/1'), p('Brooks Cascadia 19', 'https://a.example/2'), p("Hoka Speedgoat 6 Men's", 'https://a.example/3')]
+  assert.match(shortlistProblem(dup) ?? '', /same shoe/)
+  const sameUrl = [p('Hoka Speedgoat 6', 'https://a.example/1'), p('Brooks Cascadia 19', 'https://a.example/1'), p('Saucony Xodus Ultra 3', 'https://a.example/3')]
+  assert.ok(shortlistProblem(sameUrl), 'two picks cannot share a product page')
+  const ok = [p('Hoka Speedgoat 6', 'https://a.example/1'), p('Brooks Cascadia 19', 'https://a.example/2'), p('Saucony Xodus Ultra 3', 'https://a.example/3')]
+  assert.equal(shortlistProblem(ok), null)
+})
+
+test('cadence: robust to hidden far foot, doubled contacts and stray detections', () => {
+  type S = { timeSec: number; side: 'left' | 'right' }
+  const other = (side: S['side']): S['side'] => (side === 'left' ? 'right' : 'left')
+  const alternating = (spm: number, n: number): S[] =>
+    Array.from({ length: n }, (_, i) => ({ timeSec: (i * 60) / spm, side: (i % 2 ? 'right' : 'left') as S['side'] }))
+  const oneFoot = (strideSpm: number, n: number): S[] =>
+    Array.from({ length: n }, (_, i) => ({ timeSec: (i * 60) / strideSpm, side: 'left' as const }))
+  const near = (value: number | null, expected: number) => value !== null && Math.abs(value - expected) < 1
+  assert.ok(near(cadenceFromStrikes(alternating(170, 12)), 170), 'clean alternating contacts')
+  assert.ok(near(cadenceFromStrikes(oneFoot(85, 6)), 170), 'only the near foot visible: each interval is a stride')
+  const doubled = alternating(170, 10).flatMap((s): S[] => [s, { timeSec: s.timeSec + 0.04, side: other(s.side) }])
+  assert.ok(near(cadenceFromStrikes(doubled), 170), 'left/right label swaps must not double cadence')
+  const missed = alternating(180, 14).filter((_, i) => i !== 5)
+  assert.ok(near(cadenceFromStrikes(missed), 180), 'one missed contact barely moves the median')
+  assert.equal(cadenceFromStrikes(alternating(100, 10)), null, 'walking pace is not a running cadence')
+  assert.equal(cadenceFromStrikes(alternating(59, 8)), null, 'an implausible 59 spm is reported as not measured')
+  assert.equal(cadenceFromStrikes(alternating(320, 12)), null, 'an implausible 320 spm is reported as not measured')
+  assert.equal(cadenceFromStrikes(alternating(170, 3)), null, 'too few contacts')
 })
 
 test('gait tracker: low-confidence hips clear the timing history without dropping events', () => {

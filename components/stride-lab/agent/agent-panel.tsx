@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { briefLine, type MovementBrief, type ShopperPrefs } from '@/lib/agent/brief'
 import { DEPTHS, addedLayers, type Depth } from '@/lib/agent/depth'
@@ -10,7 +10,7 @@ import type { Passport } from '@/lib/passport/schema'
 import { Button } from '@/components/ui/button'
 import type { Fitting } from '@/lib/wassist/fitting'
 import type { BriefField } from '../fitting-brief'
-import { AgentSteps, activityOf } from './agent-steps'
+import { AgentSteps, activityOf, progressOf } from './agent-steps'
 import { DecisionPanel } from './decision-panel'
 import { closingLineOf, outputsOf, type AgentOutputs, type ShoePick } from './outputs'
 import { usePassport } from './passport-card'
@@ -88,6 +88,9 @@ interface AgentPanelProps {
   confirmedSize: string
   onSizeCommit: (size: string) => void
   onBriefField: (field: BriefField) => void
+  /** After the size check: WhatsApp, baseline and passport are offered. */
+  takeAway: boolean
+  onStockSettled: (settled: boolean) => void
 }
 
 export function AgentPanel({
@@ -105,11 +108,27 @@ export function AgentPanel({
   confirmedSize,
   onSizeCommit,
   onBriefField,
+  takeAway,
+  onStockSettled,
 }: AgentPanelProps) {
   const { messages, status, error, sentBrief, prefs, busy } = agent
 
   const outputs = useMemo(() => outputsOf(messages), [messages])
   const activity = useMemo(() => activityOf(messages), [messages])
+  const progress = useMemo(() => progressOf(messages), [messages])
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const hasOutputs = Boolean(outputs)
+
+  // When the shortlist lands, bring it into view and move focus to it, instead of leaving the
+  // shopper at the bottom of a growing transcript.
+  useEffect(() => {
+    if (!hasOutputs) return
+    const heading = headingRef.current
+    if (!heading) return
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    heading.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' })
+    heading.focus({ preventScroll: true })
+  }, [hasOutputs])
   const passport = useMemo(
     () => (sentBrief && prefs && outputs ? passportFrom(sentBrief, { ...prefs, size: confirmedSize.trim() || prefs.size }, outputs) : null),
     [sentBrief, prefs, outputs, confirmedSize],
@@ -144,9 +163,9 @@ export function AgentPanel({
         <div className="flex flex-col gap-1.5">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
             <span className="led" data-state={busy ? 'busy' : 'on'} aria-hidden />
-            {choice ? 'Step 3 of 3 · Decide' : outputs ? 'Step 3 of 3 · Choose' : 'Step 3 of 3 · Forma is searching'}
+            {choice ? 'Your pick' : outputs ? 'Shortlist' : 'Searching'}
           </p>
-          <h2 id="agent-heading" className="text-balance text-xl font-semibold text-foreground">
+          <h2 id="agent-heading" ref={headingRef} tabIndex={-1} className="scroll-mt-6 text-balance text-xl font-semibold text-foreground focus-visible:outline-none">
             {heading}
           </h2>
         </div>
@@ -168,8 +187,17 @@ export function AgentPanel({
               </span>
             </p>
             <p className="text-lg leading-snug opacity-60">
-              {`  ${DEPTHS[ranDepth].label.toUpperCase()} SEARCH · STEP ${Math.max(activity.steps, 1)}${status === 'submitted' ? ' · GROK IS THINKING' : ''}`}
+              {`  ${DEPTHS[ranDepth].label.toUpperCase()} SEARCH · ABOUT ${DEPTHS[ranDepth].seconds}S${status === 'submitted' ? ' · GROK IS THINKING' : ''}`}
             </p>
+            {progress.length > 0 && (
+              <ol className="mt-3 flex flex-col gap-1 text-lg leading-snug" aria-label="Search progress">
+                {progress.map((step) => (
+                  <li key={step.label} className={step.done ? 'opacity-70' : 'phosphor'}>
+                    {`${step.done ? '[ OK ]' : '[ .. ]'} ${step.label.toUpperCase()}${step.count > 1 ? ` ×${step.count}` : ''}`}
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         )}
 
@@ -228,6 +256,8 @@ export function AgentPanel({
             member={member}
             onPinBaseline={onPinBaseline}
             baselinePinned={baselinePinned}
+            takeAway={takeAway}
+            onSettled={onStockSettled}
           />
         )}
 

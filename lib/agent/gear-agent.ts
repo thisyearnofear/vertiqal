@@ -3,6 +3,7 @@ import { ToolLoopAgent, stepCountIs, tool, type InferAgentUIMessage, type ModelM
 import { z } from 'zod'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'
+import { shortlistProblem } from './picks'
 import { issueStockToken } from './stock-token'
 import { searchCommunity, searchOpen, searchResearch, searchWeb } from './tavily'
 
@@ -140,9 +141,11 @@ export const gearAgent = new ToolLoopAgent({
     recommendProducts: tool({
       description: 'Present exactly three recommended products to the shopper.',
       inputSchema: z.object({ picks: z.array(pick).length(3) }),
-      execute: async ({ picks }) => ({
-        picks: picks.map((p) => ({ ...p, stockToken: issueStockToken({ productName: p.name, productUrl: p.url }) })),
-      }),
+      execute: async ({ picks }) => {
+        const problem = shortlistProblem(picks)
+        if (problem) return { picks: [], error: problem }
+        return { picks: picks.map((p) => ({ ...p, stockToken: issueStockToken({ productName: p.name, productUrl: p.url }) })) }
+      },
     }),
   },
   // Derive the phase from the conversation (not stepNumber) so it survives the approval round-trip.
@@ -161,6 +164,19 @@ export const gearAgent = new ToolLoopAgent({
 
     if (hasLayer(depth, 'research') && !count('checkEvidence')) return only('checkEvidence')
     if (!count('buildGearProfile')) return only('buildGearProfile')
+    // A shortlist with a repeated shoe is rejected by the tool; allow exactly one corrected attempt.
+    const rejectedShortlist = messages.some(
+      (m) =>
+        m.role === 'tool' &&
+        m.content.some(
+          (p) =>
+            p.type === 'tool-result' &&
+            p.toolName === 'recommendProducts' &&
+            p.output.type === 'json' &&
+            typeof (p.output.value as { error?: unknown } | null)?.error === 'string',
+        ),
+    )
+    if (rejectedShortlist && count('recommendProducts') < 2) return only('recommendProducts')
     if (!count('recommendProducts')) {
       if (count('searchProducts') < DEPTHS[depth].searches) return only('searchProducts')
       const context: ToolName[] = []

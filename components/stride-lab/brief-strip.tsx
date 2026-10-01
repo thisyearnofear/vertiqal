@@ -319,12 +319,14 @@ interface BriefSentenceProps {
   active: BriefQuestion | null
   onPick: (q: BriefQuestion) => void
   trailing?: ReactNode
+  /** Results stages: the brief is settled, so optional extras step aside. Blanks stay tappable to edit. */
+  compact?: boolean
   /** When set, the sentence was pre-filled from last time and can be forgotten. */
   remembered?: { onForget: () => void }
 }
 
 /** The confirmed brief as one editable sentence; every blank reopens its question in the Forma strip. */
-export function BriefSentence({ sport, draft, notes, active, onPick, trailing, remembered }: BriefSentenceProps) {
+export function BriefSentence({ sport, draft, notes, active, onPick, trailing, remembered, compact = false }: BriefSentenceProps) {
   const budget = parseBudgetPounds(draft.budgetPounds)
   const height = parseHeightCm(draft.heightCm)
   const blank = (question: BriefQuestion, value: string | null, empty: string) => (
@@ -362,19 +364,23 @@ export function BriefSentence({ sport, draft, notes, active, onPick, trailing, r
         .
       </p>
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
-        {!notes.width && (
-          <button type="button" onClick={() => onPick('width')} className={extra}>
-            + foot width
-          </button>
+        {!compact && (
+          <>
+            {!notes.width && (
+              <button type="button" onClick={() => onPick('width')} className={extra}>
+                + foot width
+              </button>
+            )}
+            {!notes.niggles.trim() && (
+              <button type="button" onClick={() => onPick('niggles')} className={extra}>
+                + niggles
+              </button>
+            )}
+            <button type="button" onClick={() => onPick('describe')} className={extra}>
+              + tell Forma in a sentence
+            </button>
+          </>
         )}
-        {!notes.niggles.trim() && (
-          <button type="button" onClick={() => onPick('niggles')} className={extra}>
-            + niggles
-          </button>
-        )}
-        <button type="button" onClick={() => onPick('describe')} className={extra}>
-          + tell Forma in a sentence
-        </button>
         {trailing}
       </div>
       {remembered && (
