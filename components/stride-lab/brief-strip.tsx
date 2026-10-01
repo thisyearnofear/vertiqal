@@ -20,12 +20,33 @@ const NAV =
 const OTHER_INPUT =
   'well h-10 w-28 rounded-md px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50'
 
-function Chips({ label, options, value, onPick, render = (o) => o }: { label: string; options: readonly string[]; value: string; onPick: (v: string) => void; render?: (o: string) => ReactNode }) {
+function Chips({
+  label,
+  options,
+  value,
+  onPick,
+  render = (o) => o,
+  suggested,
+}: {
+  label: string
+  options: readonly string[]
+  value: string
+  onPick: (v: string) => void
+  render?: (o: string) => ReactNode
+  suggested?: string | null
+}) {
   return (
     <div role="group" aria-label={label} className="flex gap-2 overflow-x-auto pb-1 max-lg:flex-nowrap lg:flex-wrap">
       {options.map((o) => (
-        <button key={o} type="button" aria-pressed={value === o} onClick={() => onPick(o)} className={cn(CHIP, value === o ? CHIP_ON : CHIP_OFF)}>
+        <button
+          key={o}
+          type="button"
+          aria-pressed={value === o}
+          onClick={() => onPick(o)}
+          className={cn(CHIP, value === o ? CHIP_ON : suggested === o ? 'border-dashed border-primary/70 text-foreground' : CHIP_OFF)}
+        >
           {render(o)}
+          {suggested === o && value !== o && <span className="ml-1.5 text-xs font-normal normal-case tracking-normal text-muted-foreground">· looks like</span>}
         </button>
       ))}
     </div>
@@ -98,12 +119,69 @@ interface BriefQuestionPanelProps {
   onSkip: () => void
   onBack: (() => void) | null
   onClose: () => void
+  /** Opens another question (used by the "tell me in a sentence" link). */
+  onAsk?: (q: BriefQuestion) => void
+  /** Free-text brief parse; presence enables the describe panel. */
+  describe?: { pending: boolean; error: string | null; onSubmit: (text: string) => void }
+  /** Clip-based surface suggestion; presence enables the guess button. */
+  surfaceGuess?: { pending: boolean; suggestion: string | null; message: string | null; onGuess: () => void }
+}
+
+function DescribeControls({ sport, describe }: { sport: Sport; describe: NonNullable<BriefQuestionPanelProps['describe']> }) {
+  const [text, setText] = useState('')
+  return (
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (text.trim()) describe.onSubmit(text.trim())
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <input
+          aria-label="Describe your shoes and fit in a sentence"
+          maxLength={300}
+          placeholder={
+            sport === 'running'
+              ? 'Pegasus 40, UK 9, a bit tight in the toes, up to £150'
+              : 'Solution, UK 7, too painful for long sessions, under £140'
+          }
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className={cn(OTHER_INPUT, 'w-full max-w-md')}
+        />
+        <button type="submit" disabled={!text.trim() || describe.pending} className={cn(CHIP, CHIP_OFF, 'disabled:opacity-40')}>
+          {describe.pending ? 'Forma is reading…' : 'Fill my brief'}
+        </button>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">Sent as text to Grok (xAI) via the AI gateway. No video or images.</p>
+      {describe.error && (
+        <p role="alert" className="text-xs font-semibold leading-relaxed text-primary">
+          {describe.error}
+        </p>
+      )}
+    </form>
+  )
 }
 
 /** One brief question at a time, answered with a tap wherever the answer has a known shape. */
-export function BriefQuestionPanel({ question, sport, draft, notes, likelySize, onDraft, onNotes, onSkip, onBack, onClose }: BriefQuestionPanelProps) {
+export function BriefQuestionPanel({
+  question,
+  sport,
+  draft,
+  notes,
+  likelySize,
+  onDraft,
+  onNotes,
+  onSkip,
+  onBack,
+  onClose,
+  onAsk,
+  describe,
+  surfaceGuess,
+}: BriefQuestionPanelProps) {
   const options = INTAKE_OPTIONS[sport]
-  const optional = question === 'width' || question === 'niggles'
+  const optional = question === 'width' || question === 'niggles' || question === 'describe'
   const [niggles, setNiggles] = useState(notes.niggles)
   const budget = parseBudgetPounds(draft.budgetPounds)
   const height = parseHeightCm(draft.heightCm)
@@ -111,8 +189,46 @@ export function BriefQuestionPanel({ question, sport, draft, notes, likelySize, 
   return (
     <div id={QUESTION_ID} tabIndex={-1} role="group" aria-label={questionPrompt(question, sport)} className="flex flex-col gap-2 focus-visible:outline-none">
       {question === 'height' && <HeightDial key={height ?? 'none'} id="strip-height" variant="strip" value={height} onCommit={(cm) => onDraft({ heightCm: String(cm) })} />}
-      {question === 'goal' && <Chips label="Goal" options={options.goals} value={draft.goal} onPick={(goal) => onDraft({ goal })} />}
-      {question === 'surface' && <Chips label={options.surfaceLabel} options={options.surfaces} value={draft.surface} onPick={(surface) => onDraft({ surface })} />}
+      {question === 'goal' && (
+        <div className="flex flex-col gap-2">
+          <Chips label="Goal" options={options.goals} value={draft.goal} onPick={(goal) => onDraft({ goal })} />
+          {onAsk && describe && (
+            <button
+              type="button"
+              onClick={() => onAsk('describe')}
+              className="w-fit rounded-sm text-xs font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              Or tell me in a sentence ›
+            </button>
+          )}
+        </div>
+      )}
+      {question === 'surface' && (
+        <div className="flex flex-col gap-2">
+          <Chips
+            label={options.surfaceLabel}
+            options={options.surfaces}
+            value={draft.surface}
+            onPick={(surface) => onDraft({ surface })}
+            suggested={surfaceGuess?.suggestion}
+          />
+          {surfaceGuess && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button
+                type="button"
+                onClick={surfaceGuess.onGuess}
+                disabled={surfaceGuess.pending}
+                className={cn(CHIP, CHIP_OFF, 'disabled:opacity-40')}
+              >
+                {surfaceGuess.pending ? 'Forma is looking…' : 'Guess from my clip'}
+              </button>
+              <span className="text-xs leading-relaxed text-muted-foreground">Sends one still to Grok.</span>
+              {surfaceGuess.message && <span className="text-xs font-semibold leading-relaxed text-primary">{surfaceGuess.message}</span>}
+            </div>
+          )}
+        </div>
+      )}
+      {question === 'describe' && describe && <DescribeControls sport={sport} describe={describe} />}
       {question === 'size' && (
         <div className="flex flex-col gap-2">
           <SizeChips value={draft.size} likely={likelySize ?? DEFAULT_SIZE} onPick={(size) => onDraft({ size })} />
@@ -256,6 +372,9 @@ export function BriefSentence({ sport, draft, notes, active, onPick, trailing, r
             + niggles
           </button>
         )}
+        <button type="button" onClick={() => onPick('describe')} className={extra}>
+          + tell Forma in a sentence
+        </button>
         {trailing}
       </div>
       {remembered && (
