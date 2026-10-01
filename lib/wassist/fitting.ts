@@ -40,11 +40,13 @@ export const fittingSchema = z.object({
     .optional(),
 })
 
-/** Phone is optional for returning shoppers; the server falls back to the linked number. */
-export const handoffSchema = z.object({ phone: phoneSchema.optional(), fitting: fittingSchema })
+/** Phone is optional for returning shoppers; the server falls back to the linked number. `link` carries the code-verification token between polls. */
+export const handoffSchema = z.object({ phone: phoneSchema.optional(), link: z.string().max(500).optional(), fitting: fittingSchema })
 
 export type Fitting = z.infer<typeof fittingSchema>
 
 export type HandoffResult =
   | { status: 'awaiting-link'; connectUrl: string }
+  | { status: 'awaiting-code'; code: string; link: string; sendUrl: string; expiresAt: string }
+  | { status: 'expired' }
   | { status: 'sent'; chatUrl: string; messages: number }

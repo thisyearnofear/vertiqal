@@ -78,8 +78,8 @@ FreeMoCap remains a separate, optional offline reference system. No FreeMoCap co
 | `/api/passport/[token]` | GET | Reads a passport. |
 | `/api/passport/[token]/fit` | POST | Checks a given shoe against a passport. |
 | `/api/mcp` | GET, POST, DELETE | MCP server exposing passport fit checks to other agents. |
-| `/api/wassist/handoff` | POST | Ensures this environment's BYOA agent exists for this origin, then sends the fitting, or returns a `connectUrl` if the number hasn't linked yet. |
-| `/api/wassist/webhook` | POST | Inbound WhatsApp messages, optionally with a photo (Wassist-hosted JPEG/PNG/WebP up to 5 MB only). Returns a silent response right away, shows "typing…" every 8 s, and replies through `reply_callback` inside `after()`. Authenticated by an HMAC token in the URL. |
+| `/api/wassist/handoff` | POST | Ensures this environment's BYOA agent exists for this origin. Verified members send straight away; anyone else gets a `connectUrl`, or — if the number already has a conversation — a `FORMA-XXXXXX` code plus a signed `link` token (`lib/wassist/link.ts`, HMAC of `{phone, code, t}`, 10-minute TTL). The fitting is sent only after that code appears on a SHOPPER line in the transcript, then the member cookie is written with `verifiedAt`. |
+| `/api/wassist/webhook` | POST | Inbound WhatsApp messages, optionally with a photo (Wassist-hosted JPEG/PNG/WebP up to 5 MB only). Returns a silent response right away, shows "typing…" every 8 s, and replies through `reply_callback` inside `after()`. Authenticated by an HMAC token in the URL; bare link codes get a fixed ack, other replies are capped at 25/number/day (per instance) and cost-logged. |
 | `/api/wassist/checkin` | GET | Vercel Cron job. Sends the break-in check-in template to shoppers with a pick whose chat has been quiet for 12–13 days. Requires `Authorization: Bearer $CRON_SECRET` and does nothing without `WASSIST_CHECKIN_TEMPLATE`. |
 
 ## Extension points
@@ -91,7 +91,7 @@ FreeMoCap remains a separate, optional offline reference system. No FreeMoCap co
 ## Data and privacy
 
 - No database. Passports are signed tokens (`lib/passport/token.ts`), so they carry their own data.
-- Shopper memory is a signed, httpOnly `vq_member` cookie (`lib/member/cookie.ts`) holding the WhatsApp number and last pick. The Wassist conversation is the long-term memory, and guests are never tracked. The number is masked in every response.
+- Shopper memory is a signed, httpOnly `vq_member` cookie (`lib/member/cookie.ts`) holding the WhatsApp number and last pick. It is written only after a link code proves phone possession (`verifiedAt` set); older cookies without it are treated as guests by `/api/member`. The Wassist conversation is the long-term memory, and guests are never tracked. The number is masked in every response.
 - WhatsApp photos are downloaded only from Wassist hosts, passed to Grok for that one reply, and never stored. Later turns see them as `[sent a photo]`.
 - The check-in is sent at most once per shopper. The template text in the transcript is the marker, so no extra state is kept.
 - Stock checks send only the product URL and size to Solari. Screenshots are returned inline and not stored.
