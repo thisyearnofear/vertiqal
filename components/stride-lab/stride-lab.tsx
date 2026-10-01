@@ -971,6 +971,21 @@ export function StrideLab({
                   <span className="sr-only">{': Forma speaks coaching cues aloud'}</span>
                 </button>
               )}
+              {!stageIdle && !liveActive && !shopping && (
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="h-10 whitespace-nowrap px-3 font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                  title="Watch the illustrated sample fitting. This clears the current clip."
+                  onClick={() => {
+                    if (measuredReady && !window.confirm('Watching the sample clears this clip and its measurements. Continue?')) return
+                    showExample()
+                  }}
+                >
+                  <Play aria-hidden />
+                  Sample fitting
+                </Button>
+              )}
             </div>
           )}
         </div>

@@ -40,20 +40,63 @@ async function createLandmarker() {
   }
 }
 
+type Landmarker = Awaited<ReturnType<typeof createLandmarker>>
+
+/** Keep an unused landmarker around briefly so switching providers or opening the example reuses it. */
+const IDLE_CLOSE_MS = 60_000
+
+/**
+ * One landmarker shared by every session (provider switches, the example observer). Building one
+ * loads the WASM runtime and a ~9 MB model and initialises the GPU, so doing it per switch is slow.
+ */
+const shared: {
+  landmarker: Promise<Landmarker> | null
+  users: number
+  closeTimer: ReturnType<typeof setTimeout> | null
+  lastTimestamp: number
+} = { landmarker: null, users: 0, closeTimer: null, lastTimestamp: 0 }
+
+async function acquireLandmarker() {
+  if (shared.closeTimer) clearTimeout(shared.closeTimer)
+  shared.closeTimer = null
+  const pending = (shared.landmarker ??= createLandmarker())
+  try {
+    const landmarker = await pending
+    shared.users++
+    return landmarker
+  } catch (error) {
+    if (shared.landmarker === pending) shared.landmarker = null
+    throw error
+  }
+}
+
+function releaseLandmarker() {
+  shared.users = Math.max(0, shared.users - 1)
+  if (shared.users > 0 || !shared.landmarker) return
+  const closing = shared.landmarker
+  shared.closeTimer = setTimeout(() => {
+    if (shared.users > 0 || shared.landmarker !== closing) return
+    shared.landmarker = null
+    shared.closeTimer = null
+    void closing.then((landmarker) => landmarker.close()).catch(() => {})
+  }, IDLE_CLOSE_MS)
+}
+
 export const mediapipeProvider: PoseProvider = {
   id: 'mediapipe',
   label: 'MediaPipe Pose',
   detail: 'Runs on this device · no upload',
   available: true,
   async load(): Promise<PoseSession> {
-    const landmarker = await createLandmarker()
-    let lastTimestamp = 0
+    const landmarker = await acquireLandmarker()
+    let released = false
 
     return {
       poseAt(video) {
-        // MediaPipe requires strictly increasing timestamps, even when the clip loops.
-        const timestamp = Math.max(performance.now(), lastTimestamp + 1)
-        lastTimestamp = timestamp
+        // MediaPipe requires strictly increasing timestamps per landmarker, even when the clip loops
+        // or another session used it last.
+        const timestamp = Math.max(performance.now(), shared.lastTimestamp + 1)
+        shared.lastTimestamp = timestamp
         const result = landmarker.detectForVideo(video, timestamp)
         const landmarks = result.landmarks[0]
         if (!landmarks) return null
@@ -68,7 +111,9 @@ export const mediapipeProvider: PoseProvider = {
         return pose
       },
       dispose() {
-        landmarker.close()
+        if (released) return
+        released = true
+        releaseLandmarker()
       },
     }
   },

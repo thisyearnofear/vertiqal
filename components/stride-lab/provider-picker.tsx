@@ -17,12 +17,11 @@ const HOSTED_LABEL: Record<string, string> = {
 export function ProviderPicker({ providers, value, onChange, status }: ProviderPickerProps) {
   const [pending, setPending] = useState<string | null>(null)
   const [consented, setConsented] = useState<Record<string, boolean>>({})
-  const [checked, setChecked] = useState(false)
 
   const request = (id: string) => {
+    setPending(null)
     if (!HOSTED_LABEL[id] || consented[id]) return onChange(id)
     setPending(id)
-    setChecked(false)
   }
 
   const confirm = (id: string) => {
@@ -72,25 +71,27 @@ export function ProviderPicker({ providers, value, onChange, status }: ProviderP
               </span>
             </label>
             {pending === provider.id && (
-              <div className="well flex flex-col gap-2 rounded-md p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">{hosted}</p>
-                <label className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => setChecked(e.target.checked)}
-                    className="mt-0.5"
-                  />
-                  I understand sampled frames from my clip leave this device for hosted analysis.
-                </label>
-                <button
-                  type="button"
-                  disabled={!checked}
-                  onClick={() => confirm(provider.id)}
-                  className="w-fit rounded-sm border-2 border-primary bg-primary px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-primary-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Enable hosted analysis
-                </button>
+              <div className="well flex flex-col gap-2 rounded-md p-3" role="group" aria-label={`Confirm ${provider.label}`}>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Up to 16 still frames from your uploaded clip leave this device for hosted keypoint analysis. Live camera stays on-device.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    autoFocus
+                    onClick={() => confirm(provider.id)}
+                    className="rounded-sm border-2 border-primary bg-primary px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-primary-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    Send frames to VLM Run
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPending(null)}
+                    className="rounded-sm px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
           </div>
