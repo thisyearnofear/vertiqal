@@ -3,12 +3,15 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowUpRight, Pin, RotateCcw } from 'lucide-react'
 import { buttonVariants, Button } from '@/components/ui/button'
+import type { MovementBrief } from '@/lib/agent/brief'
+import { trackStep } from '@/lib/funnel'
 import type { Sport } from '@/lib/metrics/readout'
 import type { MemberView } from '@/lib/member/schema'
 import type { Passport } from '@/lib/passport/schema'
 import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from '@/lib/fitting/stock'
 import { cn } from '@/lib/utils'
 import type { Fitting } from '@/lib/wassist/fitting'
+import { FitReceipt } from './fit-receipt'
 import type { ShoePick } from './outputs'
 import { PassportCard } from './passport-card'
 import { StockProof, stockLine, useStockCheck } from './stock-check'
@@ -20,6 +23,7 @@ const shortName = (name: string) => name.split(' ').slice(0, 3).join(' ')
 interface DecisionPanelProps {
   pick: ShoePick
   picks: ShoePick[]
+  brief: MovementBrief
   sport: Sport
   size: string
   onSizeCommit: (size: string) => void
@@ -35,6 +39,7 @@ interface DecisionPanelProps {
 export function DecisionPanel({
   pick,
   picks,
+  brief,
   sport,
   size,
   onSizeCommit,
@@ -82,6 +87,7 @@ export function DecisionPanel({
   }
 
   const recordChoice = () => {
+    trackStep('buy_clicked', { sport, retailer: pick.retailer, verified: available })
     if (!member.linked || !snapshot) return
     void fetch('/api/member', {
       method: 'POST',
@@ -104,7 +110,7 @@ export function DecisionPanel({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 animate-focus-in flex-col gap-2 motion-reduce:animate-none">
           <p className="text-lg uppercase leading-none opacity-60">{`Your pick · ${pick.retailer}`}</p>
           <p className="text-pretty font-sans text-2xl font-semibold leading-tight md:text-3xl">{pick.name}</p>
           <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-80">{pick.why}</p>
@@ -113,6 +119,8 @@ export function DecisionPanel({
           {'[ BACK TO SHORTLIST ]'}
         </button>
       </div>
+
+      <FitReceipt brief={brief} />
 
       <div className="flex flex-col gap-4 rounded-md border border-stage-foreground/30 p-4 md:p-5">
         <form onSubmit={commit} className="flex flex-wrap items-end gap-3">

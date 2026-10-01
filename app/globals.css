@@ -44,6 +44,7 @@
   --animate-roll-in: roll-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-hud-in: hud-in 0.5s ease-out 2.2s both;
   --animate-pip: pip 0.35s ease-out both;
+  --animate-focus-in: focus-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 /*
@@ -251,6 +252,20 @@
   }
 }
 
+/* The decision header settles into focus when a pick is chosen. */
+@keyframes focus-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
 /* The locked-metrics strip fades in after the lock banner gets out of the way. */
 @keyframes hud-in {
   from {
@@ -297,7 +312,8 @@
   .animate-lock-flash,
   .animate-hud-in,
   .animate-roll-in,
-  .animate-pip {
+  .animate-pip,
+  .animate-focus-in {
     animation: none;
   }
 }
