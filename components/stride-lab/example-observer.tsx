@@ -272,7 +272,7 @@ export function ExampleObserver({ sport, themeKey, localSession, loadLocalSessio
         <p id="example-media-heading" tabIndex={-1} className={cn(LABEL, 'focus-visible:outline-none')}>
           Synthetic example
         </p>
-        <div className="screen flex aspect-video items-center justify-center">
+        <div className="screen flex aspect-[4/5] items-center justify-center sm:aspect-video lg:aspect-auto lg:h-[clamp(500px,66svh,620px)]">
           <ClimberSketch className="max-h-48 w-full max-w-xs text-stage-foreground" />
         </div>
         <p className="font-mono text-xs uppercase leading-snug text-muted-foreground">
@@ -287,7 +287,7 @@ export function ExampleObserver({ sport, themeKey, localSession, loadLocalSessio
       <p id="example-media-heading" tabIndex={-1} className={cn(LABEL, 'focus-visible:outline-none')}>
         AI-generated example
       </p>
-      <div ref={containerRef} className="screen relative aspect-video w-full">
+      <div ref={containerRef} className="screen relative aspect-[4/3] w-full sm:aspect-video lg:aspect-auto lg:h-[clamp(500px,66svh,620px)]">
         <video
           ref={videoRef}
           src={EXAMPLE_FOOTAGE.src}

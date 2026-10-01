@@ -24,6 +24,7 @@ import {
 } from './session.ts'
 import { EXAMPLE_FOOTAGE, EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleCompanion, exampleMetrics, nextStep } from './example.ts'
 import { settleStream } from './camera.ts'
+import { UK_SIZES, answeredCount, feetInches, isAnswered, nextQuestion, previousQuestion, stepHeight } from './brief-flow.ts'
 import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
@@ -621,4 +622,28 @@ test('climb tracker: a pose gap does not fabricate a placement', () => {
   for (let i = 0; i <= 10; i++) snap = tracker.update(0.8 + i / 30, climbPose(0.55), FRAME_W, FRAME_H)
   assert.equal(snap!.totalPlacements, before, 'a still foot after a gap is not a new placement')
   assert.equal(snap!.movingFoot, null, 'lost tracking does not resume an old settle')
+})
+
+test('brief flow: asks required questions in order and skips what is answered or skipped', () => {
+  const none = new Set<never>()
+  assert.equal(nextQuestion({ draft: blank, notes: EMPTY_NOTES, skipped: none, heightOnScreen: false }), 'height')
+  assert.equal(nextQuestion({ draft: blank, notes: EMPTY_NOTES, skipped: none, heightOnScreen: true }), 'goal', 'height is left to the stage screen')
+  assert.equal(nextQuestion({ draft: { ...blank, heightCm: '178', goal: 'Easy miles' }, notes: EMPTY_NOTES, skipped: new Set(['surface'] as const), heightOnScreen: false }), 'size')
+  assert.equal(nextQuestion({ draft: valid, notes: EMPTY_NOTES, skipped: none, heightOnScreen: false }), null)
+  assert.equal(answeredCount(valid, EMPTY_NOTES), 5)
+  assert.equal(answeredCount({ ...valid, heightCm: '90', budgetPounds: '0' }, EMPTY_NOTES), 3, 'invalid height and budget are not answers')
+})
+
+test('brief flow: optional answers, back navigation and height helpers', () => {
+  assert.equal(isAnswered('width', blank, { ...EMPTY_NOTES, width: 'wide' }), true)
+  assert.equal(isAnswered('niggles', blank, { ...EMPTY_NOTES, niggles: '   ' }), false)
+  assert.equal(previousQuestion('goal'), 'height')
+  assert.equal(previousQuestion('height'), null)
+  assert.equal(previousQuestion('width'), null)
+  assert.equal(stepHeight('', 1), 176, 'stepping from empty starts at a typical height')
+  assert.equal(stepHeight('220', 1), 220)
+  assert.equal(stepHeight('120', -1), 120)
+  assert.equal(feetInches(178), '5′10″')
+  assert.equal(UK_SIZES[0], 'UK 3')
+  assert.equal(UK_SIZES.at(-1), 'UK 13')
 })
