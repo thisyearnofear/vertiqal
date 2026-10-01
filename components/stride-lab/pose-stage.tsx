@@ -41,6 +41,8 @@ interface PoseStageProps {
   progress?: { events: number; target: number; ready: boolean }
   /** Locked measurements pinned along the bottom of the screen once the clip is measured. */
   lockedMetrics?: { label: string; value: string; unit: string }[]
+  /** Height was never entered, so distance figures in the HUD are estimates. */
+  provisional?: boolean
   /** Shrink the screen on large displays while shopping results sit below it. */
   dense?: boolean
   /** Primary call to action shown on the idle screen. */
@@ -110,6 +112,7 @@ export function PoseStage({
   onValidationFrame,
   progress,
   lockedMetrics,
+  provisional = false,
   dense = false,
   idleAction,
   heightControl,
@@ -391,6 +394,11 @@ export function PoseStage({
                   </dd>
                 </div>
               ))}
+              {provisional && (
+                <p className="col-span-full self-center text-[10px] uppercase tracking-[0.2em] phosphor opacity-60 md:col-span-1 md:ml-auto md:text-right">
+                  {'Height not set · distances estimated'}
+                </p>
+              )}
             </dl>
           )}
         </>

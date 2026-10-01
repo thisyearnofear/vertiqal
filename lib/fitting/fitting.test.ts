@@ -27,6 +27,7 @@ import { settleStream } from './camera.ts'
 import { UK_SIZES, answeredCount, feetInches, isAnswered, nextQuestion, previousQuestion, stepHeight } from './brief-flow.ts'
 import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
 import { draftFromRemembered, parseRememberedBrief, rememberBrief, type RememberedBrief } from './remembered-brief.ts'
+import { applyParsedBrief, briefParseSchema } from './brief-parse.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
@@ -699,6 +700,59 @@ test('remembered brief: drafts fall back to member size and blank goal/surface f
   assert.deepEqual(climbing, { size: 'UK 10', budgetPounds: '160', heightCm: '178', goal: '', surface: '' })
   assert.deepEqual(draftFromRemembered(null, 'running', 'UK 10'), { size: 'UK 10', budgetPounds: '', heightCm: '', goal: '', surface: '' })
   assert.equal(draftFromRemembered(null, 'running', null).size, '')
+})
+
+test('brief parse: nulls change nothing and height is never touched', () => {
+  const parsed = briefParseSchema('running').parse({
+    size: null,
+    budgetPounds: null,
+    goal: null,
+    surface: null,
+    width: null,
+    currentShoe: null,
+    fitNote: null,
+  })
+  const applied = applyParsedBrief(valid, { ...EMPTY_NOTES, width: 'wide' }, parsed)
+  assert.deepEqual(applied.draft, valid)
+  assert.equal(applied.notes.width, 'wide')
+  assert.deepEqual(applied.filled, [])
+})
+
+test('brief parse: bad size is rejected, budget becomes a string, current composes', () => {
+  const parsed = briefParseSchema('running').parse({
+    size: 'nine-ish',
+    budgetPounds: 150,
+    goal: 'Easy miles',
+    surface: 'Road',
+    width: 'wide',
+    currentShoe: 'Pegasus 40',
+    fitNote: 'tight in the toes',
+  })
+  const applied = applyParsedBrief(blank, EMPTY_NOTES, parsed)
+  assert.equal(applied.draft.size, '', 'unrecognised size must not overwrite the draft')
+  assert.equal(applied.draft.budgetPounds, '150')
+  assert.equal(applied.draft.goal, 'Easy miles')
+  assert.equal(applied.draft.surface, 'Road')
+  assert.equal(applied.draft.heightCm, '', 'height is never set from text')
+  assert.equal(applied.notes.width, 'wide')
+  assert.equal(applied.notes.current, 'Pegasus 40 — tight in the toes')
+  assert.deepEqual(applied.filled, ['budget', 'goal', 'surface', 'width'])
+
+  const sizeOnly = applyParsedBrief(blank, EMPTY_NOTES, { ...parsed, size: 'UK 9.5', budgetPounds: null, goal: null, surface: null, width: null, currentShoe: null, fitNote: null })
+  assert.equal(sizeOnly.draft.size, 'UK 9.5')
+  assert.deepEqual(sizeOnly.filled, ['size'])
+  assert.equal(sizeOnly.notes.current, '')
+
+  const noteOnly = applyParsedBrief(blank, EMPTY_NOTES, { ...parsed, size: null, budgetPounds: null, goal: null, surface: null, width: null, currentShoe: 'Solution', fitNote: null })
+  assert.equal(noteOnly.notes.current, 'Solution')
+})
+
+test('brief parse: schema rejects out-of-range budget and unlisted options', () => {
+  const schema = briefParseSchema('climbing')
+  const base = { size: null, budgetPounds: null, goal: null, surface: null, width: null, currentShoe: null, fitNote: null }
+  assert.equal(schema.safeParse({ ...base, budgetPounds: 5000 }).success, false)
+  assert.equal(schema.safeParse({ ...base, goal: 'Easy miles' }).success, false, 'running goal is not a climbing goal')
+  assert.equal(schema.safeParse({ ...base, goal: 'Hard bouldering', surface: 'Indoor walls' }).success, true)
 })
 
 test('brief flow: optional answers, back navigation and height helpers', () => {

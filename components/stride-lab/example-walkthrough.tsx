@@ -10,7 +10,7 @@ import {
   exampleMetrics,
   nextStep,
 } from '@/lib/fitting/example'
-import { SPORTS, type Sport } from '@/lib/metrics/readout'
+import type { Sport } from '@/lib/metrics/readout'
 import { cn } from '@/lib/utils'
 import { FittingRationale } from './fitting-rationale'
 
