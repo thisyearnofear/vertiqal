@@ -39,6 +39,10 @@ interface PoseStageProps {
   onValidationFrame?: (frame: { timeSec: number; pose: Pose | null; width: number; height: number; snapshot: MovementSnapshot }) => void
   /** Measurement progress for a loaded clip: pips fill per event, then a lock banner plays once. */
   progress?: { events: number; target: number; ready: boolean }
+  /** Locked measurements pinned along the bottom of the screen once the clip is measured. */
+  lockedMetrics?: { label: string; value: string; unit: string }[]
+  /** Shrink the screen on large displays while shopping results sit below it. */
+  dense?: boolean
   /** Primary call to action shown on the idle screen. */
   idleAction?: ReactNode
   /** Height setter shown as a boot line on the idle screen. */
@@ -105,6 +109,8 @@ export function PoseStage({
   onFile,
   onValidationFrame,
   progress,
+  lockedMetrics,
+  dense = false,
   idleAction,
   heightControl,
 }: PoseStageProps) {
@@ -284,7 +290,10 @@ export function PoseStage({
   return (
     <div
       ref={containerRef}
-      className="screen aspect-[4/5] w-full sm:aspect-video lg:aspect-auto lg:h-[clamp(500px,66svh,620px)]"
+      className={cn(
+        'screen aspect-[4/5] w-full sm:aspect-video lg:aspect-auto',
+        dense ? 'lg:h-[clamp(320px,42svh,420px)]' : 'lg:h-[clamp(500px,66svh,620px)]',
+      )}
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -368,6 +377,22 @@ export function PoseStage({
               {'Measurements locked'}
             </p>
           </div>
+          {lockedMetrics && lockedMetrics.length > 0 && (
+            <dl
+              aria-label="Locked measurements"
+              className="animate-hud-in absolute inset-x-0 bottom-0 z-10 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-stage-foreground/30 bg-stage/80 px-4 py-2.5 font-mono text-stage-foreground sm:grid-cols-3 md:flex md:flex-wrap md:items-end md:justify-between md:px-6 md:py-3"
+            >
+              {lockedMetrics.map((metric) => (
+                <div key={metric.label} className="flex min-w-0 flex-col gap-0.5">
+                  <dt className="truncate text-[10px] uppercase tracking-[0.2em] opacity-60">{metric.label}</dt>
+                  <dd className="flex items-baseline gap-1 leading-none">
+                    <span className="text-2xl tabular-nums phosphor md:text-3xl">{metric.value}</span>
+                    <span className="text-sm opacity-60">{metric.unit}</span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </>
       )}
 
