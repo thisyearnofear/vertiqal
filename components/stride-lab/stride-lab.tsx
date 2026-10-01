@@ -19,6 +19,7 @@ import {
   type PrefDraft,
   type PrefField,
 } from '@/lib/fitting/prefs'
+import { REQUIRED_QUESTIONS, answeredCount, nextQuestion, previousQuestion, questionPrompt, type BriefQuestion } from '@/lib/fitting/brief-flow'
 import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
 import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, type ResetReason } from '@/lib/fitting/session'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
@@ -35,12 +36,13 @@ import { HeroCard } from './hero/hero-card'
 import { useGearAgent } from './agent/use-gear-agent'
 import { ExampleObserver } from './example-observer'
 import { ExampleWalkthrough, type ExampleState } from './example-walkthrough'
-import { BRIEF_FIELD_ID, FittingBrief, type BriefField } from './fitting-brief'
-import { FittingHeader } from './fitting-header'
+import { BriefQuestionPanel, BriefSentence, QUESTION_ID } from './brief-strip'
+import { FittingBrief, type BriefField } from './fitting-brief'
+import { HeightDial } from './height-dial'
+import { FittingHeader, SportToggle } from './fitting-header'
 import { FittingNotes } from './fitting-notes'
 import { GaitReadout } from './gait-readout'
 import { LiveOverlay } from './live-overlay'
-import { NextStep } from './next-step'
 import { PoseStage, type Keyframe } from './pose-stage'
 import { ProviderPicker } from './provider-picker'
 import { ValidationControls } from './validation-controls'
@@ -122,6 +124,8 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
   const [depth, setDepth] = useState<Depth>('considered')
   const [confirmedPrefs, setConfirmedPrefs] = useState<ShopperPrefs | null>(null)
   const [attempted, setAttempted] = useState(false)
+  const [activeQuestion, setActiveQuestion] = useState<BriefQuestion | null>(null)
+  const [skipped, setSkipped] = useState<ReadonlySet<BriefQuestion>>(new Set())
   const agent = useGearAgent()
   const speak = useVoice(voiceOn)
   const { member, forget } = useMember(initialMember)
@@ -234,7 +238,9 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
       if (clearsBaseline(reason)) setBaseline(null)
       if (reason === 'sport' || reason === 'start-fresh') {
         setPrefDraft((d) => ({ ...d, goal: '', surface: '' }))
+        setSkipped(new Set())
       }
+      setActiveQuestion(null)
       setNotes((current) => notesAfterReset(reason, current))
       setLockedReadout(null)
       setCaption(null)
@@ -292,10 +298,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     restartAnalysis(sport, currentAnalysisHeight)
     setExampleObservation(null)
     setExample({ step: 0, playing: !prefersStill(), concept: 0 })
-    requestAnimationFrame(() => {
-      const headingId = window.matchMedia('(min-width: 1024px)').matches ? 'example-heading' : 'example-media-heading'
-      document.getElementById(headingId)?.focus()
-    })
+    requestAnimationFrame(() => document.getElementById('example-media-heading')?.focus())
   }
 
   const exitExample = () => {
@@ -602,22 +605,51 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     needsRecapture,
   })
 
-  const focusBriefField = (field: BriefField) => {
-    const target = document.getElementById(BRIEF_FIELD_ID[field])
-    let ancestor = target?.parentElement ?? null
-    while (ancestor) {
-      if (ancestor.tagName === 'DETAILS') (ancestor as HTMLDetailsElement).open = true
-      ancestor = ancestor.parentElement
-    }
-    scrollToSection('fitting-brief')
-    requestAnimationFrame(() => target?.focus({ preventScroll: true }))
+  const stageIdle = !example && !clip && !live.stream
+  const askingBrief = !example && !liveActive && (stage === 'capture' || stage === 'confirm')
+  const question =
+    activeQuestion ?? (askingBrief ? nextQuestion({ draft: prefDraft, notes, skipped, heightOnScreen: stageIdle }) : null)
+
+  const afterPaint = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn))
+
+  const askQuestion = (next: BriefQuestion) => {
+    setActiveQuestion(next)
+    afterPaint(() => {
+      const target = document.getElementById(QUESTION_ID)
+      target?.scrollIntoView({ block: 'nearest', behavior: prefersStill() ? 'auto' : 'smooth' })
+      target?.focus({ preventScroll: true })
+    })
+  }
+
+  const focusBriefField = (field: BriefField) => askQuestion(field)
+
+  const answerDraft = (patch: Partial<PrefDraft>) => {
+    updateDraft({ ...prefDraft, ...patch })
+    setActiveQuestion(null)
+  }
+
+  const answerNotes = (patch: Partial<FittingNotesState>) => {
+    updateNotes({ ...notes, ...patch })
+    setActiveQuestion(null)
+  }
+
+  const skipQuestion = (current: BriefQuestion) => {
+    setSkipped((s) => new Set(s).add(current))
+    setActiveQuestion(null)
   }
 
   const personalFilm = () => {
-    const missingHeight = enteredHeight === null
     if (example) setExample(null)
-    if (missingHeight) {
-      requestAnimationFrame(() => focusBriefField('height'))
+    if (enteredHeight === null) {
+      if (!clip && !live.stream) {
+        afterPaint(() => {
+          const input = document.getElementById('stage-height')
+          input?.scrollIntoView({ block: 'center', behavior: prefersStill() ? 'auto' : 'smooth' })
+          input?.focus({ preventScroll: true })
+        })
+      } else {
+        askQuestion('height')
+      }
       return
     }
     if (engine === 'ready') goLive()
@@ -633,15 +665,27 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
     else if (action === 'recapture') goLive()
   }
 
+  const findShoesAction =
+    !example && submitReady && (stage === 'confirm' || (shopping && !question))
+      ? { label: sentBrief ? 'Update search' : 'Find my shoes', onClick: submitSearch }
+      : null
+  const stripAction = example
+    ? { label: 'Upload my clip', onClick: () => document.getElementById('clip-upload')?.click() }
+    : stage === 'confirm' && findShoesAction
+      ? findShoesAction
+      : nextStep.action
+        ? { label: nextStep.action.label, onClick: runNextAction }
+        : null
+
   const heroPicks = choice ? [choice, ...picks.filter((p) => p.url !== choice.url)] : picks
   const panelReadout = lockedReadout ?? readout
 
   return (
     <div
-      className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 md:px-8 lg:py-8"
+      className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 md:px-8 lg:gap-5 lg:py-6"
       style={{ '--stage-foreground': PHOSPHOR_COLOR[persona.phosphor] } as CSSProperties}
     >
-      <FittingHeader sport={sport} onSport={changeSport} />
+      <FittingHeader />
 
       <input
         id="clip-upload"
@@ -689,144 +733,154 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
         </aside>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-4 pb-52 lg:grid-cols-[minmax(0,1fr)_360px] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <main className="order-2 flex min-w-0 flex-col gap-4 lg:order-1">
-          <div className="lg:hidden">
-            <NextStep step={nextStep} onAction={runNextAction} showAction={false} />
-          </div>
-
-          {!example && shopping && (
-            <div id="forma-procurement" className="scroll-mt-6">
-              <AgentPanel
-                agent={agent}
-                sport={sport}
-                member={member}
-                choice={choice}
-                onChoose={setChoice}
-                onPinBaseline={measuredReady ? () => setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today' }) : undefined}
-                baselinePinned={Boolean(baseline)}
-                deeper={deeper}
-                onLookHarder={lookHarder}
-                onRetry={retrySearch}
-                onStartFresh={startFresh}
-                confirmedSize={prefDraft.size}
-                onSizeCommit={(size) => {
-                  setPrefDraft((d) => ({ ...d, size }))
-                  setConfirmedPrefs((p) => (p ? { ...p, size } : p))
-                }}
-                onBriefField={focusBriefField}
-              />
-            </div>
-          )}
-
-          {example ? (
-            <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} />
-          ) : (
-            <>
-              {stage === 'invite' && (
-                <div className="housing flex flex-col gap-2 rounded-2xl p-4 md:p-5">
-                  <p className={LABEL}>Your fitting begins with movement</p>
-                  <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
-                    {'Observe your gait in the motion panel, confirm the brief, then compare sourced directions — all from a clip that stays on this device.'}
-                  </p>
-                </div>
-              )}
-
-              {measuredReady && !shopping && readout.events > 0 && (
-                <div className="housing rounded-2xl p-4 md:p-5">
-                  <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
-                </div>
-              )}
-
-              <details className="group housing rounded-2xl p-4 md:p-5" open={stage === 'confirm' && !shopping}>
-                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                  <span className={LABEL}>
-                    {missingFields.length > 0 ? `Your brief · ${missingFields.length} to confirm` : 'Your brief'}
-                  </span>
-                  <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>
-                    +
-                  </span>
-                </summary>
-                <div className="mt-3">
-                  <FittingBrief
+      <section aria-label="Movement analysis" className="housing flex flex-col gap-3 rounded-2xl p-3 md:gap-4 md:p-5">
+        {example ? (
+          <ExampleObserver
+            sport={sport}
+            themeKey={persona.phosphor}
+            localSession={providerId === 'mediapipe' && sessionState.status === 'ready' ? sessionState.session : null}
+            loadLocalSession={providerId !== 'mediapipe'}
+            localSessionFailed={providerId === 'mediapipe' && sessionState.status === 'error'}
+            onObservation={setExampleObservation}
+          />
+        ) : (
+          <>
+            {clip && (
+              <p className="truncate px-1 font-mono text-xs leading-none text-muted-foreground" title={clip.name}>
+                {clip.name}
+              </p>
+            )}
+            <PoseStage
+              key={clip?.url ?? (live.stream ? 'live' : 'empty')}
+              themeKey={persona.phosphor}
+              videoRef={videoRef}
+              src={clip?.url ?? null}
+              stream={live.stream}
+              onKeyframe={addKeyframe}
+              onHero={setHero}
+              overlay={
+                live.phase === 'off' || live.phase === 'error' ? undefined : (
+                  <LiveOverlay
+                    phase={live.phase}
+                    secondsLeft={live.secondsLeft}
+                    totalSeconds={CAPTURE_SECONDS[sport]}
+                    caption={caption}
+                    events={readout.events}
+                    framing={snapshot?.framing ?? EMPTY_FRAME}
                     sport={sport}
-                    draft={prefDraft}
-                    notes={notes}
-                    onDraft={updateDraft}
-                    onNotes={updateNotes}
-                    onSubmit={submitSearch}
-                    attempted={attempted}
-                    submitLabel={sentBrief ? 'Update search' : 'Find my shoes'}
-                    submitEnabled={submitReady}
-                    submitHint={submitHint}
-                    provisionalHeight={provisional}
                   />
-                </div>
-              </details>
+                )
+              }
+              session={sessionState.status === 'ready' ? sessionState.session : null}
+              tracker={tracker}
+              sport={sport}
+              engine={engine}
+              statusLabel={statusLabel}
+              onSnapshot={setSnapshot}
+              onFile={loadFile}
+              onValidationFrame={onValidationFrame}
+              progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
+              idleAction={
+                <button
+                  type="button"
+                  onClick={showExample}
+                  className="flex items-center gap-2 whitespace-nowrap rounded-sm border-2 border-stage-foreground bg-stage-foreground px-3 py-2 text-lg uppercase leading-none text-stage transition-transform hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring motion-reduce:transition-none md:text-2xl"
+                >
+                  <Play className="size-4 fill-current" aria-hidden />
+                  Show me a sample fitting
+                </button>
+              }
+              heightControl={
+                <HeightDial
+                  key={enteredHeight ?? 'none'}
+                  id="stage-height"
+                  variant="screen"
+                  value={enteredHeight}
+                  onCommit={(cm) => updateDraft({ ...prefDraft, heightCm: String(cm) })}
+                />
+              }
+            />
+          </>
+        )}
 
-              {!measuredReady && !shopping && readout.events > 0 && (
-                <div className="housing rounded-2xl p-4 md:p-5">
-                  <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
-                </div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <SportToggle sport={sport} onSport={changeSport} />
+          {!example && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="lg"
+                className="h-10 whitespace-nowrap px-3"
+                onClick={() => document.getElementById('clip-upload')?.click()}
+              >
+                <Upload aria-hidden />
+                {stage === 'invite' ? 'Upload a clip' : 'Another clip'}
+              </Button>
+              {liveActive ? (
+                <Button variant="outline" size="lg" className="h-10 whitespace-nowrap px-3" onClick={live.stop}>
+                  <Square aria-hidden />
+                  Stop capture
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="h-10 whitespace-nowrap px-3"
+                  onClick={personalFilm}
+                  disabled={enteredHeight !== null && engine !== 'ready'}
+                  title={
+                    enteredHeight === null
+                      ? 'Set your height first — recordings cannot be re-analysed later'
+                      : engine === 'loading'
+                        ? 'Pose engine is warming up'
+                        : engine === 'error'
+                          ? 'Live analysis is unavailable right now — upload a clip instead'
+                          : undefined
+                  }
+                >
+                  <Camera aria-hidden />
+                  {enteredHeight === null ? 'Set up my camera' : stage === 'invite' ? 'Film me' : 'Film again'}
+                </Button>
               )}
-
-              {sport === 'running' && (clip || liveActive || captureStatus === 'ready') && (
-                <details className="group housing rounded-2xl p-4 md:p-5">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                    <span className={LABEL}>Local validation</span>
-                    <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>
-                      +
-                    </span>
-                  </summary>
-                  <div className="mt-3">
-                    <ValidationControls
-                      status={captureStatus}
-                      source={captureSource}
-                      traceSource={capturedTrace?.sourceKind ?? null}
-                      onSource={setCaptureSource}
-                      canStart={validationCanStart}
-                      onStart={startCapture}
-                      onStop={stopCapture}
-                      onExport={exportCapture}
-                      stopReason={capturedTrace?.stopReason ?? null}
-                      frameCount={capturedTrace?.frames.length ?? 0}
-                      contactCount={capturedTrace?.contacts.length ?? 0}
-                    />
-                  </div>
-                </details>
-              )}
-
-              {baseline && (
-                <div className="housing flex flex-col gap-2 rounded-2xl p-4 md:p-5">
-                  <p className={LABEL}>Baseline · this session only</p>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {'Compare your movement across sessions. '}
-                    {proof
-                      ? `${proof.improved} of ${proof.scored} scored metrics improved vs `
-                      : 'Load a clip to compare against '}
-                    <span className="font-semibold text-foreground">{baseline.clipName}</span>.
-                  </p>
-                  <Button variant="outline" size="lg" className="h-10 w-fit px-4" onClick={() => setBaseline(null)}>
-                    <PinOff aria-hidden />
-                    Clear baseline
+              {clip && (
+                <>
+                  <Button variant="outline" size="icon-lg" onClick={togglePlay} aria-label={playing ? 'Pause (Space)' : 'Play (Space)'}>
+                    {playing ? <Pause aria-hidden /> : <Play aria-hidden />}
                   </Button>
-                </div>
+                  <Button variant="outline" size="icon-lg" onClick={restart} aria-label="Restart analysis (R)">
+                    <RotateCcw aria-hidden />
+                  </Button>
+                </>
               )}
-            </>
-          )}
-
-          {choice && hero && (
-            <div id="hero-frame" className="scroll-mt-6">
-              <HeroCard frame={hero} readout={panelReadout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
+              {(clip || live.stream) && (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={voiceOn}
+                  onClick={() => setVoiceOn((v) => !v)}
+                  className="well flex h-10 items-center gap-2 rounded-md px-3 text-xs font-semibold uppercase tracking-[0.18em] text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <span className="led" data-state={voiceOn ? 'on' : 'off'} aria-hidden />
+                  Voice
+                  <span className="sr-only">{': Forma speaks coaching cues aloud'}</span>
+                </button>
+              )}
             </div>
           )}
+        </div>
 
-          {shopping && picks.length > 0 && !choice && !example && (
-            <div id="fitting-notes" className="scroll-mt-6">
-              <FittingNotes sport={sport} readout={panelReadout} keyframes={keyframes} value={notes} onChange={updateNotes} />
-            </div>
-          )}
-        </main>
+        {!example && (
+          <p className="px-1 text-pretty text-xs leading-relaxed text-muted-foreground">
+            {enteredHeight === null
+              ? `${SPORTS[sport].clipHint} Set your height on the screen before filming — recordings can't be re-analysed afterwards.`
+              : `${SPORTS[sport].clipHint} Recording captures ${CAPTURE_SECONDS[sport]} seconds, live only — the video is never saved.`}
+          </p>
+        )}
+        {!example && live.error && (
+          <p role="alert" className="px-1 text-sm leading-relaxed text-primary">
+            {`Live capture unavailable: ${live.error}.`}
+          </p>
+        )}
 
         <FormaDock
           persona={persona}
@@ -837,129 +891,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
           step={example ? { ...nextStep, title: stepTitle(sport, example.step) } : nextStep}
           isExample={Boolean(example)}
           observation={example && sport === 'running' ? exampleObservation : null}
-          media={
-            example ? (
-              <ExampleObserver
-                sport={sport}
-                themeKey={persona.phosphor}
-                localSession={providerId === 'mediapipe' && sessionState.status === 'ready' ? sessionState.session : null}
-                loadLocalSession={providerId !== 'mediapipe'}
-                localSessionFailed={providerId === 'mediapipe' && sessionState.status === 'error'}
-                onObservation={setExampleObservation}
-              />
-            ) : (
-              <div className="flex flex-col gap-3">
-                {clip && (
-                  <p className="truncate font-mono text-xs leading-none text-muted-foreground" title={clip.name}>
-                    {clip.name}
-                  </p>
-                )}
-                <PoseStage
-                  compact
-                  key={clip?.url ?? (live.stream ? 'live' : 'empty')}
-                  themeKey={persona.phosphor}
-                  videoRef={videoRef}
-                  src={clip?.url ?? null}
-                  stream={live.stream}
-                  onKeyframe={addKeyframe}
-                  onHero={setHero}
-                  overlay={
-                    live.phase === 'off' || live.phase === 'error' ? undefined : (
-                      <LiveOverlay
-                        compact
-                        phase={live.phase}
-                        secondsLeft={live.secondsLeft}
-                        totalSeconds={CAPTURE_SECONDS[sport]}
-                        caption={caption}
-                        events={readout.events}
-                        framing={snapshot?.framing ?? EMPTY_FRAME}
-                        sport={sport}
-                      />
-                    )
-                  }
-                  session={sessionState.status === 'ready' ? sessionState.session : null}
-                  tracker={tracker}
-                  sport={sport}
-                  engine={engine}
-                  statusLabel={statusLabel}
-                  onSnapshot={setSnapshot}
-                  onFile={loadFile}
-                  onValidationFrame={onValidationFrame}
-                  progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="h-10 whitespace-nowrap px-3"
-                    onClick={() => document.getElementById('clip-upload')?.click()}
-                  >
-                    <Upload aria-hidden />
-                    {stage === 'invite' ? 'Upload a clip' : 'Another clip'}
-                  </Button>
-                  {liveActive ? (
-                    <Button variant="outline" size="lg" className="h-10 whitespace-nowrap px-3" onClick={live.stop}>
-                      <Square aria-hidden />
-                      Stop capture
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      className="h-10 whitespace-nowrap px-3"
-                      onClick={personalFilm}
-                      disabled={enteredHeight !== null && engine !== 'ready'}
-                      title={
-                        enteredHeight === null
-                          ? 'Set your height in the brief first — recordings cannot be re-analysed later'
-                          : engine === 'loading'
-                            ? 'Pose engine is warming up'
-                            : engine === 'error'
-                              ? 'Live analysis is unavailable right now — upload a clip instead'
-                              : undefined
-                      }
-                    >
-                      <Camera aria-hidden />
-                      {enteredHeight === null ? 'Set up my camera' : stage === 'invite' ? 'Film me' : 'Film again'}
-                    </Button>
-                  )}
-                  {clip && (
-                    <>
-                      <Button variant="outline" size="icon-lg" onClick={togglePlay} aria-label={playing ? 'Pause (Space)' : 'Play (Space)'}>
-                        {playing ? <Pause aria-hidden /> : <Play aria-hidden />}
-                      </Button>
-                      <Button variant="outline" size="icon-lg" onClick={restart} aria-label="Restart analysis (R)">
-                        <RotateCcw aria-hidden />
-                      </Button>
-                    </>
-                  )}
-                  {(clip || live.stream) && (
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={voiceOn}
-                      onClick={() => setVoiceOn((v) => !v)}
-                      className="well flex h-10 items-center gap-2 rounded-md px-3 text-xs font-semibold uppercase tracking-[0.18em] text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
-                      <span className="led" data-state={voiceOn ? 'on' : 'off'} aria-hidden />
-                      Voice
-                      <span className="sr-only">{': Forma speaks coaching cues aloud'}</span>
-                    </button>
-                  )}
-                </div>
-                <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
-                  {enteredHeight === null
-                    ? `${SPORTS[sport].clipHint} Enter your height in the brief before filming — recordings can't be re-analysed afterwards.`
-                    : `${SPORTS[sport].clipHint} Recording captures ${CAPTURE_SECONDS[sport]} seconds, live only — the video is never saved.`}
-                </p>
-                {live.error && (
-                  <p role="alert" className="text-sm leading-relaxed text-primary">
-                    {`Live capture unavailable: ${live.error}.`}
-                  </p>
-                )}
-              </div>
-            )
-          }
+          actionInStage={!example && stage === 'invite' && !clip && !live.stream}
           secondaryAction={
             example
               ? {
@@ -968,7 +900,7 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
                   disabled: enteredHeight !== null && engine !== 'ready',
                   hint:
                     enteredHeight === null
-                      ? 'Needs your height first — exits the example and focuses the height field in your brief.'
+                      ? 'Needs your height first — exits the example and asks for it on the screen.'
                       : engine === 'loading'
                         ? 'Pose engine is warming up. You can upload a clip now.'
                         : engine === 'error'
@@ -1008,15 +940,175 @@ export function StrideLab({ initialPersona, initialMember }: { initialPersona: P
           tuning={tuning}
           onToggleTuning={() => setTuning((t) => !t)}
           onPersona={changePersona}
-          action={
-            example
-              ? { label: 'Find my fit', onClick: () => document.getElementById('clip-upload')?.click() }
-              : nextStep.action
-                ? { label: nextStep.action.label, onClick: runNextAction }
-                : null
+          action={stripAction}
+          pips={example ? undefined : { done: answeredCount(prefDraft, notes), total: REQUIRED_QUESTIONS.length }}
+          ask={
+            question
+              ? {
+                  eyebrow: stage === 'capture' ? 'Forma · while I watch' : 'Forma · your brief',
+                  prompt: questionPrompt(question, sport),
+                  controls: (
+                    <BriefQuestionPanel
+                      key={question}
+                      question={question}
+                      sport={sport}
+                      draft={prefDraft}
+                      notes={notes}
+                      likelySize={member.last?.size ?? null}
+                      onDraft={answerDraft}
+                      onNotes={answerNotes}
+                      onSkip={() => skipQuestion(question)}
+                      onBack={previousQuestion(question) ? () => setActiveQuestion(previousQuestion(question)) : null}
+                      onClose={() => setActiveQuestion(null)}
+                    />
+                  ),
+                }
+              : null
+          }
+          footer={
+            example ? undefined : (
+              <div className="flex flex-col gap-1 px-1">
+                <BriefSentence
+                  sport={sport}
+                  draft={prefDraft}
+                  notes={notes}
+                  active={question}
+                  onPick={askQuestion}
+                  trailing={
+                    shopping && findShoesAction ? (
+                      <Button size="sm" onClick={findShoesAction.onClick}>
+                        {findShoesAction.label}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+                <details className="group">
+                  <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-sm text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+                    Show all fields
+                    <span aria-hidden className="transition-transform group-open:rotate-90">
+                      ›
+                    </span>
+                  </summary>
+                  <div className="mt-2 max-w-2xl">
+                    <FittingBrief
+                      sport={sport}
+                      draft={prefDraft}
+                      notes={notes}
+                      onDraft={updateDraft}
+                      onNotes={updateNotes}
+                      onSubmit={submitSearch}
+                      attempted={attempted}
+                      submitLabel={sentBrief ? 'Update search' : 'Find my shoes'}
+                      submitEnabled={submitReady}
+                      submitHint={submitHint}
+                      provisionalHeight={provisional}
+                    />
+                  </div>
+                </details>
+              </div>
+            )
           }
         />
-      </div>
+      </section>
+
+      <main className="flex min-w-0 flex-col gap-4 pb-52 lg:pb-0">
+        {!example && shopping && (
+          <div id="forma-procurement" className="scroll-mt-6">
+            <AgentPanel
+              agent={agent}
+              sport={sport}
+              member={member}
+              choice={choice}
+              onChoose={setChoice}
+              onPinBaseline={measuredReady ? () => setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today' }) : undefined}
+              baselinePinned={Boolean(baseline)}
+              deeper={deeper}
+              onLookHarder={lookHarder}
+              onRetry={retrySearch}
+              onStartFresh={startFresh}
+              confirmedSize={prefDraft.size}
+              onSizeCommit={(size) => {
+                setPrefDraft((d) => ({ ...d, size }))
+                setConfirmedPrefs((p) => (p ? { ...p, size } : p))
+              }}
+              onBriefField={focusBriefField}
+            />
+          </div>
+        )}
+
+        {example ? (
+          <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} />
+        ) : (
+          <>
+            {measuredReady && !shopping && readout.events > 0 && (
+              <div className="housing rounded-2xl p-4 md:p-5">
+                <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
+              </div>
+            )}
+
+            {!measuredReady && !shopping && readout.events > 0 && (
+              <div className="housing rounded-2xl p-4 md:p-5">
+                <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
+              </div>
+            )}
+
+            {sport === 'running' && (clip || liveActive || captureStatus === 'ready') && (
+              <details className="group housing rounded-2xl p-4 md:p-5">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+                  <span className={LABEL}>Local validation</span>
+                  <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>
+                    +
+                  </span>
+                </summary>
+                <div className="mt-3">
+                  <ValidationControls
+                    status={captureStatus}
+                    source={captureSource}
+                    traceSource={capturedTrace?.sourceKind ?? null}
+                    onSource={setCaptureSource}
+                    canStart={validationCanStart}
+                    onStart={startCapture}
+                    onStop={stopCapture}
+                    onExport={exportCapture}
+                    stopReason={capturedTrace?.stopReason ?? null}
+                    frameCount={capturedTrace?.frames.length ?? 0}
+                    contactCount={capturedTrace?.contacts.length ?? 0}
+                  />
+                </div>
+              </details>
+            )}
+
+            {baseline && (
+              <div className="housing flex flex-col gap-2 rounded-2xl p-4 md:p-5">
+                <p className={LABEL}>Baseline · this session only</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {'Compare your movement across sessions. '}
+                  {proof
+                    ? `${proof.improved} of ${proof.scored} scored metrics improved vs `
+                    : 'Load a clip to compare against '}
+                  <span className="font-semibold text-foreground">{baseline.clipName}</span>.
+                </p>
+                <Button variant="outline" size="lg" className="h-10 w-fit px-4" onClick={() => setBaseline(null)}>
+                  <PinOff aria-hidden />
+                  Clear baseline
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+
+        {choice && hero && (
+          <div id="hero-frame" className="scroll-mt-6">
+            <HeroCard frame={hero} readout={panelReadout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
+          </div>
+        )}
+
+        {shopping && picks.length > 0 && !choice && !example && (
+          <div id="fitting-notes" className="scroll-mt-6">
+            <FittingNotes sport={sport} readout={panelReadout} keyframes={keyframes} value={notes} onChange={updateNotes} />
+          </div>
+        )}
+      </main>
     </div>
   )
 }
