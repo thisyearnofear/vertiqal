@@ -54,3 +54,15 @@ Allowed patterns for our free → paid ladders:
 - https://developers.openai.com/plugins/plugin-guidelines
 - https://learn.chatgpt.com/docs/plugins
 - DevDay 2026 Plugin Extensions / mid-conversation discovery writeups (e.g. intent routing / "plugin SEO")
+
+## Usage-only scoreboard (Plugin Lane)
+
+Watch weekly. **Usage-first; don't chase ARPU yet** — no paid conversion, checkout, or monetisation metrics on this board. Free MCP wedge in ChatGPT (`get_fit_passport`, `check_fit`); digital paid / affiliate Buy stays off-platform if mentioned at all and is out of scope here. Instrument when you have analytics (MCP/`/api/mcp` request logs, Vercel logs, stable client ids); do not invent dashboards until those exist.
+
+| # | Metric | What “good” looks like |
+| --- | --- | --- |
+| 1 | Plugin connects | Successful connect + `tools/list` for `https://vertiqal.vercel.app/api/mcp` |
+| 2 | Free tool calls / week | Calls to live free tools: `get_fit_passport`, `check_fit` |
+| 3 | Return users | ≥2 sessions in 7 days (same ChatGPT user / stable client id if logged) |
+
+Related: [CONNECT](./CHATGPT_PLUGIN_CONNECT.md) free wedge vs product-side deep actions.
