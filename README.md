@@ -46,6 +46,7 @@ Thin packaging over the live Fit Passport MCP (directory at [chatgpt.com/plugins
 | Connect | [`docs/CHATGPT_PLUGIN_CONNECT.md`](docs/CHATGPT_PLUGIN_CONNECT.md) |
 | Eval set | [`docs/CHATGPT_PLUGIN_EVAL.md`](docs/CHATGPT_PLUGIN_EVAL.md) |
 | Starter prompts | [`docs/CHATGPT_PLUGIN_STARTER_PROMPTS.md`](docs/CHATGPT_PLUGIN_STARTER_PROMPTS.md) |
+| Scoreboard | Usage-only funnel (connect → free tool → return) in [`docs/CHATGPT_PLUGIN_PLAYBOOK.md`](docs/CHATGPT_PLUGIN_PLAYBOOK.md#usage-only-scoreboard-plugin-lane) — usage-first; don’t chase ARPU yet |
 
 ## Monetisation and costs
 
