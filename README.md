@@ -34,6 +34,19 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 | Wassist | WhatsApp handoff (Bring Your Own Agent), reply webhook and the conversation transcript that serves as shopper memory. |
 | Next.js 16 + AI SDK | App, route handlers, tool-calling agent. |
 
+## ChatGPT plugin — "will these fit me"
+
+Thin packaging over the live Fit Passport MCP (directory at [chatgpt.com/plugins](https://chatgpt.com/plugins)). Description in user words. **Free wedge first:** `get_fit_passport` + `check_fit`. Live Solari size/stock checks and Fit Passport **issuance** stay on the product — not in-plugin deep actions. No digital checkout inside ChatGPT (see playbook commerce constraints).
+
+| | |
+| --- | --- |
+| MCP | [`https://vertiqal.vercel.app/api/mcp`](https://vertiqal.vercel.app/api/mcp) (`app/api/mcp` · tools `get_fit_passport`, `check_fit`) |
+| Live app | [vertiqal.vercel.app](https://vertiqal.vercel.app) |
+| Playbook | [`docs/CHATGPT_PLUGIN_PLAYBOOK.md`](docs/CHATGPT_PLUGIN_PLAYBOOK.md) |
+| Connect | [`docs/CHATGPT_PLUGIN_CONNECT.md`](docs/CHATGPT_PLUGIN_CONNECT.md) |
+| Eval set | [`docs/CHATGPT_PLUGIN_EVAL.md`](docs/CHATGPT_PLUGIN_EVAL.md) |
+| Starter prompts | [`docs/CHATGPT_PLUGIN_STARTER_PROMPTS.md`](docs/CHATGPT_PLUGIN_STARTER_PROMPTS.md) |
+
 ## Monetisation and costs
 
 There is no revenue path yet; every fitting is free and costs money in model, search and browser calls. The plan — free-stage cost controls first, then affiliate commission on Buy, then B2B fit data once measurement accuracy is validated — lives in [docs/monetisation.md](docs/monetisation.md).
