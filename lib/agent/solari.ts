@@ -246,14 +246,29 @@ export async function getReplayUrl(sessionId: string): Promise<string | null> {
   }
 }
 
+// Free plans reject stealth (and therefore proxies). Learned once per process so later checks skip
+// straight to a plain session instead of paying for a refused launch every time.
+let stealthCapable = true
+const isPlanGate = (error: unknown) => /FeatureRequiresPlan|requires a paid plan/i.test(String(error instanceof Error ? error.message : error))
+
 async function launchBrowser(solari: Solari, proxy: LaunchOptions['proxy'], timeoutMs: number) {
-  // A timed-out launch can still resolve server-side; close the late session rather than leaving it running.
-  const work = solari.launch({ stealth: true, proxy, recording: true, retries: 1 })
+  const attempt = async (stealth: boolean) => {
+    // A timed-out launch can still resolve server-side; close the late session rather than leaving it running.
+    const work = solari.launch({ stealth, proxy: stealth ? proxy : undefined, recording: true, retries: 1 })
+    try {
+      return await within(work, timeoutMs, 'Solari browser launch')
+    } catch (error) {
+      void work.then((browser) => browser.close()).catch(() => {})
+      throw error
+    }
+  }
+  if (!stealthCapable) return attempt(false)
   try {
-    return await within(work, timeoutMs, 'Solari browser launch')
+    return await attempt(true)
   } catch (error) {
-    void work.then((browser) => browser.close()).catch(() => {})
-    throw error
+    if (!isPlanGate(error)) throw error
+    stealthCapable = false
+    return attempt(false)
   }
 }
 
