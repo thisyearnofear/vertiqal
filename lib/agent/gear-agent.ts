@@ -42,7 +42,7 @@ Keep any text between tool calls to one short sentence, in the requested voice.
 - buildGearProfile: translate the measurements into 3–4 shoe requirements. Every requirement quotes the measurement that justifies it. If checkEvidence ran, set researchRef only where a curated finding genuinely supports that requirement; never stretch a finding. If research contradicts a common shop-floor rule (e.g. buying stability shoes for pronation), follow the research and say so.
   - Running: category is neutral, stability or motion-control; think cushioning, drop, stack, stability.
   - Climbing: category is flat, moderate or aggressive (downturn); think downturn, asymmetry, stiffness, closure, rubber. Climbing shoes are usually sized 0.5–2 sizes below street size; state the size you will use in a requirement.
-- searchProducts: specific queries for current models that fit the profile, favouring UK retailers with product pages (not review roundups).
+- searchProducts: specific queries for current models that fit the profile, favouring UK retailers with product pages (not review roundups). To build a diverse shortlist, search one distinct candidate model at a time (e.g. "Brooks Ghost 16 buy") rather than broad category queries — broad queries return several retailers selling the same shoe.
 - checkCommunity (considered and deep): name the 3–5 strongest candidates. Drop or demote a candidate if riders consistently report a problem relevant to this shopper.
 - checkAthletes (deep): the same top 3 candidates. Call it in the same step as checkCommunity when both are offered.
 - recommendProducts: exactly 3 picks, each a different model (a GORE-TEX, wide or gender version is the same model), best fit first. Only use product-page URLs from searchProducts results, never review or forum links from other tools; never invent or edit URLs. Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
@@ -67,8 +67,12 @@ function productUrlsIn(messages: ModelMessage[]) {
   return messages.flatMap((m) =>
     m.role === 'tool'
       ? m.content.flatMap((p) => {
-          if (p.type !== 'tool-result' || p.toolName !== 'searchProducts' || p.output.type !== 'json') return []
-          const results = (p.output.value as { results?: { url?: unknown }[] } | null)?.results ?? []
+          if (p.type !== 'tool-result' || p.toolName !== 'searchProducts') return []
+          // ModelMessage tool-results carry the raw output value; tolerate the
+          // {type:'json', value} envelope too in case the shape shifts.
+          const out = p.output as { type?: string; value?: unknown; results?: { url?: unknown }[] } | null
+          const payload = out?.type === 'json' ? (out.value as { results?: { url?: unknown }[] } | null) : out
+          const results = payload?.results ?? []
           return results.flatMap((r) => (typeof r.url === 'string' ? [r.url] : []))
         })
       : [],
@@ -87,8 +91,8 @@ export function createGearAgent(model: string) {
   model,
   instructions: INSTRUCTIONS,
   // Deepest legit run is ~8 steps (research → profile → 2 searches → community + athletes → recommend → final text).
-  // Room for one rejected shortlist plus one extra search and a corrected pick.
-  stopWhen: stepCountIs(12),
+  // Room for two rejected shortlists with corrective searches and re-picks.
+  stopWhen: stepCountIs(14),
   tools: {
     checkEvidence: tool({
       description:
@@ -191,11 +195,10 @@ export function createGearAgent(model: string) {
             typeof (p.output.value as { error?: unknown } | null)?.error === 'string',
         ),
     )
-    if (rejectedShortlist && count('recommendProducts') < 2) {
-      // Let Forma fetch the replacement it promises (one extra product search), then re-pick.
-      return count('searchProducts') <= DEPTHS[depth].searches
-        ? { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[], toolChoice: 'required' as const }
-        : only('recommendProducts')
+    if (rejectedShortlist && count('recommendProducts') < 3) {
+      // Let Forma keep hunting: a rejected shortlist lifts the depth search cap so a
+      // monoculture result set (same model, many retailers) can be worked around.
+      return { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[], toolChoice: 'required' as const }
     }
     if (!count('recommendProducts')) {
       if (count('searchProducts') < DEPTHS[depth].searches) return only('searchProducts')
