@@ -82,8 +82,9 @@ function promptTextOf(messages: ModelMessage[]) {
   return first.content.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('\n')
 }
 
-export const gearAgent = new ToolLoopAgent({
-  model: 'spacexai/grok-4.7',
+export function createGearAgent(model: string) {
+  return new ToolLoopAgent({
+  model,
   instructions: INSTRUCTIONS,
   // Deepest legit run is ~8 steps (research → profile → 2 searches → community + athletes → recommend → final text).
   // Room for one rejected shortlist plus one extra search and a corrected pick.
@@ -207,6 +208,7 @@ export const gearAgent = new ToolLoopAgent({
     }
     return { activeTools: [], toolChoice: 'none' as const }
   },
-})
+  })
+}
 
-export type GearAgentUIMessage = InferAgentUIMessage<typeof gearAgent>
+export type GearAgentUIMessage = InferAgentUIMessage<ReturnType<typeof createGearAgent>>

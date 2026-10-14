@@ -34,13 +34,42 @@ const RESEARCH_DOMAINS = [
   'mdpi.com',
 ]
 
-export const searchWeb = (query: string) => tavily(query, RETAILER_DOMAINS)
+/**
+ * Retailer domains also host homepages, careers and corporate pages that a
+ * fitting can't cite. Prefer URLs that at least look like product pages —
+ * deeper paths, no corporate subdomain. Falls back to the raw list rather
+ * than emptying it.
+ */
+const NON_PRODUCT_HOST = /^(about|careers|jobs|investors?|news|press|help|support|stores?)\./i
+
+function looksLikeProductPage(url: string): boolean {
+  try {
+    const u = new URL(url)
+    if (NON_PRODUCT_HOST.test(u.hostname)) return false
+    return u.pathname.replace(/\/+$/, '').split('/').filter(Boolean).length >= 2
+  } catch {
+    return false
+  }
+}
+
+function preferProductPages(hits: SearchHit[]): SearchHit[] {
+  const product = hits.filter((h) => looksLikeProductPage(h.url))
+  return product.length ? product : hits
+}
+
+export const searchWeb = (query: string) =>
+  tavily(query, RETAILER_DOMAINS, 8, 'advanced').then(preferProductPages)
 export const searchCommunity = (query: string) => tavily(query, COMMUNITY_DOMAINS)
 export const searchResearch = (query: string) => tavily(query, RESEARCH_DOMAINS, 5)
 /** Unrestricted search, for athlete and race-kit coverage that lives on news and brand sites. */
 export const searchOpen = (query: string) => tavily(query, [], 4)
 
-async function tavily(query: string, domains: string[], maxResults = 8): Promise<SearchHit[]> {
+async function tavily(
+  query: string,
+  domains: string[],
+  maxResults = 8,
+  depth: 'basic' | 'advanced' = 'basic',
+): Promise<SearchHit[]> {
   const apiKey = process.env.TAVILY_API_KEY
   if (!apiKey) throw new Error('TAVILY_API_KEY is not configured')
 
@@ -50,7 +79,7 @@ async function tavily(query: string, domains: string[], maxResults = 8): Promise
     body: JSON.stringify({
       query,
       max_results: maxResults,
-      search_depth: 'basic',
+      search_depth: depth,
       ...(domains.length ? { include_domains: domains } : {}),
     }),
     signal: AbortSignal.timeout(20_000),

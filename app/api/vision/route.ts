@@ -1,6 +1,7 @@
 import { Output, generateText } from 'ai'
 import { z } from 'zod'
 import { visionFindingSchema } from '@/lib/agent/fitting-notes'
+import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
 
 export const maxDuration = 60
@@ -29,8 +30,13 @@ export async function POST(request: Request) {
 
   const started = Date.now()
   try {
+    const model = await resolveModel('agent')
+    if (!model) {
+      logCost('paid_call', { route: 'vision', ok: false, ms: Date.now() - started, kind, sport, images: images.length, reason: 'no_model_available' })
+      return Response.json({ error: 'Forma’s model is unreachable right now — try again shortly.' }, { status: 503 })
+    }
     const { output } = await generateText({
-      model: 'spacexai/grok-4.7',
+      model,
       system: SYSTEM[kind](sport),
       messages: [
         {
@@ -54,6 +60,6 @@ export async function POST(request: Request) {
     return Response.json(output)
   } catch (error) {
     logCost('paid_call', { route: 'vision', ok: false, ms: Date.now() - started, kind, sport, images: images.length })
-    return Response.json({ error: error instanceof Error ? error.message : 'Vision analysis failed' }, { status: 502 })
+    return Response.json({ error: friendlyModelError(error) }, { status: 502 })
   }
 }

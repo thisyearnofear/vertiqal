@@ -1,10 +1,13 @@
 import 'server-only'
 import { Output, generateText } from 'ai'
+import { resolveModel } from '@/lib/agent/models'
 import { fitVerdictSchema, type Passport } from './schema'
 
 export async function checkFit(passport: Passport, product: string) {
+  const model = await resolveModel('agent')
+  if (!model) throw new Error('No reachable model for the fit check')
   const { output } = await generateText({
-    model: 'spacexai/grok-4.7',
+    model,
     system:
       'You are Forma, the vertiqal fitting agent. Judge whether a named shoe suits the passport owner using only their measured passport and your knowledge of that product. Be specific and honest; if you do not know the product, say so in a reason and score conservatively. No medical claims.',
     prompt: `Fit passport:\n${JSON.stringify(passport)}\n\nProduct to judge: ${product}`,

@@ -5,7 +5,7 @@ import { createRateLimiter } from '@/lib/agent/stock-policy'
 import { logCost } from '@/lib/cost-log'
 import { fetchInboundImage, findConversation, isValidWebhookToken, markTyping, transcriptOf } from '@/lib/wassist/client'
 import { isLinkCodeMessage } from '@/lib/wassist/link'
-import { replyAgent } from '@/lib/wassist/reply-agent'
+import { getReplyAgent } from '@/lib/wassist/reply-agent'
 
 export const maxDuration = 60
 
@@ -78,7 +78,9 @@ export async function POST(request: Request) {
           content: [{ type: 'text', text }, ...(photo ? [{ type: 'file' as const, ...photo }] : [])],
         },
       ]
-      const result = await replyAgent.generate({ messages })
+      const agent = await getReplyAgent()
+      if (!agent) throw new Error('No reachable model for the reply agent')
+      const result = await agent.generate({ messages })
       const searches = result.steps.flatMap((s) => s.toolCalls).filter((c) => c.toolName === 'searchProducts').length
       logCost('paid_call', {
         route: 'wassist-reply',

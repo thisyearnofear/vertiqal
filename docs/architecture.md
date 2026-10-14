@@ -16,7 +16,7 @@ lib/metrics (browser)         cadence, foot strike, overstride │ reach, hip po
 lib/fitting (browser)         stage flow + confirmed brief: size, budget, calibrated height, goal, surface
   │                           └─▶ synthetic example bypasses this path and calls no APIs
   ▼
-/api/agent                    gear agent (AI SDK + Grok 4.7), streams tool steps to the UI
+/api/agent                    gear agent (AI SDK + Grok 4.7, falling back per `lib/agent/models.ts`), streams tool steps to the UI
   │  tools: buildGearProfile → research / stock / rider reports / athletes (Tavily) → recommendProducts
   ▼
 Picks ──▶ /api/stock-check     signed product target + user-submitted size → retailer policy/rate limit/cache → Solari (UK egress) → page verification → Grok verdict + screenshot
@@ -33,6 +33,10 @@ Next visit ──▶ /api/member         reads the cookie + shopper's recent Wha
 ```
 
 Measurement always comes from untouched frames. The hero card grade and try-on image are separate outputs and never feed back into metrics.
+
+### Model fallback
+
+Every language-model call goes through `lib/agent/models.ts`: an ordered candidate chain per role — `agent` (reasoning/tool use, default `grok-4.7 → gemini-2.5-flash → gpt-5-mini → deepseek-v3.1`) and `fast` (extraction/judging, default `grok-4.20-non-reasoning → gemini-2.5-flash-lite → nova-2-lite → gpt-5-nano`). The first model answering a probe is cached for the instance; a total miss is retried after 60s. Chains are env-overridable via `FORMA_AGENT_MODELS` / `FORMA_FAST_MODELS`, so a restricted or unfunded model degrades to a working one instead of halting the fitting. Single-purpose models with no substitute (Grok TTS, FLUX Kontext) fail with shopper-readable copy, never raw gateway errors.
 
 ## Fitting-state rules
 
