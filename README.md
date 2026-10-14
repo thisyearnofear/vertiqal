@@ -24,10 +24,10 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 
 | Service | Role |
 | --- | --- |
-| Vercel AI Gateway | Grok 4.7 (agent + vision), Grok TTS (voice), FLUX Kontext (try-on). No per-provider keys. |
+| Vercel AI Gateway | Grok 4.7 (agent + vision), Grok TTS (voice), FLUX Kontext (try-on). No per-provider keys. Language-model calls fall back automatically through an ordered chain when the named model isn't reachable on this account (`FORMA_AGENT_MODELS` / `FORMA_FAST_MODELS`); see [architecture](docs/architecture.md#model-fallback). |
 | MediaPipe Pose | On-device keypoints, every frame. |
 | VLM Run (Orion) | Optional hosted keypoint refinement on sampled frames of uploaded clips. |
-| Tavily | Live retailer, research, community and athlete search. |
+| Tavily | Live retailer, research, community and athlete search. Product search runs at advanced depth and filters out corporate/homepage URLs so picks cite real product pages. |
 | Solari | Stealth browser with UK residential egress for size and stock checks, with screenshot and session replay receipts. |
 | Browser Use | User-approved basket availability checks (agent tool). |
 | Vercel Analytics | Funnel events only — `sample_started`, `film_started`, `clip_uploaded`, `measurements_locked`, `shopping_started`, `pick_chosen`, `buy_clicked`, `whatsapp_sent`, `shortlist_feedback`, `limit_hit` — carrying sport/retailer flags, no PII. |
@@ -47,6 +47,7 @@ Thin packaging over the live Fit Passport MCP (directory at [chatgpt.com/plugins
 | Eval set | [`docs/CHATGPT_PLUGIN_EVAL.md`](docs/CHATGPT_PLUGIN_EVAL.md) |
 | Starter prompts | [`docs/CHATGPT_PLUGIN_STARTER_PROMPTS.md`](docs/CHATGPT_PLUGIN_STARTER_PROMPTS.md) |
 | Scoreboard | Usage-only funnel (connect → free tool → return) in [`docs/CHATGPT_PLUGIN_PLAYBOOK.md`](docs/CHATGPT_PLUGIN_PLAYBOOK.md#usage-only-scoreboard-plugin-lane) — usage-first; don’t chase ARPU yet |
+| Virality | Hero-frame cards + WhatsApp handoff are the share loop (pick → card → chat → back). Run the K-factor worksheet on shared picks → new fittings, then a 48-hour test on the card CTA. |
 
 ## Monetisation and costs
 

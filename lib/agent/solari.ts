@@ -2,6 +2,7 @@ import 'server-only'
 import { Output, generateText } from 'ai'
 import { Solari, type BrowserSession, type LaunchOptions } from '@solarisdk/browser'
 import { z } from 'zod'
+import { resolveModel } from './models'
 import { guardedStockVerdict } from './stock-page.ts'
 import { extraStockHosts, stockUrlAllowed } from './stock-policy.ts'
 
@@ -195,9 +196,11 @@ async function readProductPage(browser: BrowserSession, url: string) {
 }
 
 async function judgeStock(input: { productName: string; size: string }, page: Awaited<ReturnType<typeof readProductPage>>, timeoutMs: number) {
+  const model = await resolveModel('fast')
+  if (!model) throw new Error('No reachable model for the stock verdict')
   const { output } = await generateText({
-    // Reading evidence off a page is extraction, not reasoning; the non-reasoning model is ~4x faster here.
-    model: 'spacexai/grok-4.20-non-reasoning',
+    // Reading evidence off a page is extraction, not reasoning; the fast chain favours cheap non-reasoning models.
+    model,
     system:
       'You verify stock on a retailer product page for a shoe fitter. Decide whether the requested size is in stock right now, using only the evidence given: structured offer data, the size controls (entries marked [unavailable] are greyed out), the visible page text and the screenshot. Match sizes sensibly (e.g. "UK 9" matches a "9" button on a UK site). If the page is a bot check, error or not this product, answer blocked. Never guess: prefer unclear over a confident wrong answer.',
     messages: [

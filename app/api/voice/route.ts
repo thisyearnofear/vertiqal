@@ -1,5 +1,6 @@
 import { generateSpeech } from 'ai'
 import { z } from 'zod'
+import { friendlyModelError } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
 
 const bodySchema = z.object({ text: z.string().trim().min(1).max(240) })
@@ -21,6 +22,6 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     logCost('paid_call', { route: 'voice', ok: false, ms: Date.now() - started, chars: parsed.data.text.length })
-    return Response.json({ error: error instanceof Error ? error.message : 'Speech failed' }, { status: 502 })
+    return Response.json({ error: friendlyModelError(error) }, { status: 502 })
   }
 }

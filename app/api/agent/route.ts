@@ -1,13 +1,14 @@
 import { createAgentUIStreamResponse, type StepResult } from 'ai'
 import { agentRequestSchema, briefToPrompt } from '@/lib/agent/brief'
-import { gearAgent } from '@/lib/agent/gear-agent'
+import { createGearAgent } from '@/lib/agent/gear-agent'
+import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
 
 export const maxDuration = 120
 
 const MAX_BODY_BYTES = 32_768
 
-type AgentStep = StepResult<(typeof gearAgent)['tools']>
+type AgentStep = StepResult<ReturnType<typeof createGearAgent>['tools']>
 
 const sumUsage = (steps: AgentStep[], key: 'inputTokens' | 'outputTokens' | 'totalTokens') =>
   steps.every((s) => typeof s.usage?.[key] === 'number')
@@ -45,9 +46,26 @@ export async function POST(request: Request) {
     { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text' as const, text: briefToPrompt(brief, prefs) }] },
   ]
 
+  const model = await resolveModel('agent')
+  if (!model) {
+    logCost('agent_run', {
+      sport: brief.sport,
+      depth: prefs.depth,
+      ms: Date.now() - started,
+      tavilyCalls: 0,
+      outcome: 'failed',
+      error: true,
+      reason: 'no_model_available',
+    })
+    return Response.json(
+      { error: 'Forma’s fitting model is unreachable right now — please try again in a moment.' },
+      { status: 503 },
+    )
+  }
+
   const steps: AgentStep[] = []
   return createAgentUIStreamResponse({
-    agent: gearAgent,
+    agent: createGearAgent(model),
     uiMessages,
     abortSignal: request.signal,
     onStepEnd: (step) => {
@@ -72,6 +90,7 @@ export async function POST(request: Request) {
       logCost('agent_run', {
         sport: brief.sport,
         depth: prefs.depth,
+        model,
         steps: steps.length,
         inputTokens: sumUsage(steps, 'inputTokens'),
         outputTokens: sumUsage(steps, 'outputTokens'),
@@ -84,6 +103,6 @@ export async function POST(request: Request) {
         error: outcome.status === 'failed',
       })
     },
-    onError: (error) => (error instanceof Error ? error.message : 'The agent hit an unexpected error'),
+    onError: (error) => friendlyModelError(error),
   })
 }

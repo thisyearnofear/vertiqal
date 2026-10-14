@@ -1,5 +1,6 @@
 import { generateImage } from 'ai'
 import { z } from 'zod'
+import { friendlyModelError } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
 
 export const maxDuration = 60
@@ -38,7 +39,6 @@ export async function POST(request: Request) {
     return Response.json({ image: `data:${result.mediaType};base64,${result.base64}`, model: TRYON_MODEL })
   } catch (error) {
     logCost('paid_call', { route: 'tryon', ok: false, ms: Date.now() - started, sport })
-    const message = error instanceof Error ? error.message : 'Image generation failed'
-    return Response.json({ error: message.slice(0, 200) }, { status: 502 })
+    return Response.json({ error: friendlyModelError(error) }, { status: 502 })
   }
 }

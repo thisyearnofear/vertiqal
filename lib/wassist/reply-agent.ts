@@ -1,6 +1,7 @@
 import 'server-only'
 import { ToolLoopAgent, stepCountIs, tool } from 'ai'
 import { z } from 'zod'
+import { resolveModel } from '@/lib/agent/models'
 import { searchWeb } from '@/lib/agent/tavily'
 
 const INSTRUCTIONS = `You are Forma, the vertiqal fitting agent, chatting with a shopper on WhatsApp.
@@ -19,8 +20,9 @@ Earlier in the chat you sent them a fitting measured from a video of their runni
 - Never invent URLs or prices. Never give medical diagnoses.
 - If there is no fitting in the transcript yet, tell them to finish the scan on the vertiqal screen.`
 
-export const replyAgent = new ToolLoopAgent({
-  model: 'spacexai/grok-4.7',
+export function createReplyAgent(model: string) {
+  return new ToolLoopAgent({
+  model,
   instructions: INSTRUCTIONS,
   stopWhen: stepCountIs(3),
   tools: {
@@ -30,4 +32,11 @@ export const replyAgent = new ToolLoopAgent({
       execute: async ({ query }) => (await searchWeb(query)).slice(0, 5),
     }),
   },
-})
+  })
+}
+
+/** Resolves the reachable model for this instance, then builds the agent. Null when no model answers. */
+export async function getReplyAgent() {
+  const model = await resolveModel('agent')
+  return model ? createReplyAgent(model) : null
+}
