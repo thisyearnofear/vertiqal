@@ -1,5 +1,24 @@
-import 'server-only'
-import { RETAILER_DOMAINS } from './domains'
+import { RETAILER_DOMAINS } from './domains.ts'
+import { createTtlCache } from './stock-policy.ts'
+
+export const TAVILY_CACHE_TTL_MS = 6 * 60 * 60_000
+
+const searchCache = createTtlCache<SearchHit[]>(TAVILY_CACHE_TTL_MS)
+const inFlightSearches = new Map<string, Promise<SearchHit[]>>()
+
+export function tavilyCacheKey(
+  query: string,
+  domains: string[],
+  maxResults: number,
+  depth: 'basic' | 'advanced',
+): string {
+  const normalizedQuery = query.trim().toLowerCase().replace(/\s+/g, ' ')
+  const normalizedDomains = [...domains]
+    .map((d) => d.trim().toLowerCase())
+    .sort()
+    .join(',')
+  return `${depth}:${maxResults}:${normalizedDomains}:${normalizedQuery}`
+}
 
 export interface SearchHit {
   title: string
@@ -70,28 +89,48 @@ async function tavily(
   maxResults = 8,
   depth: 'basic' | 'advanced' = 'basic',
 ): Promise<SearchHit[]> {
+  const key = tavilyCacheKey(query, domains, maxResults, depth)
+  const cached = searchCache.get(key)
+  if (cached) return cached.value
+
+  const pending = inFlightSearches.get(key)
+  if (pending) return pending
+
   const apiKey = process.env.TAVILY_API_KEY
   if (!apiKey) throw new Error('TAVILY_API_KEY is not configured')
 
-  const response = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query,
-      max_results: maxResults,
-      search_depth: depth,
-      ...(domains.length ? { include_domains: domains } : {}),
-    }),
-    signal: AbortSignal.timeout(20_000),
-  })
-  if (!response.ok) throw new Error(`Tavily search failed (${response.status})`)
+  const work = (async () => {
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        max_results: maxResults,
+        search_depth: depth,
+        ...(domains.length ? { include_domains: domains } : {}),
+      }),
+      signal: AbortSignal.timeout(20_000),
+    })
+    if (!response.ok) throw new Error(`Tavily search failed (${response.status})`)
 
-  const data = (await response.json()) as {
-    results?: { title: string; url: string; content: string }[]
+    const data = (await response.json()) as {
+      results?: { title: string; url: string; content: string }[]
+    }
+    const hits = (data.results ?? []).map((r) => ({
+      title: r.title,
+      url: r.url,
+      snippet: r.content.slice(0, 400),
+    }))
+    if (hits.length > 0) {
+      searchCache.set(key, hits)
+    }
+    return hits
+  })()
+
+  inFlightSearches.set(key, work)
+  try {
+    return await work
+  } finally {
+    inFlightSearches.delete(key)
   }
-  return (data.results ?? []).map((r) => ({
-    title: r.title,
-    url: r.url,
-    snippet: r.content.slice(0, 400),
-  }))
 }
