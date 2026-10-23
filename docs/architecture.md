@@ -10,6 +10,7 @@ lib/pose (browser)            MediaPipe every frame ── optional VLM Run refi
   │
   ▼
 lib/metrics (browser)         cadence, foot strike, overstride │ reach, hip position, precision │ framing quality
+  │                           ├─▶ lib/pose/twin-3d: 3D Movement Twin rig, biomechanical vectors & agent fit pins (Three.js, on-device)
   │                           ├─▶ lib/hero: best frame → hero card (canvas, on-device)
   │                           └─▶ fitting-notes: footfall stills → /api/vision (opt-in, Grok vision)
   ▼

@@ -14,6 +14,7 @@ export interface HeroFrame {
   score: number
   box: { x: number; y: number; w: number; h: number }
   trails: Point[][]
+  pose?: Pose
 }
 
 const MIN_SCORE = 0.5
@@ -84,5 +85,5 @@ export function captureHero(video: HTMLVideoElement, pose: Pose, history: Pose[]
     }),
   )
 
-  return { id: nextId++, sport, dataUrl: canvas.toDataURL('image/jpeg', 0.9), score, box: poseBox(pose), trails }
+  return { id: nextId++, sport, dataUrl: canvas.toDataURL('image/jpeg', 0.9), score, box: poseBox(pose), trails, pose }
 }

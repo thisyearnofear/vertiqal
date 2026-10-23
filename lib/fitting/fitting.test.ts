@@ -43,6 +43,7 @@ import { ClimbTracker } from '../metrics/climb.ts'
 import { AFFILIATE_DISCLOSURE, parseAffiliateMerchants, wrapAffiliateUrl } from '../agent/affiliate.ts'
 import { tavilyCacheKey } from '../agent/tavily.ts'
 import { DEMO_PASSPORTS, issuePassport, passportId, readPassport, tokenFrom } from '../passport/token.ts'
+import { jointForAttribute, retargetPoseTo3D } from '../pose/twin-3d.ts'
 import { CAPACITY_MESSAGE, DEFAULT_SURFACE_POLICIES, createSurfaceGuard, disabledSurfaces } from '../rate-limit.ts'
 import { attractPose } from '../../components/stride-lab/attract-runner.ts'
 import type { Pose } from '../pose/types.ts'
@@ -1041,4 +1042,44 @@ test('affiliate wrapper: wraps only approved retailers when configured and leave
   const unapproved = wrapAffiliateUrl('https://evil.example.com/shoe', { affiliateId: '998877', merchants })
   assert.deepEqual(unapproved, { href: 'https://evil.example.com/shoe', affiliated: false })
   assert.match(AFFILIATE_DISCLOSURE, /never changes the ranking/)
+})
+
+test('3D movement twin: retargets running and climbing poses into 3D rig, vectors, and agent pins', () => {
+  const runPose = attractPose(0.3, { centerX: 0.5, height: 0.62, groundY: 0.85, aspect: 1 })
+  const runTwin = retargetPoseTo3D(runPose, {
+    sport: 'running',
+    requirements: [
+      { attribute: 'Heel cushioning', target: 'Max stack foam', evidence: '14 cm overstride' },
+      { attribute: 'Toe box width', target: 'Wide forefoot' },
+    ],
+  })
+  assert.ok(runTwin.joints.pelvis, 'synthesises pelvis midpoint')
+  assert.ok(runTwin.joints.thorax, 'synthesises thorax')
+  assert.ok(runTwin.joints.left_hip && runTwin.joints.right_hip)
+  assert.ok(runTwin.joints.left_hip.z > 0 && runTwin.joints.right_hip.z < 0, 'separates left and right limbs in 3D Z')
+  assert.ok(runTwin.bones.length >= 12, 'builds connected 3D bone hierarchy')
+  assert.deepEqual(
+    runTwin.vectors.map((v) => v.id),
+    ['overstride', 'strike', 'lean'],
+  )
+  assert.equal(runTwin.pins.length, 2)
+  assert.equal(runTwin.pins[0].joint, 'left_heel')
+  assert.equal(runTwin.pins[1].joint, 'left_foot')
+
+  const climbTwin = retargetPoseTo3D(
+    {
+      ...climbPose(0.45, 0.72),
+      left_shoulder: kp(0.45, 0.15),
+      right_shoulder: kp(0.55, 0.15),
+      left_elbow: kp(0.4, 0.08),
+      left_wrist: kp(0.38, 0.02),
+    },
+    { sport: 'climbing' },
+  )
+  assert.deepEqual(
+    climbTwin.vectors.map((v) => v.id),
+    ['reach', 'hips', 'toe'],
+  )
+  assert.equal(jointForAttribute('Downturn & asymmetry', 'climbing'), 'left_foot')
+  assert.equal(jointForAttribute('Hip posture', 'climbing'), 'pelvis')
 })

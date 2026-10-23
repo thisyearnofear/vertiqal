@@ -21,9 +21,9 @@ Why it fits brief: multimodal copilot (phone clip -> pose -> 3D -> brief -> stoc
 - WebGL first, WebGPU materials only if cheap (see trustfall pattern)
 
 ## Tasks
-- [ ] Twin rig + metric vectors (overstride, strike, hips / reach)
-- [ ] Agent narration anchors to 3D pins
-- [ ] 3D snapshot export for hero card + passport
+- [x] Twin rig + metric vectors (overstride, strike, hips / reach) (`lib/pose/twin-3d.ts`, `components/stride-lab/twin/movement-twin.tsx`)
+- [x] Agent narration anchors to 3D pins (`jointForAttribute`, `TwinPin` selection & joint highlight ring)
+- [x] 3D snapshot export for hero card + passport (`Save 3D PNG` + `Use 3D in Hero Card`)
 - [ ] Mobile perf pass (docked bar, scroll, camera checks already listed in README)
 - [ ] Demo clip with real consented footage (synthetic clip cannot validate accuracy)
 

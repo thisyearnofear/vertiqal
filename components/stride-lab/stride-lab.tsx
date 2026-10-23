@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
-import { Camera, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
+import { Box, Camera, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
 import { forgetBrief, saveBrief, savePersona } from '@/app/actions'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -51,6 +51,7 @@ import { GaitReadout } from './gait-readout'
 import { LiveOverlay } from './live-overlay'
 import { PoseStage, type Keyframe } from './pose-stage'
 import { ProviderPicker } from './provider-picker'
+import { MovementTwin } from './twin/movement-twin'
 import { ValidationControls } from './validation-controls'
 import { useLiveCamera } from './use-live-camera'
 import { useMember } from './use-member'
@@ -129,6 +130,7 @@ export function StrideLab({
   const [bought, setBought] = useState(false)
   const [, startSaving] = useTransition()
   const [voiceOn, setVoiceOn] = useState(false)
+  const [twinOpen, setTwinOpen] = useState(false)
   const [caption, setCaption] = useState<string | null>(null)
   const [keyframes, setKeyframes] = useState<Keyframe[]>([])
   const [hero, setHero] = useState<HeroFrame | null>(null)
@@ -182,7 +184,8 @@ export function StrideLab({
 
   const readout = useMemo(() => readoutOf(snapshot, sport), [snapshot, sport])
   const memberLines = useMemo(() => memberContext(member), [member])
-  const picks = useMemo(() => outputsOf(agent.messages)?.picks ?? [], [agent.messages])
+  const agentOutputs = useMemo(() => outputsOf(agent.messages), [agent.messages])
+  const picks = useMemo(() => agentOutputs?.picks ?? [], [agentOutputs])
   const [providerMismatch, setProviderMismatch] = useState(false)
 
   const clearValidationCapture = useCallback(() => {
@@ -1027,6 +1030,17 @@ export function StrideLab({
                   <span className="sr-only">{': Forma speaks coaching cues aloud'}</span>
                 </button>
               )}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={twinOpen || measuredReady}
+                onClick={() => setTwinOpen((v) => !v)}
+                className="well flex h-10 items-center gap-2 rounded-md px-3 text-xs font-semibold uppercase tracking-[0.18em] text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <span className="led" data-state={twinOpen || measuredReady ? 'on' : 'off'} aria-hidden />
+                <Box className="size-3.5" aria-hidden />
+                3D Twin
+              </button>
               {!stageIdle && !liveActive && !shopping && (
                 <Button
                   variant="ghost"
@@ -1241,6 +1255,20 @@ export function StrideLab({
             {visible.readout && readout.events > 0 && (
               <div className="housing rounded-2xl p-4 md:p-5">
                 <GaitReadout readout={readout} baseline={baseline?.readout ?? null} provisionalHeight={provisional} />
+              </div>
+            )}
+
+            {(twinOpen || measuredReady) && (
+              <div id="movement-twin" className="scroll-mt-6">
+                <MovementTwin
+                  sport={sport}
+                  pose={hero?.pose ?? null}
+                  snapshot={snapshot}
+                  readout={panelReadout}
+                  requirements={agentOutputs?.profile.requirements ?? []}
+                  themeKey={persona.phosphor}
+                  onCaptureHero={setHero}
+                />
               </div>
             )}
 
