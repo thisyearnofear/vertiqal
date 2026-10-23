@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowUpRight, Pin, RotateCcw } from 'lucide-react'
 import { buttonVariants, Button } from '@/components/ui/button'
+import { AFFILIATE_DISCLOSURE, wrapAffiliateUrl } from '@/lib/agent/affiliate'
 import type { MovementBrief } from '@/lib/agent/brief'
 import { trackStep } from '@/lib/funnel'
 import type { Sport } from '@/lib/metrics/readout'
@@ -151,8 +152,10 @@ export function DecisionPanel({
     setAttempt((a) => a + 1)
   }
 
+  const buyLink = wrapAffiliateUrl(pick.url)
+
   const recordChoice = () => {
-    trackStep('buy_clicked', { sport, retailer: pick.retailer, verified: available })
+    trackStep('buy_clicked', { sport, retailer: pick.retailer, verified: available, affiliated: buyLink.affiliated })
     onBought()
     if (!member.linked || !snapshot) return
     void fetch('/api/member', {
@@ -272,9 +275,9 @@ export function DecisionPanel({
               </Button>
             )}
             <a
-              href={pick.url}
+              href={buyLink.href}
               target="_blank"
-              rel="noreferrer"
+              rel={buyLink.affiliated ? 'noreferrer sponsored' : 'noreferrer'}
               data-buy-link
               onClick={recordChoice}
               className={cn(buttonVariants({ size: 'lg', variant: unavailable ? 'outline' : 'default' }), 'h-11 px-5 text-base')}
@@ -288,6 +291,9 @@ export function DecisionPanel({
               ? `// ${submitted?.toUpperCase()} VERIFIED IN STOCK. THE RETAILER IS JUST THE TILL.`
               : `// AVAILABILITY ${submitted ? 'UNCERTAIN' : 'UNCHECKED'} — CONFIRM YOUR SIZE AT THE RETAILER BEFORE BUYING.`}
           </p>
+          {buyLink.affiliated && (
+            <p className="font-sans text-xs leading-snug opacity-60">{AFFILIATE_DISCLOSURE}</p>
+          )}
         </div>
       </div>
 

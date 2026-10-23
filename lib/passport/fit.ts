@@ -3,6 +3,9 @@ import { Output, generateText } from 'ai'
 import { resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
 import { fitVerdictSchema, type Passport } from './schema'
+import { tokenFrom } from './token'
+
+export { tokenFrom }
 
 export async function checkFit(passport: Passport, product: string) {
   const started = Date.now()
@@ -25,11 +28,4 @@ export async function checkFit(passport: Passport, product: string) {
     logCost('paid_call', { route: 'passport-fit', ok: false, ms: Date.now() - started, sport: passport.sport, model })
     throw error
   }
-}
-
-/** Accepts a bare token or any passport URL issued by vertiqal. */
-export function tokenFrom(input: string) {
-  const trimmed = input.trim()
-  const match = trimmed.match(/\/api\/passport\/([^/?#\s]+)/)
-  return match ? match[1] : trimmed
 }

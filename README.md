@@ -118,7 +118,7 @@ The six-stage walkthrough is an illustrated journey, not a genuine recorded fitt
 
 ### Compact workspace verification
 
-Automated checks last run 2026-10-23: `pnpm typecheck` clean, `pnpm test:fitting` 55/55, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
+Automated checks last run 2026-10-23: `pnpm typecheck` clean, `pnpm test:fitting` 58/58, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
 
 ## Solari cookbook patterns applied
 

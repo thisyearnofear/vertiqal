@@ -36,7 +36,7 @@ The free stage exists to learn two things: **how people use it** (funnel drop-of
 4. **Instant switches for expensive extras.**
    - **Implemented (`lib/rate-limit.ts`):** Set `FORMA_DISABLED_FEATURES` (comma-separated, e.g. `tryon,deep,voice,pose-vlmrun`) to immediately return `503` with the capacity message on any expensive surface.
 5. **Spend less per fitting without hurting quality.**
-   - Cache shortlists for identical brief + prefs for a few hours (Tavily is the main repeat cost).
+   - **Implemented (`lib/agent/tavily.ts`):** 6-hour in-memory TTL cache + in-flight deduplication across Tavily product, community, research, and athlete searches so identical queries cost zero repeat search credits.
    - Pre-render Forma's templated mood lines to static audio per voice, so TTS is only called for dynamic text.
    - Keep Considered as the default depth (Deep only on request, capped as above).
 6. **Measure cost per fitting.** Log usage per agent run (steps, tool calls, input/output tokens from the AI SDK `onFinish` usage) alongside the funnel. Add `limit_hit` and pick feedback events. This gives the two numbers the revenue decision needs: cost per completed fitting and fittings → `buy_clicked` conversion.
@@ -51,9 +51,9 @@ The free stage exists to learn two things: **how people use it** (funnel drop-of
 ## Revenue options, ranked
 
 1. **Affiliate commission on Buy (first).** Most UK running and climbing retailers are on affiliate networks (e.g. Awin, Rakuten). Rules:
-   - Apply the affiliate wrapper **at click time, after ranking**, so commission can never influence which shoes are recommended — the same principle the agent already applies to sponsored athletes.
-   - Visible disclosure near Buy (ASA/CMA): "We may earn a commission. It never changes the ranking."
-   - Tag `buy_clicked` with whether the link was affiliated.
+   - **Implemented (`lib/agent/affiliate.ts` + `DecisionPanel`):** `wrapAffiliateUrl` wraps approved retailer URLs at click/render time on the Buy button when `NEXT_PUBLIC_AWIN_AFFILIATE_ID` and `NEXT_PUBLIC_AWIN_MERCHANTS` (`domain:merchantId,...`) are configured, never altering the canonical `pick.url` used for ranking, stock checks, or Fit Passports.
+   - Visible disclosure near Buy (ASA/CMA): `"We may earn a commission. It never changes the ranking."` (shown automatically whenever a link is affiliated, with `rel="noreferrer sponsored"`).
+   - `buy_clicked` is tagged with `affiliated: true | false`.
    - When going commercial, prefer network product feeds (price/stock) over stealth-browser checks on partner retailers, which may conflict with their terms.
 2. **B2B fit data: Fit Passport / API.** Retailers pay to reduce returns via per-check API pricing or a "check against my fit" widget. Blocked on accuracy validation — the measurements are still experimental.
 3. **Licensing to running shops and climbing gyms.** In-store movement analyser, with staff interpreting results; less exposed to accuracy risk.

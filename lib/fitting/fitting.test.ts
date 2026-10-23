@@ -40,6 +40,9 @@ import { GaitTracker, MIN_STRIKES_FOR_SIGNALS, cadenceFromStrikes } from '../met
 import { modelKey, shortlistProblem } from '../agent/picks.ts'
 import { narrate, shortShoeName } from './narration.ts'
 import { ClimbTracker } from '../metrics/climb.ts'
+import { AFFILIATE_DISCLOSURE, parseAffiliateMerchants, wrapAffiliateUrl } from '../agent/affiliate.ts'
+import { tavilyCacheKey } from '../agent/tavily.ts'
+import { DEMO_PASSPORTS, issuePassport, passportId, readPassport, tokenFrom } from '../passport/token.ts'
 import { CAPACITY_MESSAGE, DEFAULT_SURFACE_POLICIES, createSurfaceGuard, disabledSurfaces } from '../rate-limit.ts'
 import { attractPose } from '../../components/stride-lab/attract-runner.ts'
 import type { Pose } from '../pose/types.ts'
@@ -984,4 +987,58 @@ test('surface guard: enforces per-visitor limits, global daily capacity, and fea
     assert.equal(switchedOff.reason, 'disabled')
     assert.equal(switchedOff.error, CAPACITY_MESSAGE)
   }
+})
+
+test('fit passport: demo tokens resolve, signed tokens round-trip, and tampered tokens fail', () => {
+  // Demo tokens work with zero secret configuration
+  assert.equal(tokenFrom('https://vertiqal.vercel.app/api/passport/demo-running'), 'demo-running')
+  assert.equal(tokenFrom('  demo-climbing  '), 'demo-climbing')
+  assert.equal(passportId('demo-running'), 'VQ-DEMO-RUN')
+  assert.equal(passportId('demo-climbing'), 'VQ-DEMO-CLIMB')
+  assert.deepEqual(readPassport('demo-running'), DEMO_PASSPORTS['demo-running'])
+  assert.deepEqual(readPassport('demo-climbing'), DEMO_PASSPORTS['demo-climbing'])
+  assert.equal(readPassport('demo-tampered'), null)
+
+  // Signed token round-trip
+  const prevSecret = process.env.PASSPORT_SECRET
+  process.env.PASSPORT_SECRET = 'test-passport-secret-key'
+  try {
+    const issued = issuePassport(DEMO_PASSPORTS['demo-running'])
+    assert.match(issued.id, /^VQ-[0-9A-F]{6}$/)
+    assert.deepEqual(readPassport(issued.token), DEMO_PASSPORTS['demo-running'])
+    assert.equal(readPassport(`${issued.token.slice(0, -2)}xx`), null, 'tampered signature must be rejected')
+  } finally {
+    if (prevSecret === undefined) delete process.env.PASSPORT_SECRET
+    else process.env.PASSPORT_SECRET = prevSecret
+  }
+})
+
+test('tavily cache key: normalises whitespace, casing, and domain order', () => {
+  const keyA = tavilyCacheKey('  Brooks   Ghost 16 buy ', ['SportsDirect.com', 'RunnersNeed.com'], 8, 'advanced')
+  const keyB = tavilyCacheKey('brooks ghost 16 buy', ['runnersneed.com', 'sportsdirect.com'], 8, 'advanced')
+  assert.equal(keyA, keyB)
+  const keyBasic = tavilyCacheKey('brooks ghost 16 buy', ['runnersneed.com', 'sportsdirect.com'], 8, 'basic')
+  assert.notEqual(keyA, keyBasic)
+})
+
+test('affiliate wrapper: wraps only approved retailers when configured and leaves unconfigured or unapproved URLs untouched', () => {
+  const merchants = parseAffiliateMerchants('runnersneed.com:1122, sportsdirect.com:3344 , invalid:abc')
+  assert.equal(merchants.get('runnersneed.com'), '1122')
+  assert.equal(merchants.get('sportsdirect.com'), '3344')
+  assert.equal(merchants.has('invalid'), false)
+
+  const productUrl = 'https://www.runnersneed.com/p/brooks-ghost-16'
+  const unconfigured = wrapAffiliateUrl(productUrl, { affiliateId: '', merchants })
+  assert.deepEqual(unconfigured, { href: productUrl, affiliated: false })
+
+  const wrapped = wrapAffiliateUrl(productUrl, { affiliateId: '998877', merchants })
+  assert.equal(wrapped.affiliated, true)
+  assert.equal(
+    wrapped.href,
+    `https://www.awin1.com/cread.php?awinmid=1122&awinaffid=998877&ued=${encodeURIComponent(productUrl)}`,
+  )
+
+  const unapproved = wrapAffiliateUrl('https://evil.example.com/shoe', { affiliateId: '998877', merchants })
+  assert.deepEqual(unapproved, { href: 'https://evil.example.com/shoe', affiliated: false })
+  assert.match(AFFILIATE_DISCLOSURE, /never changes the ranking/)
 })

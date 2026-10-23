@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { VOICES } from '@/lib/persona'
+import { VOICES } from '../persona.ts'
 
 export const passportSchema = z.object({
   v: z.literal(1),
