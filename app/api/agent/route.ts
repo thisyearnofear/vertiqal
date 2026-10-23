@@ -3,6 +3,7 @@ import { agentRequestSchema, briefToPrompt } from '@/lib/agent/brief'
 import { createGearAgent } from '@/lib/agent/gear-agent'
 import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
+import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 120
 
@@ -41,6 +42,19 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Send a valid { brief, prefs } from a completed fitting' }, { status: 400 })
   }
   const { brief, prefs } = parsed.data
+
+  const agentGuard = guardRequest(request, 'agent')
+  if (!agentGuard.allowed) {
+    logCost('limit_hit', { surface: 'agent', reason: agentGuard.reason, sport: brief.sport, depth: prefs.depth })
+    return guardResponse(agentGuard)
+  }
+  if (prefs.depth === 'deep') {
+    const deepGuard = guardRequest(request, 'deep')
+    if (!deepGuard.allowed) {
+      logCost('limit_hit', { surface: 'deep', reason: deepGuard.reason, sport: brief.sport, depth: prefs.depth })
+      return guardResponse(deepGuard)
+    }
+  }
 
   const uiMessages = [
     { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text' as const, text: briefToPrompt(brief, prefs) }] },

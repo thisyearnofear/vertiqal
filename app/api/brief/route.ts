@@ -4,6 +4,7 @@ import { INTAKE_OPTIONS } from '@/lib/agent/fitting-notes'
 import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { briefParseSchema } from '@/lib/fitting/brief-parse'
 import { logCost } from '@/lib/cost-log'
+import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 30
 
@@ -30,6 +31,11 @@ const surfaceSchema = (sport: 'running' | 'climbing') =>
   })
 
 export async function POST(request: Request) {
+  const guard = guardRequest(request, 'brief')
+  if (!guard.allowed) {
+    logCost('limit_hit', { surface: 'brief', reason: guard.reason })
+    return guardResponse(guard)
+  }
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Bad request' }, { status: 400 })
   const { kind, sport } = parsed.data

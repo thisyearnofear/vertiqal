@@ -3,8 +3,9 @@ import { ToolLoopAgent, stepCountIs, tool, type InferAgentUIMessage, type ModelM
 import { z } from 'zod'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'
-import { shortlistProblem } from './picks'
+import { modelKey, shortlistProblem } from './picks'
 import { issueStockToken } from './stock-token'
+import { logCost } from '@/lib/cost-log'
 import { searchCommunity, searchOpen, searchResearch, searchWeb } from './tavily'
 
 const requirement = z.object({
@@ -161,8 +162,17 @@ export function createGearAgent(model: string) {
       description: 'Present exactly three recommended products to the shopper.',
       inputSchema: z.object({ picks: z.array(pick).length(3) }),
       execute: async ({ picks }, { messages }) => {
-        const problem = shortlistProblem(picks, productUrlsIn(messages))
-        if (problem) return { picks: [], error: problem }
+        const seen = [...productUrlsIn(messages)]
+        const problem = shortlistProblem(picks, seen)
+        if (problem) {
+          const dup = new Set(picks.map((p) => modelKey(p.name))).size < picks.length
+          logCost('shortlist_rejected', {
+            kind: dup ? 'duplicate-model' : seen.length ? 'stray-url' : 'no-product-urls',
+            picks: picks.length,
+            productUrls: seen.length,
+          })
+          return { picks: [], error: problem }
+        }
         return { picks: picks.map((p) => ({ ...p, stockToken: issueStockToken({ productName: p.name, productUrl: p.url }) })) }
       },
     }),

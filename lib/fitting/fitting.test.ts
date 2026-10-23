@@ -40,6 +40,7 @@ import { GaitTracker, MIN_STRIKES_FOR_SIGNALS, cadenceFromStrikes } from '../met
 import { modelKey, shortlistProblem } from '../agent/picks.ts'
 import { narrate, shortShoeName } from './narration.ts'
 import { ClimbTracker } from '../metrics/climb.ts'
+import { CAPACITY_MESSAGE, DEFAULT_SURFACE_POLICIES, createSurfaceGuard, disabledSurfaces } from '../rate-limit.ts'
 import { attractPose } from '../../components/stride-lab/attract-runner.ts'
 import type { Pose } from '../pose/types.ts'
 
@@ -941,4 +942,46 @@ test('brief flow: optional answers, back navigation and height helpers', () => {
   assert.equal(feetInches(178), '5′10″')
   assert.equal(UK_SIZES[0], 'UK 3')
   assert.equal(UK_SIZES.at(-1), 'UK 13')
+})
+
+test('surface guard: enforces per-visitor limits, global daily capacity, and feature switches', () => {
+  const policies = {
+    ...DEFAULT_SURFACE_POLICIES,
+    tryon: { visitorLimit: 2, globalDailyLimit: 3, windowMs: 60_000 },
+  }
+  let disabled = new Set<string>()
+  const guard = createSurfaceGuard(policies, { getDisabled: () => disabled })
+  const now = 1_700_000_000_000
+
+  // Visitor A uses 2 of their 2 quota
+  assert.equal(guard('tryon', 'visitor-a', now).allowed, true)
+  assert.equal(guard('tryon', 'visitor-a', now + 100).allowed, true)
+  const limited = guard('tryon', 'visitor-a', now + 200)
+  assert.equal(limited.allowed, false)
+  if (!limited.allowed) {
+    assert.equal(limited.status, 429)
+    assert.equal(limited.reason, 'rate_limit')
+  }
+
+  // Visitor B gets the 3rd global call, then Visitor C hits global capacity (503)
+  assert.equal(guard('tryon', 'visitor-b', now + 300).allowed, true)
+  const capacity = guard('tryon', 'visitor-c', now + 400)
+  assert.equal(capacity.allowed, false)
+  if (!capacity.allowed) {
+    assert.equal(capacity.status, 503)
+    assert.equal(capacity.reason, 'capacity')
+    assert.equal(capacity.error, CAPACITY_MESSAGE)
+  }
+
+  // Feature switch disables a surface immediately
+  disabled = disabledSurfaces(' tryon, deep ')
+  assert.equal(disabled.has('tryon'), true)
+  assert.equal(disabled.has('deep'), true)
+  const switchedOff = guard('deep', 'visitor-a', now + 500)
+  assert.equal(switchedOff.allowed, false)
+  if (!switchedOff.allowed) {
+    assert.equal(switchedOff.status, 503)
+    assert.equal(switchedOff.reason, 'disabled')
+    assert.equal(switchedOff.error, CAPACITY_MESSAGE)
+  }
 })

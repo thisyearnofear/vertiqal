@@ -2,6 +2,7 @@ import { generateImage } from 'ai'
 import { z } from 'zod'
 import { friendlyModelError } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
+import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 60
 
@@ -25,6 +26,11 @@ const promptFor = (shoe: string, sport: 'running' | 'climbing') =>
   ].join(' ')
 
 export async function POST(request: Request) {
+  const guard = guardRequest(request, 'tryon')
+  if (!guard.allowed) {
+    logCost('limit_hit', { surface: 'tryon', reason: guard.reason })
+    return guardResponse(guard)
+  }
   const parsed = requestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Send one JPEG, PNG or WebP frame and a shoe name' }, { status: 400 })
 

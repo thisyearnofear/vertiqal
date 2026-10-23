@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { KEYPOINT_NAMES, type KeypointName, type Pose } from '@/lib/pose/types'
 import { logCost } from '@/lib/cost-log'
+import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 60
 
@@ -71,6 +72,11 @@ export function GET() {
 export async function POST(request: Request) {
   const key = apiKey()
   if (!key) return Response.json({ error: 'VLMRUN_API_KEY is not set' }, { status: 503 })
+  const guard = guardRequest(request, 'pose-vlmrun')
+  if (!guard.allowed) {
+    logCost('limit_hit', { surface: 'pose-vlmrun', reason: guard.reason })
+    return guardResponse(guard)
+  }
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Expected a JPEG data URL under 600 KB' }, { status: 400 })

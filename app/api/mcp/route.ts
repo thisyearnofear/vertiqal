@@ -1,7 +1,9 @@
 import { createMcpHandler } from 'mcp-handler'
 import { z } from 'zod'
+import { logCost } from '@/lib/cost-log'
 import { checkFit, tokenFrom } from '@/lib/passport/fit'
 import { passportId, readPassport } from '@/lib/passport/token'
+import { guardSurfaceKey } from '@/lib/rate-limit'
 
 export const maxDuration = 60
 
@@ -32,7 +34,11 @@ const handler = createMcpHandler((server) => {
     },
     async ({ passport: input }) => {
       const opened = open(input)
-      if (!opened) return failure('Invalid or tampered passport')
+      if (!opened) {
+        logCost('mcp_call', { tool: 'get_fit_passport', ok: false, reason: 'invalid_passport' })
+        return failure('Invalid or tampered passport')
+      }
+      logCost('mcp_call', { tool: 'get_fit_passport', ok: true, sport: opened.passport.sport })
       return text({ id: passportId(opened.token), issuer: 'vertiqal', passport: opened.passport })
     },
   )
@@ -51,10 +57,21 @@ const handler = createMcpHandler((server) => {
     },
     async ({ passport: input, product }) => {
       const opened = open(input)
-      if (!opened) return failure('Invalid or tampered passport')
+      if (!opened) {
+        logCost('mcp_call', { tool: 'check_fit', ok: false, reason: 'invalid_passport' })
+        return failure('Invalid or tampered passport')
+      }
+      const guard = guardSurfaceKey('passport-fit', passportId(opened.token))
+      if (!guard.allowed) {
+        logCost('limit_hit', { surface: 'passport-fit', reason: guard.reason, sport: opened.passport.sport })
+        return failure(guard.error)
+      }
       try {
-        return text(await checkFit(opened.passport, product))
+        const result = await checkFit(opened.passport, product)
+        logCost('mcp_call', { tool: 'check_fit', ok: true, sport: opened.passport.sport, verdict: result.verdict })
+        return text(result)
       } catch (error) {
+        logCost('mcp_call', { tool: 'check_fit', ok: false, sport: opened.passport.sport, reason: 'fit_check_failed' })
         return failure(error instanceof Error ? error.message : 'Fit check failed')
       }
     },

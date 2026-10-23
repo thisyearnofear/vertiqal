@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { visionFindingSchema } from '@/lib/agent/fitting-notes'
 import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
+import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 60
 
@@ -24,6 +25,11 @@ const SYSTEM = {
 }
 
 export async function POST(request: Request) {
+  const guard = guardRequest(request, 'vision')
+  if (!guard.allowed) {
+    logCost('limit_hit', { surface: 'vision', reason: guard.reason })
+    return guardResponse(guard)
+  }
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Send 1–3 JPEG, PNG or WebP images as data URLs' }, { status: 400 })
   const { kind, sport, images, measurements } = parsed.data

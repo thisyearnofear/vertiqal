@@ -53,6 +53,10 @@ Thin packaging over the live Fit Passport MCP (directory at [chatgpt.com/plugins
 
 There is no revenue path yet; every fitting is free and costs money in model, search and browser calls. The plan — free-stage cost controls first, then affiliate commission on Buy, then B2B fit data once measurement accuracy is validated — lives in [docs/monetisation.md](docs/monetisation.md).
 
+## Programme: Keiki × Maritime
+
+Accepted into the Keiki × Maritime programme (Oct 20 – Dec 1, 2026): build an always-on personal agent, reach 1,000 users in six weeks. Transparent user tracking starts at zero: [`docs/KEIKI_MARITIME.md`](./docs/KEIKI_MARITIME.md).
+
 ## Run locally
 
 ```bash
@@ -114,7 +118,7 @@ The six-stage walkthrough is an illustrated journey, not a genuine recorded fitt
 
 ### Compact workspace verification
 
-Code-only checks last run 2026-10-01: `pnpm typecheck` clean, `pnpm exec eslint` on the touched files 0 errors / 4 warnings, `pnpm test:fitting` 38/38, `pnpm test:pose` 34/34, `git diff --check` clean. A production build and browser checks were not run. Manual checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
+Automated checks last run 2026-10-23: `pnpm typecheck` clean, `pnpm test:fitting` 55/55, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
 
 ## Solari cookbook patterns applied
 
@@ -144,6 +148,7 @@ Verification and limits: `inspectStockPage` in `lib/agent/stock-page.ts` is a co
 | `lib/agent/` | Gear agent, tools, evidence checks, and the Tavily, Browser Use and Solari clients. |
 | `lib/hero/` | Hero frame scoring and capture. |
 | `lib/passport/` | Passport schema, signing and fit checks. |
+| `lib/rate-limit.ts` | Per-visitor daily limits, global daily route budgets and instant feature switches (`FORMA_DISABLED_FEATURES`). |
 | `lib/member/` | Signed member cookie: linked WhatsApp number and last pick. |
 | `lib/wassist/` | WhatsApp client, fitting messages, and the reply agent. |
 
@@ -165,6 +170,9 @@ Server-side only (Vercel **Vars** or an uncommitted `.env.local`). Never expose 
 | `WASSIST_CHECKIN_TEMPLATE` | Name of the approved WhatsApp template for the break-in check-in (optional) | Check-in job skips |
 | `CRON_SECRET` | Authenticates Vercel Cron calls to the check-in job | Check-in job returns 401 |
 | `VLMRUN_API_KEY` | VLM Run pose refinement | Provider falls back to MediaPipe only |
+| `FORMA_DISABLED_FEATURES` | Comma-separated kill-switch for paid surfaces (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) (optional) | All configured surfaces enabled |
+| `FORMA_BUDGET_<SURFACE>` | Global daily call budget per surface, e.g. `FORMA_BUDGET_TRYON=60` (optional) | Uses built-in daily defaults in `lib/rate-limit.ts` |
+| `FORMA_VISITOR_LIMIT_<SURFACE>` | Per-visitor daily call limit per surface, e.g. `FORMA_VISITOR_LIMIT_AGENT=6` (optional) | Uses built-in visitor defaults in `lib/rate-limit.ts` |
 
 ### WhatsApp setup notes
 
