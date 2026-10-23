@@ -1,6 +1,8 @@
+import { logCost } from '@/lib/cost-log'
 import { checkFit } from '@/lib/passport/fit'
 import { fitCheckSchema } from '@/lib/passport/schema'
 import { readPassport } from '@/lib/passport/token'
+import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 30
 
@@ -15,6 +17,11 @@ export function OPTIONS() {
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
+  const guard = guardRequest(request, 'passport-fit')
+  if (!guard.allowed) {
+    logCost('limit_hit', { surface: 'passport-fit', reason: guard.reason })
+    return guardResponse(guard)
+  }
   const { token } = await params
   const passport = readPassport(token)
   if (!passport) return Response.json({ error: 'Invalid or tampered passport' }, { status: 404, headers: CORS })

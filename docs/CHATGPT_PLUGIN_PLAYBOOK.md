@@ -65,4 +65,4 @@ Watch weekly. **Usage-first; don't chase ARPU yet** — no paid conversion, chec
 | 2 | Free tool calls / week | Calls to live free tools: `get_fit_passport`, `check_fit` |
 | 3 | Return users | ≥2 sessions in 7 days (same ChatGPT user / stable client id if logged) |
 
-Related: [CONNECT](./CHATGPT_PLUGIN_CONNECT.md) free wedge vs product-side deep actions.
+Related: [CONNECT](./CHATGPT_PLUGIN_CONNECT.md) free wedge vs product-side deep actions. Keiki × Maritime user-growth board: [`KEIKI_MARITIME.md`](./KEIKI_MARITIME.md) — 1,000 users in six weeks (programme started Oct 20, 2026).

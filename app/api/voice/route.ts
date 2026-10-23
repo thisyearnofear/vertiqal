@@ -2,10 +2,16 @@ import { generateSpeech } from 'ai'
 import { z } from 'zod'
 import { friendlyModelError } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
+import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 const bodySchema = z.object({ text: z.string().trim().min(1).max(240) })
 
 export async function POST(request: Request) {
+  const guard = guardRequest(request, 'voice')
+  if (!guard.allowed) {
+    logCost('limit_hit', { surface: 'voice', reason: guard.reason })
+    return guardResponse(guard)
+  }
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Send { text } up to 240 characters' }, { status: 400 })
 

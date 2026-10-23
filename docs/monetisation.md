@@ -6,15 +6,16 @@ Status: **plan, not implemented.** As of 2026-10-01 vertiqal has no revenue path
 
 | Surface | Paid calls | Current guard |
 | --- | --- | --- |
-| `/api/agent` (gear agent) | Grok 4.7 multi-step tool loop + Tavily searches (more at Deep: research, athletes) | None server-side. Measurement/brief gating is client-only; the route accepts arbitrary `messages` with no size cap. |
-| `/api/stock-check` | Solari browser session + Grok judge | 6 checks / 10 min per client key, **in-memory per serverless instance** |
-| `/api/tryon` | FLUX Kontext Pro image generation | None |
-| `/api/vision`, `/api/brief` | Grok vision / text | None |
-| `/api/voice` | Grok TTS per spoken line | None (240-char cap) |
-| `/api/pose/vlmrun` | VLM Run keypoint refinement | None beyond key presence |
+| `/api/agent` (gear agent) | Grok 4.7 multi-step tool loop + Tavily searches (more at Deep: research, athletes) | Server-side `agentRequestSchema` validation (`{ brief, prefs }`, ≤32 KB body, ignores client `messages`), `stopWhen: stepCountIs(14)`, cost-logged (`agent_run`), plus `lib/rate-limit.ts` per-visitor (6/day; 2/day Deep) and global daily capacity caps (`250`/day; `80`/day Deep). |
+| `/api/stock-check` | Solari browser session + Grok judge | Signed product target + retailer allowlist + 6 checks / 10 min per client key, **in-memory per serverless instance** |
+| `/api/tryon` | FLUX Kontext Pro image generation | `lib/rate-limit.ts` (3/visitor/day, 60 global/day), cost-logged via `paid_call` |
+| `/api/vision`, `/api/brief` | Grok vision / text | `lib/rate-limit.ts` (`vision`: 6/visitor/day, 150 global/day; `brief`: 10/visitor/day, 300 global/day), cost-logged via `paid_call` |
+| `/api/voice` | Grok TTS per spoken line | 240-char cap + `lib/rate-limit.ts` (30/visitor/day, 600 global/day), cost-logged via `paid_call` |
+| `/api/pose/vlmrun` | VLM Run keypoint refinement | Key presence + `lib/rate-limit.ts` (24/visitor/day, 300 global/day), cost-logged via `paid_call` |
 | `/api/wassist/webhook` | Grok reply agent (≤3 steps, may search) per inbound WhatsApp message | Webhook token + per-phone daily reply cap, 25/24h (per instance); cost logged via `paid_call` |
 | `/api/wassist/checkin` | Daily cron, one message per eligible shopper | `CRON_SECRET` |
-| `/api/mcp`, `/api/passport/*/fit` | Fit checks (no model calls) | Signed tokens |
+| `/api/mcp` (`get_fit_passport`), `/api/passport/[token]` | Read passport (no model calls) | HMAC-signed tokens (`mcp_call` logged) |
+| `/api/mcp` (`check_fit`), `/api/passport/[token]/fit` | Structured LLM fit check (`resolveModel('agent')`) | HMAC-signed passport token + `lib/rate-limit.ts` (15/visitor or passport/day, 300 global/day), cost-logged via `paid_call` & `mcp_call` |
 
 On-device measurement (MediaPipe) and the example walkthrough cost nothing per visit beyond CDN bandwidth.
 
@@ -29,12 +30,11 @@ The free stage exists to learn two things: **how people use it** (funnel drop-of
    - Tavily, Solari, VLM Run, Wassist: set the plan's monthly credit or spend limit and an alert at ~50% and ~80%.
    - Vercel: Spend Management on the project, and Firewall rate-limit rules on `/api/*` (dashboard-configured, applies before functions run).
 2. **Close the open endpoint.** `/api/agent` should validate its input server-side: at most one user brief message of bounded size, a known depth, and an explicit `stopWhen` step cap on `gearAgent`. Without this, the client-side gating is advisory and anyone can drive Grok and Tavily directly.
-   - **Implemented:** the route parses `{ brief, prefs }` against `agentRequestSchema` (bounded brief, known depth, capped notes), rejects bodies over 32 KB with 413, builds the prompt itself and ignores client `messages`; `gearAgent` has `stopWhen: stepCountIs(10)`.
-3. **Durable, shared limits.** The in-memory limiter resets per instance, so it does not bound spend at scale. Move counters to a shared store (Upstash Redis via the Vercel Marketplace is the lightest option) and apply two kinds of limit per route:
-   - **Per visitor** (IP + a signed anonymous cookie): starting points — 3 agent runs/day, 1 Deep run/day, 6 stock checks/day, 2 try-ons/day, 5 brief parses/day.
-   - **Global daily budget per route** (a kill switch): when a route's daily count is reached it returns `503 { reason: 'capacity' }`, and the UI says "Forma is at capacity today — your measurement still works" while keeping on-device analysis available.
-   Tune the numbers from the funnel data; they are starting guesses, not measured.
-4. **Instant switches for expensive extras.** Feature flags (Edge Config, so no redeploy is needed) for try-on, Deep, stock checks, voice and hosted pose. Flip one off if a provider bill spikes.
+   - **Implemented:** the route parses `{ brief, prefs }` against `agentRequestSchema` (bounded brief, known depth, capped notes), rejects bodies over 32 KB with 413, builds the prompt itself and ignores client `messages`; `gearAgent` has `stopWhen: stepCountIs(14)`.
+3. **Per-visitor and global daily limits.**
+   - **Implemented (in-process per instance via `lib/rate-limit.ts`):** Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) enforces both a per-visitor daily window (`FORMA_VISITOR_LIMIT_<SURFACE>`) and a global daily route budget (`FORMA_BUDGET_<SURFACE>`). When a route hits global capacity it returns `503 { reason: 'capacity', error: 'Forma is at capacity today — your measurement still works.' }` and logs `limit_hit`. Move counters to a shared store (e.g. Upstash Redis) if multi-instance horizontal scaling requires cross-instance enforcement.
+4. **Instant switches for expensive extras.**
+   - **Implemented (`lib/rate-limit.ts`):** Set `FORMA_DISABLED_FEATURES` (comma-separated, e.g. `tryon,deep,voice,pose-vlmrun`) to immediately return `503` with the capacity message on any expensive surface.
 5. **Spend less per fitting without hurting quality.**
    - Cache shortlists for identical brief + prefs for a few hours (Tavily is the main repeat cost).
    - Pre-render Forma's templated mood lines to static audio per voice, so TTS is only called for dynamic text.
@@ -63,7 +63,7 @@ The free stage exists to learn two things: **how people use it** (funnel drop-of
 ## Next steps
 
 1. Provider caps and alerts (step 1 above) — before any promotion.
-2. Server-side `/api/agent` validation and step cap (step 2).
-3. Shared limits, global budgets and the capacity message (step 3), plus flags (step 4).
-4. Cost-per-fitting logging and pick feedback (step 6); review after a few weeks of funnel data.
+2. ~~Server-side `/api/agent` validation and step cap (step 2).~~ *(Done)*
+3. Shared limits (including `/api/tryon`, `/api/vision`, `/api/brief`, `/api/voice`, and `/api/mcp` `check_fit`), global budgets and the capacity message (step 3), plus flags (step 4).
+4. ~~Cost-per-fitting logging and pick feedback (step 6)~~ *(Done)*; review after a few weeks of funnel data.
 5. Affiliate wrapping and disclosure once network accounts exist; run real-footage validation in parallel to unlock B2B.

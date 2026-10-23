@@ -86,6 +86,8 @@ FreeMoCap remains a separate, optional offline reference system. No FreeMoCap co
 | `/api/wassist/webhook` | POST | Inbound WhatsApp messages, optionally with a photo (Wassist-hosted JPEG/PNG/WebP up to 5 MB only). Returns a silent response right away, shows "typing…" every 8 s, and replies through `reply_callback` inside `after()`. Authenticated by an HMAC token in the URL; bare link codes get a fixed ack, other replies are capped at 25/number/day (per instance) and cost-logged. |
 | `/api/wassist/checkin` | GET | Vercel Cron job. Sends the break-in check-in template to shoppers with a pick whose chat has been quiet for 12–13 days. Requires `Authorization: Bearer $CRON_SECRET` and does nothing without `WASSIST_CHECKIN_TEMPLATE`. |
 
+Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) passes through `lib/rate-limit.ts` (`guardRequest` / `guardSurfaceKey`), enforcing per-visitor daily limits, global daily route capacity caps (`503` with `Forma is at capacity today — your measurement still works.`), and instant feature kill-switches (`FORMA_DISABLED_FEATURES`), while emitting structured cost and `limit_hit` events via `lib/cost-log.ts`.
+
 ## Extension points
 
 - **New pose provider:** implement `PoseProvider` in `lib/pose/types.ts` and register it in `lib/pose/providers/index.ts`. Use `onStatus` for background progress. See `vlmrun.ts` for a hybrid provider that wraps MediaPipe.
