@@ -118,7 +118,7 @@ The six-stage walkthrough is an illustrated journey, not a genuine recorded fitt
 
 ### Compact workspace verification
 
-Automated checks last run 2026-10-23: `pnpm typecheck` clean, `pnpm test:fitting` 58/58, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
+Automated checks last run 2026-10-23: `pnpm typecheck` clean, `pnpm test:fitting` 59/59, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
 
 ## Solari cookbook patterns applied
 
@@ -141,9 +141,10 @@ Verification and limits: `inspectStockPage` in `lib/agent/stock-page.ts` is a co
 | `components/stride-lab/` | Fitting bench: header, synthetic example, brief form, camera/video stage, pose overlay and readouts. |
 | `components/stride-lab/agent/` | Agent conversation, depth dial, picks, explicit stock checks, basket checks, Fit Passport UI. |
 | `components/stride-lab/hero/` | Hero frame card and try-on UI. |
+| `components/stride-lab/twin/` | Interactive 3D Movement Twin (Three.js WebGL rig, 3D biomechanical vectors, agent fit pins, and 3D snapshot export). |
 | `components/forma/` | Forma avatar and console personalisation. |
 | `lib/fitting/` | Client-side fitting rules: stage flow, preference validation, example scripts, stock-size and camera-stream semantics. |
-| `lib/pose/` | Pose provider contract; MediaPipe and VLM Run providers. |
+| `lib/pose/` | Pose provider contract (`MediaPipe`, `VLM Run`) and 3D Movement Twin retargeting (`lib/pose/twin-3d.ts`). |
 | `lib/metrics/` | Sport-specific measurements and readouts. |
 | `lib/agent/` | Gear agent, tools, evidence checks, and the Tavily, Browser Use and Solari clients. |
 | `lib/hero/` | Hero frame scoring and capture. |
