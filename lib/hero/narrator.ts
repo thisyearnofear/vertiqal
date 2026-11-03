@@ -2,22 +2,26 @@ import type { Sport, MetricReading } from '@/lib/metrics/readout'
 
 export interface HeroCaption {
   sport: Sport
+  /** The emotional headline — short, provocative identity statement. */
   headline: string
+  /** Contextual body — one sentence explaining the narrative. */
   body: string
+  /** The single metric that defines this user's movement. Big on the card. */
+  standoutMetric: { value: string; unit: string; label: string; description: string }
+  /** Detailed insights — only shown on the web page, never on the card. */
   insights: string[]
 }
 
-export interface NarratorOptions {
-  /** Override default voice settings. Uses browser defaults when omitted. */
-  voice?: SpeechSynthesisVoice | null
-}
-
 /**
- * Rule-based caption generator. Translates raw pose metrics into a narrative summary
- * suitable for sharing. No LLM required — fast, free, deterministic.
+ * Rule-based caption generator. Translates raw pose metrics into a shareable
+ * narrative summary suitable for social cards. No LLM required — fast, free,
+ * deterministic.
  *
- * Designed for the hero frame card. Each sport maps known thresholds to distinct
- * personality lines so the result feels authored, not templated.
+ * Design principles:
+ * - ONE standout metric per card. Not three. One.
+ * - The headline is identity ("Long strides. Heavy steps."), not data.
+ * - The body is context ("Your movement signature, captured in one clip.").
+ * - Insights are hidden detail — proof for those who want it.
  */
 export function generateHeroCaption(
   sport: Sport,
@@ -27,6 +31,7 @@ export function generateHeroCaption(
   const insights: string[] = []
   let headline = ''
   let body = ''
+  let standoutMetric: HeroCaption['standoutMetric'] = { value: '', unit: '', label: '', description: '' }
 
   const get = (sub: string) =>
     metrics.find(m => m.label.toLowerCase().includes(sub.toLowerCase())) ?? null
@@ -36,15 +41,38 @@ export function generateHeroCaption(
     const overstride = get('overstride')
     const strike = get('strike') || get('heel')
 
+    if (!cadence) {
+      headline = 'Motion captured.'
+      body = profile?.summary ?? 'No readings yet — upload a clip to see your movement signature.'
+    }
+
     if (cadence && cadence.value !== null) {
       if (cadence.value < 160) {
         headline = 'Long strides. Heavy steps.'
+        standoutMetric = {
+          value: cadence.value.toFixed(0),
+          unit: 'spm',
+          label: 'cadence',
+          description: 'Heavier landing, longer braking phase',
+        }
         insights.push(`Cadence ${cadence.value.toFixed(0)} spm — heavier landing, longer braking phase`)
       } else if (cadence.value <= 175) {
         headline = 'Even rhythm. Efficient motion.'
+        standoutMetric = {
+          value: cadence.value.toFixed(0),
+          unit: 'spm',
+          label: 'cadence',
+          description: 'Balanced stride pattern',
+        }
         insights.push(`Cadence ${cadence.value.toFixed(0)} spm — balanced stride pattern`)
       } else {
         headline = 'Quick. Light feet.'
+        standoutMetric = {
+          value: cadence.value.toFixed(0),
+          unit: 'spm',
+          label: 'cadence',
+          description: 'Faster turnover, lower impact',
+        }
         insights.push(`Cadence ${cadence.value.toFixed(0)} spm — faster turnover, lower impact`)
       }
     }
@@ -69,28 +97,50 @@ export function generateHeroCaption(
       }
     }
 
-    if (!insights.length) insights.push('Running dynamics tracked — ready to match your stride.')
+    if (!insights.length) {
+      insights.push('Running dynamics tracked — ready to match your stride.')
+      standoutMetric = { value: '?', unit: '', label: 'cadence', description: 'no readings captured' }
+    }
     body = profile?.summary ?? 'Your movement signature, captured in one clip.'
 
   } else {
     // climbing
-    const toeAngle = get('toe') && get('angle') ? get('toe') : null
-    const hipWall = get('hip') && get('wall') ? get('hip') : null
+    const toeDown = get('toe-down') || get('toe') || get('angle')
+    const hipToWall = get('hip-to-wall') || get('hip') || get('wall')
     const settle = get('settle')
 
-    // Fallback for climbing metric names that might vary
-    const toeDown = get('toe-down') || toeAngle
-    const hipToWall = get('hip-to-wall') || hipWall
+    if (!toeDown) {
+      headline = 'Motion captured.'
+      body = profile?.summary ?? 'No readings yet — upload a clip to see your climbing style.'
+    }
 
     if (toeDown && toeDown.value !== null) {
       if (toeDown.value > 25) {
         headline = 'Steep foot. High tension.'
+        standoutMetric = {
+          value: toeDown.value.toFixed(0),
+          unit: '°',
+          label: 'toe-down',
+          description: 'Aggressive edging stance',
+        }
         insights.push(`Toe-down ${toeDown.value.toFixed(0)}° — aggressive edging stance`)
       } else if (toeDown.value > 10) {
         headline = 'Balanced placement. Controlled reach.'
+        standoutMetric = {
+          value: toeDown.value.toFixed(0),
+          unit: '°',
+          label: 'toe-down',
+          description: 'Precise foot readjustment',
+        }
         insights.push(`Toe-down ${toeDown.value.toFixed(0)}° — precise foot readjustment`)
       } else {
         headline = 'Flat-footed. Efficient power.'
+        standoutMetric = {
+          value: toeDown.value.toFixed(0),
+          unit: '°',
+          label: 'toe-down',
+          description: 'Smearing and flat traction',
+        }
         insights.push(`Toe-down ${toeDown.value.toFixed(0)}° — smearing and flat traction`)
       }
     }
@@ -111,14 +161,17 @@ export function generateHeroCaption(
       }
     }
 
-    if (!insights.length) insights.push('Climbing dynamics tracked — ready to match your style.')
+    if (!insights.length) {
+      insights.push('Climbing dynamics tracked — ready to match your style.')
+      standoutMetric = { value: '?', unit: '', label: 'toe-down', description: 'no readings captured' }
+    }
     body = profile?.summary ?? 'Your climbing mechanics, captured in one clip.'
   }
 
-  return { sport, headline, body, insights }
+  return { sport, headline, body, standoutMetric, insights }
 }
 
-/** Convert a caption to a single spoken sentence (strips metrics that break audio flow). */
+/** Convert a caption to a single spoken sentence (strips metric details for audio flow). */
 export function captionToSpeech(caption: HeroCaption): string {
   return `${caption.headline} ${caption.body}`
 }

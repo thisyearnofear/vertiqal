@@ -1223,6 +1223,22 @@ test('hero caption: running thresholds produce distinct narratives', () => {
   
   const bare = generateHeroCaption('running', [])
   assert.equal(bare.insights.length, 1, 'fallback insight when no metrics')
+  assert.ok(bare.standoutMetric.value, 'standout metric always present')
+})
+
+test('hero caption: standout metric is the defining metric', () => {
+  const m = (label: string, value: number | null) => ({ id: 'm', label, value, unit: 'spm', hint: '', better: 'higher' as const } as const)
+  const cap = generateHeroCaption('running', [m('Cadence', 155), m('Overstride', 12), m('Foot strike', -5)])
+  assert.equal(cap.standoutMetric.label, 'cadence', 'cadence is the standout for running')
+  assert.equal(cap.standoutMetric.value, '155')
+  assert.ok(cap.standoutMetric.description.length > 0, 'standout has a description')
+})
+
+test('hero caption: climbing standout is toe-down', () => {
+  const m = (label: string, value: number | null) => ({ id: 'm', label, value, unit: 'deg', hint: '', better: 'higher' as const } as const)
+  const cap = generateHeroCaption('climbing', [m('Toe-down angle', 28), m('Hip-to-wall', 35)])
+  assert.equal(cap.standoutMetric.label, 'toe-down', 'toe-down is the standout for climbing')
+  assert.ok(cap.headline.toLowerCase().includes('steep'), 'steep headline for high toe-down')
 })
 
 test('hero caption: climbing thresholds produce distinct narratives', () => {

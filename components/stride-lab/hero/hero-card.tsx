@@ -3,8 +3,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import useSWRMutation from 'swr/mutation'
 import { Download, Footprints, Share2, Volume2, VolumeX } from 'lucide-react'
-import { speak, stopSpeaking, isSpeaking } from '@/lib/voice/speak'
-import { generateHeroCaption, captionToSpeech } from '@/lib/hero/narrator'
+import { stopSpeaking } from '@/lib/voice/speak'
+import { generateHeroCaption, captionToSpeech, type HeroCaption } from '@/lib/hero/narrator'
 import type { HeroFrame } from '@/lib/hero/frame'
 import type { Readout, Sport } from '@/lib/metrics/readout'
 import { Button } from '@/components/ui/button'
@@ -63,6 +63,46 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
   const [drawn, setDrawn] = useState(false)
   const tryOnRun = useSWRMutation('/api/tryon', requestTryOn)
 
+  // ── Caption + narration ─────────────────────────────────────────
+  // Use useState initializer to compute caption once at mount — no effect needed.
+  const [caption] = useState<HeroCaption | null>(() =>
+    readout.events ? generateHeroCaption(sport, readout.metrics) : null,
+  )
+
+  // Auto-play narration once on mount
+  const narrationPlayed = useRef(false)
+  const [playing, setPlaying] = useState(false)
+
+  useEffect(() => {
+    if (!caption || narrationPlayed.current) return
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const utter = new SpeechSynthesisUtterance(captionToSpeech(caption))
+      utter.rate = 0.95
+      utter.lang = 'en-GB'
+      const handleEnd = () => setPlaying(false)
+      utter.addEventListener('end', handleEnd)
+      window.speechSynthesis.speak(utter)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPlaying(true)
+      narrationPlayed.current = true
+      return () => {
+        utter.removeEventListener('end', handleEnd)
+        window.speechSynthesis.cancel()
+      }
+    }
+    return undefined
+  }, [caption])
+
+  const toggleSpeak = () => {
+    if (playing) {
+      stopSpeaking()
+      setPlaying(false)
+    } else if (caption) {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(captionToSpeech(caption)))
+      setPlaying(true)
+    }
+  }
+
   const pick = picks[pickIndex] ?? picks[0] ?? null
   const impression = tryOn && frame && tryOn.frameId === frame.id && showImpression ? tryOn : null
   const metricsKey = readout.metrics.map((m) => `${m.id}:${m.value === null ? '-' : m.value.toFixed(1)}`).join('|')
@@ -70,7 +110,7 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
   useEffect(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
-    if (!canvas || !ctx || !frame) return
+    if (!canvas || !ctx || !frame || !caption) return
     let cancelled = false
     const theme = readOverlayTheme(canvas)
     Promise.all([loadImage(impression?.image ?? frame.dataUrl), document.fonts.load(`84px ${theme.font}`).catch(() => [])])
@@ -83,6 +123,7 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
           theme,
           metrics: readout.metrics,
           sport,
+          caption,
           pick: impression?.shoe ?? pick?.name ?? null,
           impression: Boolean(impression),
           date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase(),
@@ -93,13 +134,12 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
     return () => {
       cancelled = true
     }
-    // metricsKey stands in for readout.metrics so the card only redraws when a shown number changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frame, grade, impression, metricsKey, pick?.name, sport, themeKey])
 
   const toFile = () =>
     new Promise<File | null>((resolve) =>
-      canvasRef.current?.toBlob((blob) => resolve(blob ? new File([blob], 'vertiqal-hero.png', { type: 'image/png' }) : null), 'image/png'),
+      canvasRef.current?.toBlob((blob) => resolve(blob ? new File([blob], 'forma-hero.png', { type: 'image/png' }) : null), 'image/png'),
     )
 
   const save = async () => {
@@ -117,7 +157,7 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
     const file = await toFile()
     if (!file) return
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'My vertiqal hero frame' }).catch(() => {})
+      await navigator.share({ files: [file], title: 'My Forma hero frame' }).catch(() => {})
     } else {
       await save()
     }
@@ -150,6 +190,7 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
       </div>
 
       <div className="grid gap-8 px-1 md:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+        {/* ── CARD ─────────────────────────────────────────────── */}
         <div className="relative w-full">
           <canvas
             ref={canvasRef}
@@ -157,9 +198,11 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
             height={CARD_HEIGHT}
             role="img"
             aria-label={
-              frame
-                ? `Hero frame of your ${sport === 'running' ? 'stride' : 'reach'}${impression ? `, AI impression wearing ${impression.shoe}` : ''}, with your measurements`
-                : 'No hero frame yet'
+              caption
+                ? `${caption.headline} — ${sport} hero frame`
+                : frame
+                  ? `Hero frame of your ${sport === 'running' ? 'stride' : 'reach'}${impression ? `, AI impression wearing ${impression.shoe}` : ''}`
+                  : 'No hero frame yet'
             }
             className={cn('aspect-[4/5] w-full rounded-lg bg-stage', !(frame && drawn) && 'invisible')}
           />
@@ -172,7 +215,9 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
           )}
         </div>
 
+        {/* ── CONTROLS + METRICS ───────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-6">
+          {/* Grade */}
           <div className="flex flex-col gap-2">
             <span id={`${id}-grade`} className={LABEL}>
               Grade
@@ -195,6 +240,7 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
             </div>
           </div>
 
+          {/* Share actions */}
           <div className="flex flex-wrap gap-3">
             <Button size="lg" className="px-4" disabled={!frame || !drawn} onClick={share}>
               <Share2 aria-hidden />
@@ -204,8 +250,54 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
               <Download aria-hidden />
               Save PNG
             </Button>
+            {caption && (
+              <Button
+                variant="outline"
+                size="lg"
+                className="px-4"
+                onClick={toggleSpeak}
+                aria-label={playing ? 'Mute narration' : 'Play narration'}
+              >
+                {playing ? <VolumeX aria-hidden /> : <Volume2 aria-hidden />}
+                {playing ? 'Mute' : 'Narrate'}
+              </Button>
+            )}
           </div>
 
+          {/* ── METRICS (on the web page, not the card) ─────────── */}
+          {caption && (
+            <div className="flex flex-col gap-4 border-t border-border pt-5">
+              {/* Standout metric — large, on the page */}
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-5xl font-light text-foreground">{caption.standoutMetric.value}</span>
+                <span className="font-mono text-xl text-muted-foreground">{caption.standoutMetric.unit}</span>
+              </div>
+              <p className="text-sm text-muted-foreground">{caption.standoutMetric.label} — {caption.standoutMetric.description}</p>
+
+              {/* Headline */}
+              <div className="border-l-2 border-primary pl-4 text-lg font-medium leading-relaxed text-foreground">
+                {caption.headline}
+              </div>
+
+              {/* All metrics as a grid */}
+              <div className="grid gap-3 pt-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                {readout.metrics
+                  .filter((m) => m.value !== null)
+                  .map((m) => (
+                    <div key={m.id} className="well rounded-lg p-3">
+                      <p className="text-2xl font-mono font-light text-foreground">
+                        {Math.abs(m.value!) >= 10 ? Math.round(m.value!) : m.value!.toFixed(1)}
+                        <span className="ml-1 text-base text-muted-foreground">{m.unit}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider">{m.label}</p>
+                      {m.hint && <p className="mt-1 text-xs text-muted-foreground/70">{m.hint}</p>}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* See yourself in them */}
           <div className="flex flex-col gap-3 border-t border-border pt-5">
             <p className={LABEL}>See yourself in them</p>
             <p className="max-w-lg text-pretty text-sm leading-relaxed text-muted-foreground">
