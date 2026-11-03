@@ -13,6 +13,7 @@ import {
   stockUrlAllowed,
 } from '@/lib/agent/stock-policy'
 import { logCost } from '@/lib/cost-log'
+import { hasSecret } from '@/lib/secrets'
 
 export const maxDuration = 60
 
@@ -41,6 +42,9 @@ const rateHeaders = (result: { remaining: number; retryAfterSec: number }) => ({
 
 export async function POST(request: Request) {
   if (!process.env.SOLARI_API_KEY) {
+    return Response.json({ error: 'Live stock checks are not configured' }, { status: 503 })
+  }
+  if (!hasSecret('STOCK_CHECK_SECRET')) {
     return Response.json({ error: 'Live stock checks are not configured' }, { status: 503 })
   }
   const limit = limiter(requestClientKey(request))

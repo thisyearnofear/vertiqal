@@ -72,7 +72,7 @@ export function GET() {
 export async function POST(request: Request) {
   const key = apiKey()
   if (!key) return Response.json({ error: 'VLMRUN_API_KEY is not set' }, { status: 503 })
-  const guard = guardRequest(request, 'pose-vlmrun')
+  const guard = await guardRequest(request, 'pose-vlmrun')
   if (!guard.allowed) {
     logCost('limit_hit', { surface: 'pose-vlmrun', reason: guard.reason })
     return guardResponse(guard)

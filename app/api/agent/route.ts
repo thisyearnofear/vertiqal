@@ -43,13 +43,13 @@ export async function POST(request: Request) {
   }
   const { brief, prefs } = parsed.data
 
-  const agentGuard = guardRequest(request, 'agent')
+  const agentGuard = await guardRequest(request, 'agent')
   if (!agentGuard.allowed) {
     logCost('limit_hit', { surface: 'agent', reason: agentGuard.reason, sport: brief.sport, depth: prefs.depth })
     return guardResponse(agentGuard)
   }
   if (prefs.depth === 'deep') {
-    const deepGuard = guardRequest(request, 'deep')
+    const deepGuard = await guardRequest(request, 'deep')
     if (!deepGuard.allowed) {
       logCost('limit_hit', { surface: 'deep', reason: deepGuard.reason, sport: brief.sport, depth: prefs.depth })
       return guardResponse(deepGuard)
@@ -60,8 +60,8 @@ export async function POST(request: Request) {
     { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text' as const, text: briefToPrompt(brief, prefs) }] },
   ]
 
-  const model = await resolveModel('agent')
-  if (!model) {
+  const resolved = await resolveModel('agent')
+  if (!resolved) {
     logCost('agent_run', {
       sport: brief.sport,
       depth: prefs.depth,
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
   const steps: AgentStep[] = []
   return createAgentUIStreamResponse({
-    agent: createGearAgent(model),
+    agent: createGearAgent(resolved.model),
     uiMessages,
     abortSignal: request.signal,
     onStepEnd: (step) => {
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       logCost('agent_run', {
         sport: brief.sport,
         depth: prefs.depth,
-        model,
+        model: resolved.label,
         steps: steps.length,
         inputTokens: sumUsage(steps, 'inputTokens'),
         outputTokens: sumUsage(steps, 'outputTokens'),

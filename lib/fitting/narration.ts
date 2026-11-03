@@ -5,7 +5,7 @@ import type { FittingStage } from './session'
 /** Where the size check for the chosen shoe has got to. */
 export type StockPhase = 'idle' | 'checking' | 'in_stock' | 'unavailable' | 'unsure' | 'error'
 
-export type NarrationAction = 'buy' | 'open' | 'shortlist' | 'whatsapp'
+export type NarrationAction = 'buy' | 'open' | 'shortlist'
 
 export interface Narration {
   /** Two or three words for the strip heading. */
@@ -29,7 +29,7 @@ export interface ResultsState {
   fallbackFrom: string | null
   /** The pick Forma will try next if this one is sold out (only before a fallback has happened). */
   nextPick: string | null
-  /** The shopper went to the retailer, so Forma offers the phone handoff. */
+  /** The shopper went to the retailer, so Forma can offer the passport and the hero frame. */
   bought: boolean
 }
 
@@ -94,19 +94,12 @@ export function narrate(state: ResultsState): Narration | null {
         action: null,
       }
     case 'in_stock':
-      return state.bought
-        ? {
-            title: 'Take it with you',
-            line: "Want your fitting on your phone? I'll check in after a couple of weeks of wear.",
-            mood: 'asking',
-            action: { kind: 'whatsapp', label: 'Send to WhatsApp' },
-          }
-        : {
-            title: 'In stock',
-            line: `The ${name} in ${size}${state.stock.price ? `, ${state.stock.price}` : ''} at ${retailer}. It's yours if you want it.`,
-            mood: 'pleased',
-            action: { kind: 'buy', label: `Buy at ${retailer}` },
-          }
+      return {
+        title: 'In stock',
+        line: `The ${name} in ${size}${state.stock.price ? `, ${state.stock.price}` : ''} at ${retailer}. It's yours if you want it.`,
+        mood: 'pleased',
+        action: { kind: 'buy', label: `Buy at ${retailer}` },
+      }
     case 'unavailable':
       return state.nextPick
         ? {

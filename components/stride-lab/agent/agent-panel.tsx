@@ -5,15 +5,12 @@ import { RotateCcw } from 'lucide-react'
 import { briefLine, type MovementBrief, type ShopperPrefs } from '@/lib/agent/brief'
 import { DEPTHS, addedLayers, type Depth } from '@/lib/agent/depth'
 import type { Sport } from '@/lib/metrics/readout'
-import type { MemberView } from '@/lib/member/schema'
 import type { Passport } from '@/lib/passport/schema'
 import { Button } from '@/components/ui/button'
-import type { Fitting } from '@/lib/wassist/fitting'
 import type { BriefField } from '../fitting-brief'
 import { AgentSteps, activityOf, progressOf, readingOf } from './agent-steps'
 import { DecisionPanel } from './decision-panel'
 import { closingLineOf, outputsOf, type AgentOutputs, type ShoePick } from './outputs'
-import { usePassport } from './passport-card'
 import { Shortlist } from './shortlist'
 import { trackStep } from '@/lib/funnel'
 import type { StockPhase } from '@/lib/fitting/narration'
@@ -77,7 +74,6 @@ function ShortlistFeedback({ sport, depth }: { sport: Sport; depth: Depth }) {
 interface AgentPanelProps {
   agent: GearAgent
   sport: Sport
-  member: MemberView
   choice: ShoePick | null
   onChoose: (pick: ShoePick | null) => void
   onPinBaseline?: () => void
@@ -89,7 +85,7 @@ interface AgentPanelProps {
   confirmedSize: string
   onSizeCommit: (size: string) => void
   onBriefField: (field: BriefField) => void
-  /** After the size check: WhatsApp, baseline and passport are offered. */
+  /** After the size check: the baseline, the passport and the shareable hero frame are offered. */
   takeAway: boolean
   onStock: (stock: { phase: StockPhase; price: string | null }) => void
   canFallBack: boolean
@@ -100,7 +96,6 @@ interface AgentPanelProps {
 export function AgentPanel({
   agent,
   sport,
-  member,
   choice,
   onChoose,
   onPinBaseline,
@@ -140,23 +135,6 @@ export function AgentPanel({
   const passport = useMemo(
     () => (sentBrief && prefs && outputs ? passportFrom(sentBrief, { ...prefs, size: confirmedSize.trim() || prefs.size }, outputs) : null),
     [sentBrief, prefs, outputs, confirmedSize],
-  )
-  const { data: issued } = usePassport(passport)
-  const fitting = useMemo<Fitting | null>(
-    () =>
-      sentBrief && outputs && prefs
-        ? {
-            sport: sentBrief.sport,
-            voice: prefs.voice,
-            passportUrl: issued?.url,
-            measurements: briefLine(sentBrief).toLowerCase(),
-            summary: outputs.profile.summary,
-            category: outputs.profile.category,
-            requirements: outputs.profile.requirements.map(({ attribute, target }) => ({ attribute, target })),
-            picks: outputs.picks,
-          }
-        : null,
-    [sentBrief, outputs, prefs, issued?.url],
   )
 
   if (!sentBrief) return null
@@ -293,9 +271,7 @@ export function AgentPanel({
             size={confirmedSize}
             onSizeCommit={onSizeCommit}
             onChoose={onChoose}
-            fitting={fitting}
             passport={passport}
-            member={member}
             onPinBaseline={onPinBaseline}
             baselinePinned={baselinePinned}
             takeAway={takeAway}

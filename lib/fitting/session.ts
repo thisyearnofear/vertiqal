@@ -136,7 +136,7 @@ export function nextStepFor(state: {
     ? {
         eyebrow: 'Step 3 of 3 · Done',
         title: 'Buy it, or take it with you',
-        detail: 'Open the retailer, or send the fitting to WhatsApp for later.',
+        detail: 'Open the retailer, or keep the fit passport for other shops and AI assistants.',
         action: null,
       }
     : {
@@ -156,7 +156,7 @@ export interface Visibility {
   readout: boolean
   /** Local validation recording tools. */
   validation: boolean
-  /** Extras offered after the size check: WhatsApp, baseline, passport, hero frame and try-on. */
+  /** Extras offered after the size check: the baseline, the passport, the hero frame and try-on. */
   takeAway: boolean
 }
 

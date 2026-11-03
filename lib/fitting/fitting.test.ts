@@ -26,11 +26,10 @@ import {
 import { EXAMPLE_FOOTAGE, EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleCompanion, exampleMetrics, nextStep } from './example.ts'
 import { settleStream } from './camera.ts'
 import { UK_SIZES, answeredCount, feetInches, isAnswered, nextQuestion, previousQuestion, stepHeight } from './brief-flow.ts'
-import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
+import { draftDiffers, lastCheckLabel, stockTargetFor } from './stock.ts'
 import { draftFromRemembered, parseRememberedBrief, rememberBrief, type RememberedBrief } from './remembered-brief.ts'
 import { applyParsedBrief, briefParseSchema } from './brief-parse.ts'
 import { SAMPLE_BRIEFS, agentRequestSchema, briefToPrompt } from '../agent/brief.ts'
-import { LINK_TTL_MS, isLinkCodeMessage, issueLinkToken, newLinkCode, readLinkToken, transcriptHasCode } from '../wassist/link.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
@@ -45,6 +44,9 @@ import { tavilyCacheKey } from '../agent/tavily.ts'
 import { DEMO_PASSPORTS, issuePassport, passportId, readPassport, tokenFrom } from '../passport/token.ts'
 import { jointForAttribute, retargetPoseTo3D } from '../pose/twin-3d.ts'
 import { CAPACITY_MESSAGE, DEFAULT_SURFACE_POLICIES, createSurfaceGuard, disabledSurfaces } from '../rate-limit.ts'
+import { createMemoryCounterStore, createRedisCounterStore, redisConfig } from '../rate-limit/store.ts'
+import { MissingSecretError, hasSecret } from '../secrets.ts'
+import { parseChain, parseSpec } from '../agent/model-spec.ts'
 import { attractPose } from '../../components/stride-lab/attract-runner.ts'
 import type { Pose } from '../pose/types.ts'
 
@@ -225,7 +227,6 @@ test('narration: one short line and at most one action per results moment', () =
   const inStock = narrate({ ...base, stock: { phase: 'in_stock', price: '£135' } })!
   assert.match(inStock.line, /UK 10, £135 at SportsShoes/)
   assert.deepEqual(inStock.action, { kind: 'buy', label: 'Buy at SportsShoes' })
-  assert.equal(narrate({ ...base, stock: { phase: 'in_stock', price: null }, bought: true })!.action?.kind, 'whatsapp', 'the phone handoff is offered after buying')
   const soldOut = narrate({ ...base, stock: { phase: 'unavailable', price: null } })!
   assert.match(soldOut.line, /try the Brooks Cascadia 19 next/)
   assert.equal(soldOut.action, null, 'Forma moves on by itself while a fallback is left')
@@ -423,17 +424,6 @@ test('stock runner: blocked results are not cached', async () => {
   assert.equal(calls, 2)
 })
 
-test('choice snapshot: UK 9 verified, draft UK 10 saves UK 10 unchecked, blank saves nothing', () => {
-  const verified = { draft: 'UK 9', submitted: 'UK 9', verdict: 'In stock · UK 9 · £95' }
-  assert.deepEqual(choiceSnapshot(verified), { size: 'UK 9', stock: 'In stock · UK 9 · £95' })
-
-  const changed = choiceSnapshot({ draft: 'UK 10', submitted: 'UK 9', verdict: 'In stock · UK 9 · £95' })
-  assert.deepEqual(changed, { size: 'UK 10', stock: 'Not checked for UK 10' }, 'edited size must not inherit the old verdict')
-
-  assert.equal(choiceSnapshot({ draft: '', submitted: 'UK 9', verdict: 'In stock · UK 9 · £95' }), null, 'blank draft blocks the write')
-  assert.deepEqual(choiceSnapshot({ draft: 'UK 9', submitted: 'UK 9', verdict: null }), { size: 'UK 9', stock: 'Not checked for UK 9' })
-})
-
 test('confirmed prefs carry the shopper fields verbatim: size, budget, height plus notes lines', () => {
   const draft: PrefDraft = { ...valid, size: 'UK 9', budgetPounds: '160', heightCm: '178' }
   const notes = { ...EMPTY_NOTES, width: 'wide' as const, niggles: 'sore shins', goal: 'stale-goal', surface: 'Trail' }
@@ -443,7 +433,6 @@ test('confirmed prefs carry the shopper fields verbatim: size, budget, height pl
     sport: 'running',
     voice: 'coach',
     depth: 'considered',
-    memberLines: ['Previous running fitting: chose Old Shoe'],
   })
   assert.ok(prefs)
   assert.equal(prefs.size, 'UK 9')
@@ -452,7 +441,7 @@ test('confirmed prefs carry the shopper fields verbatim: size, budget, height pl
   assert.equal(prefs.depth, 'considered')
   assert.deepEqual(
     prefs.notes,
-    ['Goal: Easy miles', 'Surface: Road', 'Foot width: wide', 'Niggles or past issues: sore shins', 'Previous running fitting: chose Old Shoe'],
+    ['Goal: Easy miles', 'Surface: Road', 'Foot width: wide', 'Niggles or past issues: sore shins'],
     'goal/surface come from the draft (single source), not stale notes fields',
   )
 
@@ -461,7 +450,7 @@ test('confirmed prefs carry the shopper fields verbatim: size, budget, height pl
   assert.equal(merged.surface, 'Road')
   assert.equal(merged.width, 'wide')
 
-  assert.equal(buildConfirmedPrefs({ draft: blank, notes: EMPTY_NOTES, sport: 'running', voice: 'coach', depth: 'quick', memberLines: [] }), null)
+  assert.equal(buildConfirmedPrefs({ draft: blank, notes: EMPTY_NOTES, sport: 'running', voice: 'coach', depth: 'quick' }), null)
 })
 
 test('a stale getUserMedia resolution releases its tracks instead of starting capture', async () => {
@@ -895,45 +884,6 @@ test('agent request schema accepts a real brief and prefs, rejects bad input', (
   reject((b) => { (b.brief as { metrics: unknown[] }).metrics = [] }, 'empty metrics must be rejected')
 })
 
-test('wassist link: codes use the unambiguous alphabet and a fixed shape', () => {
-  const code = newLinkCode()
-  assert.match(code, /^FORMA-[A-Z2-9]{6}$/)
-  assert.doesNotMatch(code.slice(6), /[01IOL]/, 'code part uses only the unambiguous alphabet')
-  let i = 0
-  const fixed = newLinkCode(() => i++ % 32)
-  assert.equal(fixed, 'FORMA-ABCDEF')
-})
-
-test('wassist link: token round-trips and rejects tampering, expiry and wrong keys', () => {
-  const key = Buffer.from('test-key')
-  const other = Buffer.from('other-key')
-  const now = 1_700_000_000_000
-  const token = issueLinkToken(key, { phone: '447700900123', code: 'FORMA-ABC123', now })
-  assert.deepEqual(readLinkToken(key, token, now + 60_000), { phone: '447700900123', code: 'FORMA-ABC123' })
-  assert.equal(readLinkToken(other, token, now + 60_000), null, 'wrong key must fail')
-  assert.equal(readLinkToken(key, `${token.slice(0, -2)}xx`, now), null, 'tampered signature must fail')
-  const [body] = token.split('.')
-  const tampered = `${Buffer.from(JSON.stringify({ p: '449999999999', c: 'FORMA-ABC123', t: now })).toString('base64url')}.${token.split('.')[1]}`
-  assert.equal(readLinkToken(key, tampered, now), null, 'tampered payload must fail')
-  assert.equal(readLinkToken(key, `${body}.`, now), null, 'missing signature must fail')
-  assert.equal(readLinkToken(key, 'not-a-token', now), null)
-  assert.equal(readLinkToken(key, token, now + LINK_TTL_MS + 1), null, 'expired token must fail')
-  assert.equal(readLinkToken(key, token, now - 120_000), null, 'future-dated token must fail')
-})
-
-test('wassist link: transcript matching needs a SHOPPER line and a whole token', () => {
-  const code = 'FORMA-ABC123'
-  assert.equal(transcriptHasCode(`SHOPPER: ${code}`, code), true)
-  assert.equal(transcriptHasCode(`SHOPPER: here is ${code.toLowerCase()} thanks`, code), true)
-  assert.equal(transcriptHasCode(`FORMA: send me ${code}`, code), false, 'FORMA lines must not count')
-  assert.equal(transcriptHasCode(`SHOPPER: ${code}X`, code), false, 'a longer token must not match')
-  assert.equal(transcriptHasCode(`SHOPPER: FORMA-ABC123\nFORMA: hi`, code), true)
-  assert.equal(transcriptHasCode('SHOPPER: hello', code), false)
-  assert.equal(isLinkCodeMessage('  forma-abc123 '), true)
-  assert.equal(isLinkCodeMessage('my code is FORMA-ABC123'), false, 'extra words mean a real reply is needed')
-  assert.equal(isLinkCodeMessage('FORMA-ABC12'), false)
-})
-
 test('brief flow: optional answers, back navigation and height helpers', () => {
   assert.equal(isAnswered('width', blank, { ...EMPTY_NOTES, width: 'wide' }), true)
   assert.equal(isAnswered('niggles', blank, { ...EMPTY_NOTES, niggles: '   ' }), false)
@@ -948,28 +898,27 @@ test('brief flow: optional answers, back navigation and height helpers', () => {
   assert.equal(UK_SIZES.at(-1), 'UK 13')
 })
 
-test('surface guard: enforces per-visitor limits, global daily capacity, and feature switches', () => {
+test('surface guard: enforces per-visitor limits, global daily capacity, and feature switches', async () => {
   const policies = {
     ...DEFAULT_SURFACE_POLICIES,
-    tryon: { visitorLimit: 2, globalDailyLimit: 3, windowMs: 60_000 },
+    tryon: { visitorLimit: 2, globalDailyLimit: 3, windowMs: 3_600_000 },
   }
   let disabled = new Set<string>()
-  const guard = createSurfaceGuard(policies, { getDisabled: () => disabled })
-  const now = 1_700_000_000_000
+  const guard = createSurfaceGuard(policies, { getDisabled: () => disabled, store: createMemoryCounterStore() })
 
   // Visitor A uses 2 of their 2 quota
-  assert.equal(guard('tryon', 'visitor-a', now).allowed, true)
-  assert.equal(guard('tryon', 'visitor-a', now + 100).allowed, true)
-  const limited = guard('tryon', 'visitor-a', now + 200)
+  assert.equal((await guard('tryon', 'visitor-a')).allowed, true)
+  assert.equal((await guard('tryon', 'visitor-a')).allowed, true)
+  const limited = await guard('tryon', 'visitor-a')
   assert.equal(limited.allowed, false)
   if (!limited.allowed) {
     assert.equal(limited.status, 429)
     assert.equal(limited.reason, 'rate_limit')
   }
 
-  // Visitor B gets the 3rd global call, then Visitor C hits global capacity (503)
-  assert.equal(guard('tryon', 'visitor-b', now + 300).allowed, true)
-  const capacity = guard('tryon', 'visitor-c', now + 400)
+  // Visitor B gets the 3rd global call (A's two allowed calls count), then Visitor C hits global capacity (503)
+  assert.equal((await guard('tryon', 'visitor-b')).allowed, true)
+  const capacity = await guard('tryon', 'visitor-c')
   assert.equal(capacity.allowed, false)
   if (!capacity.allowed) {
     assert.equal(capacity.status, 503)
@@ -981,12 +930,75 @@ test('surface guard: enforces per-visitor limits, global daily capacity, and fea
   disabled = disabledSurfaces(' tryon, deep ')
   assert.equal(disabled.has('tryon'), true)
   assert.equal(disabled.has('deep'), true)
-  const switchedOff = guard('deep', 'visitor-a', now + 500)
+  const switchedOff = await guard('deep', 'visitor-a')
   assert.equal(switchedOff.allowed, false)
   if (!switchedOff.allowed) {
     assert.equal(switchedOff.status, 503)
     assert.equal(switchedOff.reason, 'disabled')
     assert.equal(switchedOff.error, CAPACITY_MESSAGE)
+  }
+})
+
+test('surface guard: a shared store is the single source of truth across guard instances', async () => {
+  const policies = { ...DEFAULT_SURFACE_POLICIES, tryon: { visitorLimit: 2, globalDailyLimit: 100, windowMs: 3_600_000 } }
+  const shared = createMemoryCounterStore()
+  const instanceA = createSurfaceGuard(policies, { store: shared })
+  const instanceB = createSurfaceGuard(policies, { store: shared })
+  assert.equal((await instanceA('tryon', 'v')).allowed, true)
+  assert.equal((await instanceB('tryon', 'v')).allowed, true)
+  assert.equal((await instanceA('tryon', 'v')).allowed, false, 'a second instance cannot reset the visitor quota')
+})
+
+test('surface guard: a broken counter store fails open instead of blocking shoppers', async () => {
+  const broken = { name: 'broken', hit: async () => { throw new Error('down') } }
+  const guard = createSurfaceGuard(DEFAULT_SURFACE_POLICIES, { store: broken })
+  const originalWarn = console.warn
+  console.warn = () => {}
+  try {
+    assert.equal((await guard('agent', 'v')).allowed, true)
+  } finally {
+    console.warn = originalWarn
+  }
+})
+
+test('redis counter store: pipelines INCR/PEXPIRE NX/PTTL and parses the reply', async () => {
+  const calls: { url: string; body: unknown; auth: string | null }[] = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    calls.push({ url, body: JSON.parse(String(init.body)), auth: new Headers(init.headers).get('authorization') })
+    return Response.json([{ result: 3 }, { result: 0 }, { result: 5_000 }])
+  }) as typeof fetch
+  try {
+    const store = createRedisCounterStore({ url: 'https://kv.example', token: 'tok' })
+    const hit = await store.hit('vq:v:agent:1.2.3.4', 86_400_000)
+    assert.equal(hit.count, 3)
+    assert.ok(hit.resetAt > Date.now() && hit.resetAt <= Date.now() + 5_000)
+    assert.equal(calls[0].url, 'https://kv.example/pipeline')
+    assert.equal(calls[0].auth, 'Bearer tok')
+    assert.deepEqual(calls[0].body, [['INCR', 'vq:v:agent:1.2.3.4'], ['PEXPIRE', 'vq:v:agent:1.2.3.4', '86400000', 'NX'], ['PTTL', 'vq:v:agent:1.2.3.4']])
+  } finally {
+    globalThis.fetch = realFetch
+  }
+  assert.equal(redisConfig({ KV_REST_API_URL: 'https://a/', KV_REST_API_TOKEN: 't' })?.url, 'https://a')
+  assert.equal(redisConfig({ UPSTASH_REDIS_REST_URL: 'https://b', UPSTASH_REDIS_REST_TOKEN: 't' })?.url, 'https://b')
+  assert.equal(redisConfig({}), null)
+})
+
+test('secrets: a missing signing secret is a named failure, never a vendor-key fallback', () => {
+  const saved = { p: process.env.PASSPORT_SECRET, s: process.env.STOCK_CHECK_SECRET, w: process.env.SOLARI_API_KEY }
+  delete process.env.PASSPORT_SECRET
+  delete process.env.STOCK_CHECK_SECRET
+  process.env.SOLARI_API_KEY = 'vendor-key'
+  try {
+    assert.throws(() => issuePassport(DEMO_PASSPORTS['demo-running']), MissingSecretError)
+    assert.throws(() => issueStockToken({ productName: 'x', productUrl: 'https://a.test' }), MissingSecretError)
+    assert.equal(hasSecret('STOCK_CHECK_SECRET'), false)
+    assert.deepEqual(readPassport('demo-running'), DEMO_PASSPORTS['demo-running'], 'demo passports need no secret')
+  } finally {
+    for (const [k, v] of [['PASSPORT_SECRET', saved.p], ['STOCK_CHECK_SECRET', saved.s], ['SOLARI_API_KEY', saved.w]] as const) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
   }
 })
 
@@ -1082,4 +1094,18 @@ test('3D movement twin: retargets running and climbing poses into 3D rig, vector
   )
   assert.equal(jointForAttribute('Downturn & asymmetry', 'climbing'), 'left_foot')
   assert.equal(jointForAttribute('Hip posture', 'climbing'), 'pelvis')
+})
+
+test('model specs: bare ids use the gateway, prefixed ids pick a provider, junk is dropped', () => {
+  assert.deepEqual(parseSpec('spacexai/grok-4.7'), { provider: 'gateway', id: 'spacexai/grok-4.7' })
+  assert.deepEqual(parseSpec('gateway:openai/gpt-5-mini'), { provider: 'gateway', id: 'openai/gpt-5-mini' })
+  assert.deepEqual(parseSpec(' openai-compatible:grok-4 '), { provider: 'openai-compatible', id: 'grok-4' })
+  assert.deepEqual(parseSpec('compatible:llama3.1:8b'), { provider: 'openai-compatible', id: 'llama3.1:8b' }, 'ids may contain colons')
+  assert.equal(parseSpec('mystery:model'), null)
+  assert.equal(parseSpec('gateway:'), null)
+  assert.equal(parseSpec('  '), null)
+  assert.deepEqual(
+    parseChain('compatible:a, ,b/c,bogus:d'),
+    [{ provider: 'openai-compatible', id: 'a' }, { provider: 'gateway', id: 'b/c' }],
+  )
 })

@@ -7,7 +7,7 @@ import { guardRequest, guardResponse } from '@/lib/rate-limit'
 const bodySchema = z.object({ text: z.string().trim().min(1).max(240) })
 
 export async function POST(request: Request) {
-  const guard = guardRequest(request, 'voice')
+  const guard = await guardRequest(request, 'voice')
   if (!guard.allowed) {
     logCost('limit_hit', { surface: 'voice', reason: guard.reason })
     return guardResponse(guard)

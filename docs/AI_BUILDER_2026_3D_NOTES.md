@@ -12,7 +12,7 @@ Why it fits brief: multimodal copilot (phone clip -> pose -> 3D -> brief -> stoc
 2. 3D twin mirrors movement, metrics pinned as 3D annotations
 3. Confirm brief (chips + sentence) -> Find my shoes
 4. Agent researches + Solari stock checks as today, results linked from 3D pins
-5. Fit Passport + WhatsApp handoff unchanged, add 3D snapshot to passport
+5. Fit Passport unchanged, add 3D snapshot to passport
 
 ## Tech deltas
 - `components/stride-lab/twin/`: R3F avatar, retarget from pose-provider contract, no new pose dep

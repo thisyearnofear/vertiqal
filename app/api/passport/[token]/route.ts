@@ -1,4 +1,5 @@
 import { passportId, readPassport } from '@/lib/passport/token'
+import { MissingSecretError } from '@/lib/secrets'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -13,7 +14,15 @@ export function OPTIONS() {
 /** Machine-readable fit passport, meant for retailer bots and shopping agents. */
 export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const passport = readPassport(token)
+  let passport
+  try {
+    passport = readPassport(token)
+  } catch (error) {
+    if (error instanceof MissingSecretError) {
+      return Response.json({ error: 'Fit passports are not configured on this deployment' }, { status: 503, headers: CORS })
+    }
+    throw error
+  }
   if (!passport) return Response.json({ error: 'Invalid or tampered passport' }, { status: 404, headers: CORS })
 
   const self = new URL(request.url)

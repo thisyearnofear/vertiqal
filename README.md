@@ -17,7 +17,7 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 5. **You choose how far to dig.** Search starts at Considered; **Look harder** moves to Deep and adds research and athlete evidence.
 6. **Asks before acting, then does the obvious thing.** No live search starts until a real measurement and required brief are present. Once results land, Forma narrates one step at a time from a bar that follows you down the page, with at most one main action. Picking a running shoe starts the size check for your confirmed size straight away (climbers enter the shop's size, since climbing shoes run small); if that size is sold out, Forma says so and checks the next pick once by itself. A small "Forma's browser" window shows the address being checked, a clock, then the screenshot and verdict. The size check submits one explicit size to Solari's stealth browser with UK egress by default; Grok reads the size controls, structured offers and a screenshot to decide whether that size is in stock. Checks are limited to approved retailers, authorized product targets and per-client quotas, with a short-lived per-instance cache and honest live/cached/shared labels. Receipts include the observed URL and HTTP status, plus a screenshot and session replay when available; these show execution evidence, not proof of stock. The older Browser Use basket check still exists as an agent tool. Both stop before checkout.
 7. **Carries your fit elsewhere.** A signed **Fit Passport** lets any other shopping agent check a shoe against your profile, over REST or MCP. It is only shown when it matches the size in the decision form.
-8. **Hands off to WhatsApp and remembers you.** Your fitting and chosen pick land in WhatsApp through Wassist. Linking proves the phone is yours: the screen shows a one-time code and your fitting is sent only after that code arrives from your number (a signed cookie marks the phone verified, so next time is one tap). A Grok reply agent answers follow-ups in your chosen Forma voice and can run live product searches, capped at 25 replies per number per day. The app then reads what you've said on WhatsApp since, so your next scan builds on it. You can send Forma a photo of worn soles or a sore spot and it reads the wear or the likely fit cause. About 12 days after you pick a shoe, Forma checks in once to ask how it's breaking in.
+8. **Remembers your brief, not you.** Confirmed brief answers (never niggles, never video) are kept in a cookie on this browser so a returning shopper's sentence is pre-filled. There are no accounts and no database.
 9. **Lets you see yourself.** A **hero frame** card grades your best stride or reach into a shareable image, and the opt-in **See yourself in them** shows you wearing the top pick (FLUX Kontext), clearly labelled as an AI impression, not a fit check.
 
 ## Built with
@@ -30,8 +30,7 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 | Tavily | Live retailer, research, community and athlete search. Product search runs at advanced depth and filters out corporate/homepage URLs so picks cite real product pages. |
 | Solari | Stealth browser with UK residential egress for size and stock checks, with screenshot and session replay receipts. |
 | Browser Use | User-approved basket availability checks (agent tool). |
-| Vercel Analytics | Funnel events only — `sample_started`, `film_started`, `clip_uploaded`, `measurements_locked`, `shopping_started`, `pick_chosen`, `buy_clicked`, `whatsapp_sent`, `shortlist_feedback`, `limit_hit` — carrying sport/retailer flags, no PII. |
-| Wassist | WhatsApp handoff (Bring Your Own Agent), reply webhook and the conversation transcript that serves as shopper memory. |
+| Vercel Analytics | Funnel events only — `sample_started`, `film_started`, `clip_uploaded`, `measurements_locked`, `shopping_started`, `pick_chosen`, `buy_clicked`, `shortlist_feedback`, `limit_hit` — carrying sport/retailer flags, no PII. |
 | Next.js 16 + AI SDK | App, route handlers, tool-calling agent. |
 
 ## ChatGPT plugin — "will these fit me"
@@ -47,7 +46,7 @@ Thin packaging over the live Fit Passport MCP (directory at [chatgpt.com/plugins
 | Eval set | [`docs/CHATGPT_PLUGIN_EVAL.md`](docs/CHATGPT_PLUGIN_EVAL.md) |
 | Starter prompts | [`docs/CHATGPT_PLUGIN_STARTER_PROMPTS.md`](docs/CHATGPT_PLUGIN_STARTER_PROMPTS.md) |
 | Scoreboard | Usage-only funnel (connect → free tool → return) in [`docs/CHATGPT_PLUGIN_PLAYBOOK.md`](docs/CHATGPT_PLUGIN_PLAYBOOK.md#usage-only-scoreboard-plugin-lane) — usage-first; don’t chase ARPU yet |
-| Virality | Hero-frame cards + WhatsApp handoff are the share loop (pick → card → chat → back). Run the K-factor worksheet on shared picks → new fittings, then a 48-hour test on the card CTA. |
+| Virality | Hero-frame cards and shareable Fit Passports are the share loop (pick → card → friend → back). Run the K-factor worksheet on shared picks → new fittings, then a 48-hour test on the card CTA. |
 
 ## Monetisation and costs
 
@@ -118,7 +117,7 @@ The six-stage walkthrough is an illustrated journey, not a genuine recorded fitt
 
 ### Compact workspace verification
 
-Automated checks last run 2026-10-23: `pnpm typecheck` clean, `pnpm test:fitting` 59/59, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
+Automated checks last run 2026-11-02: `pnpm typecheck` clean, `pnpm test:fitting` 60/60, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
 
 ## Solari cookbook patterns applied
 
@@ -149,9 +148,9 @@ Verification and limits: `inspectStockPage` in `lib/agent/stock-page.ts` is a co
 | `lib/agent/` | Gear agent, tools, evidence checks, and the Tavily, Browser Use and Solari clients. |
 | `lib/hero/` | Hero frame scoring and capture. |
 | `lib/passport/` | Passport schema, signing and fit checks. |
-| `lib/rate-limit.ts` | Per-visitor daily limits, global daily route budgets and instant feature switches (`FORMA_DISABLED_FEATURES`). |
-| `lib/member/` | Signed member cookie: linked WhatsApp number and last pick. |
-| `lib/wassist/` | WhatsApp client, fitting messages, and the reply agent. |
+| `lib/rate-limit.ts` | Per-visitor daily limits, global daily route budgets and instant feature switches (`FORMA_DISABLED_FEATURES`). Counters live in Redis when `KV_REST_API_URL`/`UPSTASH_REDIS_REST_URL` is set (`lib/rate-limit/store.ts`), else per instance. |
+| `lib/secrets.ts` | `requireSecret` / `MissingSecretError`: signing secrets are required, never borrowed from a vendor key. |
+| `lib/agent/models.ts` | Provider-aware model resolution: an OpenAI-compatible provider (`FORMA_LLM_*`) first, Vercel AI Gateway as fallback. |
 
 Business rules live in `lib/`; components and routes stay thin. See [docs/architecture.md](docs/architecture.md) for the request flow and extension points.
 
@@ -164,20 +163,16 @@ Server-side only (Vercel **Vars** or an uncommitted `.env.local`). Never expose 
 | `TAVILY_API_KEY` | Live search tools | Agent skips live research and stock |
 | `BROWSER_USE_API_KEY` | Basket checks | Basket check unavailable |
 | `SOLARI_API_KEY` | Stock checks and session replays | Check my size returns an error |
-| `STOCK_CHECK_SECRET` | Dedicated signing secret for stock-check product targets (optional) | Falls back to `SOLARI_API_KEY` |
+| `STOCK_CHECK_SECRET` | **Required.** Signing secret for stock-check product targets (`openssl rand -base64 32`) | Size checks return 503; picks carry no stock token |
 | `STOCK_CHECK_EXTRA_HOSTS` | Comma-separated extra approved retailer hosts (optional) | Built-in footwear retailer list only |
-| `WASSIST_API_KEY` | WhatsApp handoff, webhook auth, passport and member cookie signing fallback | Handoff hidden |
-| `PASSPORT_SECRET` | Dedicated signing secret for passports and the member cookie (optional) | Falls back to `WASSIST_API_KEY` |
-| `WASSIST_CHECKIN_TEMPLATE` | Name of the approved WhatsApp template for the break-in check-in (optional) | Check-in job skips |
-| `CRON_SECRET` | Authenticates Vercel Cron calls to the check-in job | Check-in job returns 401 |
+| `PASSPORT_SECRET` | **Required.** Signing secret for Fit Passports (`openssl rand -base64 32`). Never reuses a vendor key | Passport issue/read returns 503 (demo passports still work) |
+| `FORMA_LLM_BASE_URL`, `FORMA_LLM_API_KEY`, `FORMA_LLM_MODEL` | Any OpenAI-compatible provider (xAI `https://api.x.ai/v1`, OpenAI, Groq, Together, OpenRouter, a local Ollama/vLLM…). When all three are set it is tried first; optional `FORMA_LLM_NAME` labels it | Gateway only |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway (needs a positive credit balance; 402 otherwise). Set `FORMA_DISABLE_GATEWAY=1` to skip it | Gateway candidates are skipped |
+| `FORMA_AGENT_MODELS`, `FORMA_FAST_MODELS` | Ordered fallback chains, e.g. `compatible:grok-4,gateway:openai/gpt-5-mini` (bare ids mean the gateway) | Built-in gateway chains |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_*`) | Shared rate-limit counters so daily caps hold across serverless instances | Per-instance counters (warned at startup) |
 | `VLMRUN_API_KEY` | VLM Run pose refinement | Provider falls back to MediaPipe only |
 | `FORMA_DISABLED_FEATURES` | Comma-separated kill-switch for paid surfaces (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) (optional) | All configured surfaces enabled |
 | `FORMA_BUDGET_<SURFACE>` | Global daily call budget per surface, e.g. `FORMA_BUDGET_TRYON=60` (optional) | Uses built-in daily defaults in `lib/rate-limit.ts` |
 | `FORMA_VISITOR_LIMIT_<SURFACE>` | Per-visitor daily call limit per surface, e.g. `FORMA_VISITOR_LIMIT_AGENT=6` (optional) | Uses built-in visitor defaults in `lib/rate-limit.ts` |
 
-### WhatsApp setup notes
-
-- Production and preview deployments each get their own Wassist agent (`Forma · vertiqal` and `Forma · vertiqal · preview`). Opening a preview never replaces the live agent.
-- The break-in check-in (`vercel.json` cron, daily 09:00 UTC) messages shoppers after their 24-hour window has closed, which WhatsApp only allows through an approved template. Create a UTILITY template on your own WhatsApp Business number (the Wassist sandbox can't send templates). Give it one body variable, `{{1}}` = shoe name, and keep the phrase **"vertiqal check-in"** in the body, because the job uses it to avoid sending twice. For example: *"Hi, it's Forma with your vertiqal check-in. How are your {{1}} feeling now you've worn them in? Tell me what's working and anything that rubs, and I'll factor it into your next scan."*
-
-AI Gateway authenticates automatically on Vercel; no key is needed.
+Without any model provider configured, every LLM-backed route returns 503 and measurement still works on-device.

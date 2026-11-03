@@ -21,14 +21,3 @@ export function draftDiffers(submitted: string | null, draft: string): boolean {
 export function lastCheckLabel(submitted: string): string {
   return `Last check: ${submitted}`
 }
-
-export function choiceSnapshot(state: {
-  draft: string
-  submitted: string | null
-  verdict: string | null
-}): { size: string; stock: string } | null {
-  const size = state.draft.trim()
-  if (!size) return null
-  const verified = state.submitted === size && state.verdict ? state.verdict : null
-  return { size, stock: verified ?? `Not checked for ${size}` }
-}

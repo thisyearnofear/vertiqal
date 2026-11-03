@@ -1,4 +1,5 @@
-import { createRateLimiter, requestClientKey } from './agent/stock-policy.ts'
+import { requestClientKey } from './agent/stock-policy.ts'
+import { counterStore, type CounterStore } from './rate-limit/store.ts'
 
 export type GuardedSurface =
   | 'agent'
@@ -66,41 +67,44 @@ export function createSurfaceGuard(
   options: {
     getDisabled?: () => Set<string>
     getEnv?: (key: string) => string | undefined
+    store?: CounterStore
   } = {},
 ) {
-  const visitorLimiters = new Map<GuardedSurface, ReturnType<typeof createRateLimiter>>()
-  const globalLimiters = new Map<GuardedSurface, { limit: number; check: ReturnType<typeof createRateLimiter> }>()
+  const store = options.store ?? counterStore()
+  const limits = new Map<GuardedSurface, { visitor: number; global: number; windowMs: number }>()
 
-  const getVisitorLimiter = (surface: GuardedSurface) => {
+  const limitsFor = (surface: GuardedSurface) => {
     const policy = policies[surface]
-    const envKey = `FORMA_VISITOR_LIMIT_${surface.toUpperCase().replace(/-/g, '_')}`
-    const limit = envPositiveInt(options.getEnv?.(envKey) ?? process.env[envKey], policy.visitorLimit)
-    let limiter = visitorLimiters.get(surface)
-    if (!limiter) {
-      limiter = createRateLimiter({ limit, windowMs: policy.windowMs ?? DAY_MS })
-      visitorLimiters.set(surface, limiter)
+    const visitorKey = `FORMA_VISITOR_LIMIT_${surface.toUpperCase().replace(/-/g, '_')}`
+    const budgetKey = `FORMA_BUDGET_${surface.toUpperCase().replace(/-/g, '_')}`
+    const visitor = envPositiveInt(options.getEnv?.(visitorKey) ?? process.env[visitorKey], policy.visitorLimit)
+    const global = envPositiveInt(options.getEnv?.(budgetKey) ?? process.env[budgetKey], policy.globalDailyLimit)
+    const windowMs = policy.windowMs ?? DAY_MS
+    const existing = limits.get(surface)
+    if (!existing || existing.visitor !== visitor || existing.global !== global || existing.windowMs !== windowMs) {
+      const next = { visitor, global, windowMs }
+      limits.set(surface, next)
+      return next
     }
-    return limiter
+    return existing
   }
 
-  const getGlobalLimiter = (surface: GuardedSurface) => {
-    const policy = policies[surface]
-    const envKey = `FORMA_BUDGET_${surface.toUpperCase().replace(/-/g, '_')}`
-    const limit = envPositiveInt(options.getEnv?.(envKey) ?? process.env[envKey], policy.globalDailyLimit)
-    const existing = globalLimiters.get(surface)
-    if (!existing || existing.limit !== limit) {
-      const check = createRateLimiter({ limit, windowMs: policy.windowMs ?? DAY_MS })
-      globalLimiters.set(surface, { limit, check })
-      return check
+  /** Counts a hit and turns it into a verdict. A store failure fails open: a broken counter must not block shoppers. */
+  const count = async (key: string, limit: number, windowMs: number) => {
+    try {
+      const { count: hits, resetAt } = await store.hit(key, windowMs)
+      return {
+        allowed: hits <= limit,
+        remaining: Math.max(0, limit - hits),
+        retryAfterSec: Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)),
+      }
+    } catch (error) {
+      console.warn('[rate-limit] counter store unavailable, allowing this request', error)
+      return { allowed: true, remaining: limit, retryAfterSec: 0 }
     }
-    return existing.check
   }
 
-  return function checkSurface(
-    surface: GuardedSurface,
-    clientKey: string,
-    now = Date.now(),
-  ): GuardVerdict {
+  return async function checkSurface(surface: GuardedSurface, clientKey: string): Promise<GuardVerdict> {
     const disabled = options.getDisabled ? options.getDisabled() : disabledSurfaces()
     if (disabled.has(surface)) {
       return {
@@ -113,7 +117,9 @@ export function createSurfaceGuard(
       }
     }
 
-    const visitor = getVisitorLimiter(surface)(clientKey, now)
+    const { visitor: visitorLimit, global: globalLimit, windowMs } = limitsFor(surface)
+
+    const visitor = await count(`vq:v:${surface}:${clientKey}`, visitorLimit, windowMs)
     if (!visitor.allowed) {
       return {
         allowed: false,
@@ -125,7 +131,7 @@ export function createSurfaceGuard(
       }
     }
 
-    const global = getGlobalLimiter(surface)('global', now)
+    const global = await count(`vq:g:${surface}`, globalLimit, windowMs)
     if (!global.allowed) {
       return {
         allowed: false,
@@ -147,11 +153,11 @@ export function createSurfaceGuard(
 
 const defaultGuard = createSurfaceGuard()
 
-export function guardSurfaceKey(surface: GuardedSurface, clientKey: string): GuardVerdict {
+export function guardSurfaceKey(surface: GuardedSurface, clientKey: string): Promise<GuardVerdict> {
   return defaultGuard(surface, clientKey)
 }
 
-export function guardRequest(request: Request, surface: GuardedSurface): GuardVerdict {
+export function guardRequest(request: Request, surface: GuardedSurface): Promise<GuardVerdict> {
   return defaultGuard(surface, requestClientKey(request))
 }
 

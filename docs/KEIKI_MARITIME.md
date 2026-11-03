@@ -21,13 +21,13 @@
 | **Users as of today** | 0 |
 | **Target by Dec 1** | 1,000 |
 
-We are starting from zero. Every user count below is real, instrumented, and updated weekly. No dashboard is invented until analytics exist (Vercel Analytics funnel events already cover `sample_started` → `clip_uploaded` → `measurements_locked` → `shopping_started` → `pick_chosen` → `buy_clicked` → `whatsapp_sent`).
+We are starting from zero. Every user count below is real, instrumented, and updated weekly. No dashboard is invented until analytics exist (Vercel Analytics funnel events already cover `sample_started` → `clip_uploaded` → `measurements_locked` → `shopping_started` → `pick_chosen` → `buy_clicked`).
 
 ## Weekly tracking
 
 | Week | Starts | Users at start | Users at end | New this week | Cumulative | Milestone |
 |------|--------|----------------|--------------|---------------|------------|-----------|
-| 1 | Oct 20 | 0 | 0 | 0 | 0 | Core fitting loop, MCP server, WhatsApp handoff & cost logging live; baseline instrumented (Oct 23 check-in) |
+| 1 | Oct 20 | 0 | 0 | 0 | 0 | Core fitting loop, MCP server & cost logging live; baseline instrumented (Oct 23 check-in) |
 | 2 | Oct 27 | 0 | | | | ChatGPT Plugin eval verified + real consented clip validation + first 50 users |
 | 3 | Nov 3 | | | | | 3D Movement Twin live (AI Builder Hackathon) + Hero card share loop (200 cumulative users) |
 | 4 | Nov 10 | | | | | Run club / climbing gym community rollout + return users ≥ 10% of base |
@@ -46,7 +46,6 @@ Update this table every Friday. The "Users at end" for a week becomes "Users at 
 | 4 | Shopping started / week | Brief confirmed → "Find my shoes" → retailer research begins |
 | 5 | Pick chosen / week | User selects a shoe from the shortlist |
 | 6 | Return users / week | ≥2 fittings in 7 days (same device / stable client id if logged) |
-| 7 | WhatsApp sends / week | Fitting + pick sent to WhatsApp via Wassist |
 
 ## Mapping to existing docs
 

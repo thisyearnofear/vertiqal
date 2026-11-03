@@ -7,17 +7,14 @@ import { AFFILIATE_DISCLOSURE, wrapAffiliateUrl } from '@/lib/agent/affiliate'
 import type { MovementBrief } from '@/lib/agent/brief'
 import { trackStep } from '@/lib/funnel'
 import type { Sport } from '@/lib/metrics/readout'
-import type { MemberView } from '@/lib/member/schema'
 import type { Passport } from '@/lib/passport/schema'
-import { choiceSnapshot, draftDiffers, lastCheckLabel, stockTargetFor } from '@/lib/fitting/stock'
+import { draftDiffers, lastCheckLabel, stockTargetFor } from '@/lib/fitting/stock'
 import { cn } from '@/lib/utils'
-import type { Fitting } from '@/lib/wassist/fitting'
 import { FitReceipt } from './fit-receipt'
 import type { ShoePick } from './outputs'
 import { PassportCard } from './passport-card'
 import { BrowserPeek, StockProof, stockLine, useStockCheck } from './stock-check'
 import type { StockPhase } from '@/lib/fitting/narration'
-import { WhatsAppHandoff } from './whatsapp-handoff'
 
 const LINK = 'w-fit text-lg leading-none underline decoration-dotted underline-offset-4 opacity-70 hover:opacity-100 hover:text-primary'
 const shortName = (name: string) => name.split(' ').slice(0, 3).join(' ')
@@ -30,13 +27,11 @@ interface DecisionPanelProps {
   size: string
   onSizeCommit: (size: string) => void
   onChoose: (pick: ShoePick | null) => void
-  fitting: Fitting | null
   passport: Passport | null
-  member: MemberView
   /** Pins today's measurements so a re-film in the new shoes shows what changed. Absent for sample runs. */
   onPinBaseline?: () => void
   baselinePinned: boolean
-  /** Offer WhatsApp, baseline and passport (only once a size check has finished). */
+  /** Offer the baseline and passport (only once a size check has finished). */
   takeAway: boolean
   /** Reports where the size check is, so Forma can narrate it and the page can reveal what comes next. */
   onStock: (stock: { phase: StockPhase; price: string | null }) => void
@@ -55,9 +50,7 @@ export function DecisionPanel({
   size,
   onSizeCommit,
   onChoose,
-  fitting,
   passport,
-  member,
   onPinBaseline,
   baselinePinned,
   takeAway,
@@ -124,12 +117,6 @@ export function DecisionPanel({
   }, [checking])
   const elapsed = checking && startedAt ? Math.max(0, Math.round((now - startedAt) / 1000)) : 0
 
-  const snapshot = choiceSnapshot({
-    draft,
-    submitted,
-    verdict: data && submitted ? stockLine(data, submitted) : null,
-  })
-
   const commit = (e: FormEvent) => {
     e.preventDefault()
     const next = draft.trim()
@@ -157,24 +144,9 @@ export function DecisionPanel({
   const recordChoice = () => {
     trackStep('buy_clicked', { sport, retailer: pick.retailer, verified: available, affiliated: buyLink.affiliated })
     onBought()
-    if (!member.linked || !snapshot) return
-    void fetch('/api/member', {
-      method: 'POST',
-      keepalive: true,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sport, name: pick.name, retailer: pick.retailer, price, size: snapshot.size, at: new Date().toISOString() }),
-    }).catch(() => {})
   }
 
   const passportCurrent = Boolean(draft.trim()) && passport?.size === draft.trim()
-  const choiceFitting: Fitting | null =
-    fitting && snapshot
-      ? {
-          ...fitting,
-          passportUrl: passportCurrent ? fitting.passportUrl : undefined,
-          choice: { name: pick.name, retailer: pick.retailer, url: pick.url, price, size: snapshot.size, stock: snapshot.stock },
-        }
-      : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -300,11 +272,6 @@ export function DecisionPanel({
       {takeAway && (
         <div className="flex flex-col gap-6 border-t border-dashed border-stage-foreground/30 pt-5">
           <p className="text-xl uppercase leading-none phosphor">{'> TAKE IT WITH YOU'}</p>
-          {choiceFitting && (
-            <div id="forma-whatsapp" className="scroll-mt-24">
-              <WhatsAppHandoff fitting={choiceFitting} member={member} />
-            </div>
-          )}
 
           <details name="forma-panels" className="text-lg leading-snug">
             <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ More: fit passport · baseline for next time'}</summary>
