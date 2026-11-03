@@ -47,6 +47,7 @@ import { CAPACITY_MESSAGE, DEFAULT_SURFACE_POLICIES, createSurfaceGuard, disable
 import { createMemoryCounterStore, createRedisCounterStore, redisConfig } from '../rate-limit/store.ts'
 import { MissingSecretError, hasSecret } from '../secrets.ts'
 import { parseChain, parseSpec } from '../agent/model-spec.ts'
+import { buildErrorReport, redactPath } from '../error-report.ts'
 import { attractPose } from '../../components/stride-lab/attract-runner.ts'
 import type { Pose } from '../pose/types.ts'
 
@@ -1108,4 +1109,19 @@ test('model specs: bare ids use the gateway, prefixed ids pick a provider, junk 
     parseChain('compatible:a, ,b/c,bogus:d'),
     [{ provider: 'openai-compatible', id: 'a' }, { provider: 'gateway', id: 'b/c' }],
   )
+})
+
+test('error reports: queries and long path segments never reach the log', () => {
+  assert.equal(redactPath('/api/passport/' + 'a'.repeat(200) + '?x=1'), '/api/passport/:token')
+  assert.equal(redactPath('/api/brief?secret=1#frag'), '/api/brief')
+  const report = buildErrorReport(
+    Object.assign(new Error('boom\n  at   somewhere'), { digest: 'd123' }),
+    { path: '/api/passport/' + 'b'.repeat(80), method: 'GET' },
+    { routeType: 'route' },
+    new Date('2026-11-03T00:00:00Z'),
+  )
+  assert.equal(report.route, '/api/passport/:token')
+  assert.equal(report.message, 'boom at somewhere')
+  assert.equal(report.digest, 'd123')
+  assert.equal(buildErrorReport('plain', { path: '/x', method: 'POST' }, {}).message, 'plain')
 })

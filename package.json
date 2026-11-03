@@ -13,7 +13,9 @@
     "test:fitting": "node --test lib/fitting/fitting.test.ts",
     "test:pose": "node --test lib/pose/validation.test.ts lib/pose/example-observation.test.ts lib/pose/example-scheduler.test.ts",
     "validate:motion": "node lib/pose/validation-cli.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "smoke": "node scripts/smoke.mjs",
+    "cost:report": "node scripts/cost-report.mjs"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs}": "eslint --fix"

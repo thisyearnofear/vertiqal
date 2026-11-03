@@ -63,6 +63,8 @@ pnpm install
 pnpm dev        # http://localhost:3000
 pnpm test:fitting # fitting-state, capture and preference rules
 pnpm test:pose    # example tracking lifecycle, local export and annotation-comparison unit tests
+pnpm smoke        # end-to-end checks against BASE_URL (add --llm or --full to exercise the model; --full spends real money)
+pnpm cost:report  # unit economics from `vercel logs --json` (see script header for price assumptions)
 pnpm typecheck    # the real type gate: next.config ignores TS errors during build
 pnpm build
 ```
@@ -170,6 +172,7 @@ Server-side only (Vercel **Vars** or an uncommitted `.env.local`). Never expose 
 | `AI_GATEWAY_API_KEY` | Vercel AI Gateway (needs a positive credit balance; 402 otherwise). Set `FORMA_DISABLE_GATEWAY=1` to skip it | Gateway candidates are skipped |
 | `FORMA_AGENT_MODELS`, `FORMA_FAST_MODELS` | Ordered fallback chains, e.g. `compatible:grok-4,gateway:openai/gpt-5-mini` (bare ids mean the gateway) | Built-in gateway chains |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_*`) | Shared rate-limit counters so daily caps hold across serverless instances | Per-instance counters (warned at startup) |
+| `ERROR_WEBHOOK_URL` | Slack/Discord-style incoming webhook that receives one line per unhandled server error (`instrumentation.ts`); errors are always logged too (optional) | Logs only |
 | `VLMRUN_API_KEY` | VLM Run pose refinement | Provider falls back to MediaPipe only |
 | `FORMA_DISABLED_FEATURES` | Comma-separated kill-switch for paid surfaces (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) (optional) | All configured surfaces enabled |
 | `FORMA_BUDGET_<SURFACE>` | Global daily call budget per surface, e.g. `FORMA_BUDGET_TRYON=60` (optional) | Uses built-in daily defaults in `lib/rate-limit.ts` |
