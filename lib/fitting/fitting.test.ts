@@ -48,6 +48,10 @@ import { createMemoryCounterStore, createRedisCounterStore, redisConfig } from '
 import { MissingSecretError, hasSecret } from '../secrets.ts'
 import { parseChain, parseSpec } from '../agent/model-spec.ts'
 import { buildErrorReport, redactPath } from '../error-report.ts'
+import { CLICK_REF_PATTERN } from '../outcome/schema.ts'
+import { OUTCOME_LINK_TTL_MS, issueOutcomeToken, newClickRef, readOutcomeToken } from '../outcome/token.ts'
+import { FOLLOW_UP_DAYS, escapeIcsText, foldLine, reminderIcs } from '../outcome/reminder.ts'
+import { redisPipeline } from '../rate-limit/store.ts'
 import { attractPose } from '../../components/stride-lab/attract-runner.ts'
 import type { Pose } from '../pose/types.ts'
 
@@ -1124,4 +1128,83 @@ test('error reports: queries and long path segments never reach the log', () => 
   assert.equal(report.message, 'boom at somewhere')
   assert.equal(report.digest, 'd123')
   assert.equal(buildErrorReport('plain', { path: '/x', method: 'POST' }, {}).message, 'plain')
+})
+
+test('click references: opaque, lowercase, within the 50 character Awin limit', () => {
+  const ref = newClickRef()
+  assert.match(ref, CLICK_REF_PATTERN)
+  assert.ok(ref.length <= 50)
+  assert.notEqual(ref, newClickRef(), 'each click gets its own reference')
+  assert.equal(CLICK_REF_PATTERN.test('VQABC'), false)
+  assert.equal(CLICK_REF_PATTERN.test('vq' + 'a'.repeat(60)), false, 'over-long references are refused')
+})
+
+test('affiliate links carry the click reference only when it is well formed', () => {
+  const merchants = parseAffiliateMerchants('runnersneed.com:1122')
+  const url = 'https://www.runnersneed.com/p/brooks-ghost-16'
+  const ref = 'vq0123456789abcdef'
+  const tagged = new URL(wrapAffiliateUrl(url, { affiliateId: '998877', merchants, clickRef: ref }).href)
+  assert.equal(tagged.searchParams.get('clickref'), ref)
+  assert.equal(tagged.searchParams.get('ued'), url, 'the canonical product url is untouched')
+  const bad = new URL(wrapAffiliateUrl(url, { affiliateId: '998877', merchants, clickRef: 'Has Spaces & Caps' }).href)
+  assert.equal(bad.searchParams.has('clickref'), false)
+  assert.equal(wrapAffiliateUrl(url, { affiliateId: '', merchants, clickRef: ref }).affiliated, false)
+})
+
+test('fit-outcome links: signed, expiring, and tamper-evident', () => {
+  const saved = process.env.PASSPORT_SECRET
+  process.env.PASSPORT_SECRET = 'outcome-test-secret'
+  try {
+    const now = 1_800_000_000_000
+    const ctx = { ref: 'vq0123456789abcdef', sport: 'climbing' as const, name: 'Scarpa Instinct VS', retailer: 'Ellis Brigham', size: 'UK 7', at: now }
+    const token = issueOutcomeToken(ctx)
+    assert.deepEqual(readOutcomeToken(token, now + 1000), ctx)
+    assert.equal(readOutcomeToken(`${token.slice(0, -2)}xx`, now), null, 'tampered signature')
+    const [, sig] = token.split('.')
+    const forged = Buffer.from(JSON.stringify({ ...ctx, size: 'UK 3' })).toString('base64url')
+    assert.equal(readOutcomeToken(`${forged}.${sig}`, now), null, 'edited payload keeps the old signature')
+    assert.equal(readOutcomeToken(token, now + OUTCOME_LINK_TTL_MS + 1), null, 'expired')
+    assert.equal(readOutcomeToken(token, now - 120_000), null, 'dated in the future')
+    assert.equal(readOutcomeToken('nonsense', now), null)
+    delete process.env.PASSPORT_SECRET
+    assert.throws(() => issueOutcomeToken(ctx), MissingSecretError, 'no secret, no link')
+  } finally {
+    if (saved === undefined) delete process.env.PASSPORT_SECRET
+    else process.env.PASSPORT_SECRET = saved
+  }
+})
+
+test('calendar reminder: valid ics with escaped text and folded long lines', () => {
+  assert.equal(escapeIcsText('a, b; c\\d\ne'), 'a\\, b\\; c\\\\d\\ne')
+  const long = 'DESCRIPTION:' + 'x'.repeat(200)
+  const folded = foldLine(long).split('\r\n')
+  assert.ok(folded.every((l) => new TextEncoder().encode(l).length <= 75), 'every physical line is within 75 octets')
+  assert.ok(folded.slice(1).every((l) => l.startsWith(' ')), 'continuations start with a space')
+  assert.equal(folded.map((l, i) => (i ? l.slice(1) : l)).join(''), long, 'unfolding restores the original')
+  const ics = reminderIcs({
+    uid: 'vq0123456789abcdef',
+    summary: 'How did your shoes fit?',
+    description: 'One tap.',
+    url: 'https://vertiqal.vercel.app/fit/abc.def',
+    on: new Date('2026-12-01T10:00:00Z'),
+    now: new Date('2026-11-10T09:00:00Z'),
+  })
+  assert.match(ics, /^BEGIN:VCALENDAR\r\n/)
+  assert.match(ics, /DTSTART;VALUE=DATE:20261201\r\n/)
+  assert.match(ics, /DTEND;VALUE=DATE:20261202\r\n/)
+  assert.match(ics, /DTSTAMP:20261110T090000Z\r\n/)
+  assert.match(ics, /END:VCALENDAR\r\n$/)
+  assert.equal(FOLLOW_UP_DAYS, 21)
+})
+
+test('redis pipeline: surfaces command errors instead of treating them as zero', async () => {
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async () => Response.json([{ result: 1 }, { error: 'WRONGTYPE' }])) as typeof fetch
+  try {
+    await assert.rejects(redisPipeline({ url: 'https://kv.example', token: 't' }, [['INCR', 'a'], ['HSET', 'a', 'f', 'v']]), /WRONGTYPE/)
+    globalThis.fetch = (async () => new Response('no', { status: 500 })) as typeof fetch
+    await assert.rejects(redisPipeline({ url: 'https://kv.example', token: 't' }, [['PING']]), /500/)
+  } finally {
+    globalThis.fetch = realFetch
+  }
 })

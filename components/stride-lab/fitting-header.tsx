@@ -4,7 +4,7 @@ import type { Sport } from '@/lib/metrics/readout'
 import { cn } from '@/lib/utils'
 import { HowItWorks } from './how-it-works'
 
-const SPORT_LIST: Sport[] = ['running', 'climbing']
+const SPORT_LIST: Sport[] = ['climbing', 'running']
 const SPORT_CHOICE: Record<Sport, string> = { running: 'I run', climbing: 'I climb' }
 
 export function SportToggle({ sport, onSport }: { sport: Sport; onSport: (sport: Sport) => void }) {
@@ -34,7 +34,7 @@ export function FittingHeader() {
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <p className="font-mono text-2xl leading-none tracking-wider text-foreground engraved lg:text-3xl">vertiqal</p>
         <h1 className="text-balance text-base font-semibold leading-tight text-foreground lg:text-lg">
-          Find shoes for how you move.
+          The right shoe, in your size, checked in stock.
         </h1>
       </div>
       <HowItWorks />

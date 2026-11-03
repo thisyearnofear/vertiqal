@@ -52,6 +52,9 @@ export function GaitReadout({ readout, baseline, provisionalHeight }: { readout:
             {`${String(readout.events).padStart(2, '0')} ${eventWord.toUpperCase()}`}
           </span>
         </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Rough estimates from this one clip, worked out on your device. They steer the shortlist; they are not a medical or biomechanical assessment.
+        </p>
         {provisionalHeight && (
           <p className="rounded-md border border-primary/50 bg-primary/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
             Distance estimates need your height

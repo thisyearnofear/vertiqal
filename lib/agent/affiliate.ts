@@ -1,3 +1,4 @@
+import { CLICK_REF_PATTERN } from '../outcome/schema.ts'
 import { normalizeStockUrl, stockUrlAllowed } from './stock-policy.ts'
 
 export const AFFILIATE_DISCLOSURE = 'We may earn a commission. It never changes the ranking.'
@@ -38,6 +39,8 @@ export function wrapAffiliateUrl(
     affiliateId?: string
     merchants?: Map<string, string>
     extraHosts?: string[]
+    /** Opaque per-click reference; Awin returns it on the transaction so outcomes can be joined to purchases. */
+    clickRef?: string
   } = {},
 ): AffiliateLink {
   const parsed = normalizeStockUrl(rawUrl)
@@ -60,5 +63,6 @@ export function wrapAffiliateUrl(
   awin.searchParams.set('awinmid', merchantId)
   awin.searchParams.set('awinaffid', affiliateId)
   awin.searchParams.set('ued', parsed.toString())
+  if (options.clickRef && CLICK_REF_PATTERN.test(options.clickRef)) awin.searchParams.set('clickref', options.clickRef)
   return { href: awin.toString(), affiliated: true }
 }

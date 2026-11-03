@@ -106,3 +106,14 @@ The untracked `SHIPYARD_MMM_2026.md` proposes a £29 "Size Guaranteed" report. A
 - Whether to launch running at all before climbing is proven.
 - Whether to add direct retailer deals (higher commission than the public Awin rates).
 - Whether to charge users. Test it in Stage 1 with a real price, not a survey.
+
+## Decisions made (2026-11-03)
+
+The product was updated to match this document.
+
+- **Climbing is the default and the first sport in the toggle.** Running stays available. `/` is climbing; `/?sport=running` and a shared hero card open running.
+- **Claims were narrowed to what can be verified.** The heading is "The right shoe, in your size, checked in stock." The readout and "How it works" say the clip is a rough, on-device estimate, not a medical or biomechanical assessment. The agent prompt tells Forma the evidence is mixed, to treat gait as one input among several, to state a model's sizing relative to the shopper's size only when sources say so, and to remind climbers that some brands will not take shoes back once climbed in. That warning is also shown on the Buy step.
+- **What was not changed:** the measurement itself. The document's point is to stop over-claiming it, not to pretend it is better than it is.
+- **The outcome loop now exists in code.** Clicking out gets a random `clickref` (opaque, under 50 characters, lowercase) on the Awin link, plus a signed follow-up link at `/fit/<token>` that stores no personal data. The shopper is offered a calendar reminder three weeks out and a copyable link, since there is no account or messaging channel to chase them with. Reports cover fit (well / too tight / too loose / wrong type / sent them back) and why someone did not buy. They are logged and, when a KV/Redis store is configured, stored one per reference so "fits well" turning into "sent them back" overwrites the earlier answer. The shoe name is deliberately not stored; the reference joins to Awin's own transaction record.
+- **Not yet done:** joining Awin, configuring `NEXT_PUBLIC_AWIN_AFFILIATE_ID` and `NEXT_PUBLIC_AWIN_MERCHANTS` (the wrapping code is built and idle), and setting `KV_REST_API_*` so reports persist beyond logs.
+- **The £29 "Size Guaranteed" report proposed in `docs/SHIPYARD_MMM_2026.md` is rejected.** A guarantee means underwriting returns that a few pounds of commission cannot cover. If users are ever charged, test a small fee for the fitting itself first.

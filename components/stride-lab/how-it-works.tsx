@@ -22,7 +22,9 @@ export function HowItWorks() {
         </ol>
         <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
           The camera watches how you move — it cannot measure your shoe size, foot width or budget. You confirm those
-          yourself before anything is searched, and every recommendation waits for your go-ahead.
+          yourself before anything is searched. What it sees is one short clip, analysed on your device: a rough guide
+          to the kind of shoe, not a medical or biomechanical assessment. Forma then checks your size in stock and
+          shows what it saw.
         </p>
       </div>
     </details>
