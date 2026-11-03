@@ -38,6 +38,8 @@ import { AgentPanel } from './agent/agent-panel'
 import { activityOf } from './agent/agent-steps'
 import { outputsOf, type ShoePick } from './agent/outputs'
 import { HeroCard } from './hero/hero-card'
+import { CompareCard } from './hero/compare-card'
+import type { BaselineReading } from '@/lib/hero/comparison'
 import { useGearAgent } from './agent/use-gear-agent'
 import { ExampleObserver } from './example-observer'
 import { ExampleWalkthrough, type ExampleState } from './example-walkthrough'
@@ -63,6 +65,10 @@ interface Clip {
 interface Baseline {
   readout: Readout
   clipName: string
+  /** Hero frame photo URL for before/after comparison. */
+  heroPhotoUrl: string
+  /** Hero frame data for the before side of the comparison. */
+  heroFrame: HeroFrame
 }
 
 const CAPTURE_SECONDS: Record<Sport, number> = { running: 20, climbing: 45 }
@@ -118,6 +124,7 @@ export function StrideLab({
   const [lockedReadout, setLockedReadout] = useState<Readout | null>(null)
   const [playing, setPlaying] = useState(true)
   const [baseline, setBaseline] = useState<Baseline | null>(null)
+  const previousHeroRef = useRef<number | null>(null)
   const [persona, setPersona] = useState(initialPersona)
   // Settings belong to the phase they were opened in (setting up, or one results stage), so they close
   // by themselves once the fitting moves into results instead of riding along under the shortlist.
@@ -131,6 +138,13 @@ export function StrideLab({
   const [caption, setCaption] = useState<string | null>(null)
   const [keyframes, setKeyframes] = useState<Keyframe[]>([])
   const [hero, setHero] = useState<HeroFrame | null>(null)
+
+  // Track hero frame changes for baseline comparison detection
+  useEffect(() => {
+    if (hero && hero.id !== previousHeroRef.current) {
+      previousHeroRef.current = hero.id
+    }
+  }, [hero])
   const [notes, setNotes] = useState<FittingNotesState>(() => ({
     ...EMPTY_NOTES,
     goal: initialDraft.goal,
@@ -1184,7 +1198,10 @@ export function StrideLab({
               sport={sport}
               choice={choice}
               onChoose={choose}
-              onPinBaseline={measuredReady ? () => setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today' }) : undefined}
+              onPinBaseline={measuredReady ? () => {
+                if (!hero) return
+                setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today', heroPhotoUrl: hero.dataUrl, heroFrame: hero })
+              } : undefined}
               baselinePinned={Boolean(baseline)}
               deeper={deeper}
               onLookHarder={lookHarder}
@@ -1277,6 +1294,29 @@ export function StrideLab({
         {choice && hero && visible.takeAway && (
           <div id="hero-frame" className="scroll-mt-6">
             <HeroCard frame={hero} readout={panelReadout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
+          </div>
+        )}
+
+        {/* Baseline comparison — shown when there's a baseline AND a new hero frame */}
+        {baseline && hero && previousHeroRef.current !== hero.id && (
+          <div id="hero-compare" className="scroll-mt-6">
+            <CompareCard
+              beforeFrame={baseline.heroFrame}
+              afterFrame={hero}
+              beforeReadout={baseline.readout}
+              afterReadout={panelReadout}
+              baseline={{
+                sport,
+                capturedAt: new Date().toISOString(),
+                metrics: baseline.readout.metrics,
+                standoutMetric: { value: '0', unit: '', label: '', description: '' },
+                headline: '',
+                frameId: baseline.heroFrame.id,
+                photoUrl: baseline.heroPhotoUrl,
+              } as BaselineReading}
+              sport={sport}
+              themeKey={persona.phosphor}
+            />
           </div>
         )}
 
