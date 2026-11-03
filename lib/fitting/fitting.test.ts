@@ -1208,3 +1208,45 @@ test('redis pipeline: surfaces command errors instead of treating them as zero',
     globalThis.fetch = realFetch
   }
 })
+
+import { generateHeroCaption, captionToSpeech } from '../hero/narrator.ts'
+
+test('hero caption: running thresholds produce distinct narratives', () => {
+  const m = (label: string, value: number | null) => ({ id: 'm', label, value, unit: 'spm', hint: '', better: 'up' } as const)
+  const low = generateHeroCaption('running', [m('Cadence', 150), m('Overstride', 16), m('Foot strike', -12)])
+  assert.ok(low.headline.length > 0, 'headline present')
+  assert.equal(low.insights.length, 3, 'three insights from three metrics')
+  assert.ok(low.headline.toLowerCase().includes('long') || low.headline.toLowerCase().includes('heavy'), 'low cadence narrative')
+  
+  const high = generateHeroCaption('running', [m('Cadence', 172), m('Overstride', 7), m('Foot strike', 5)])
+  assert.ok(high.headline.toLowerCase().includes('even') || high.headline.toLowerCase().includes('quick') || high.headline.toLowerCase().includes('light'), 'mid-high cadence narrative')
+  
+  const bare = generateHeroCaption('running', [])
+  assert.equal(bare.insights.length, 1, 'fallback insight when no metrics')
+})
+
+test('hero caption: climbing thresholds produce distinct narratives', () => {
+  const m = (label: string, value: number | null) => ({ id: 'm', label, value, unit: 'deg', hint: '', better: 'down' } as const)
+  const steep = generateHeroCaption('climbing', [m('Toe-down angle', 28), m('Hip-to-wall', 35), m('Placement settle', 2.5)])
+  assert.ok(steep.headline.toLowerCase().includes('steep') || steep.headline.toLowerCase().includes('tension'), 'steep toe narrative')
+  assert.equal(steep.insights.length, 3)
+  
+  const flat = generateHeroCaption('climbing', [m('Toe-down angle', 5), m('Hip-to-wall', 20), m('Placement settle', 0.8)])
+  assert.ok(flat.headline.toLowerCase().includes('flat') || flat.headline.toLowerCase().includes('efficient'), 'flat foot narrative')
+  
+  const empty = generateHeroCaption('climbing', [])
+  assert.equal(empty.insights.length, 1)
+})
+
+test('hero caption: profile summary overrides default body', () => {
+  const cap = generateHeroCaption('running', [], { summary: 'Road runner seeking cushioned trainer for 5k' })
+  assert.equal(cap.body, 'Road runner seeking cushioned trainer for 5k')
+})
+
+test('hero caption to speech: strips metric details for audio', () => {
+  const cap = generateHeroCaption('running', [{ label: 'Cadence', value: 165, unit: 'spm' }])
+  const speech = captionToSpeech(cap)
+  assert.ok(speech.includes(cap.headline))
+  assert.ok(speech.includes(cap.body))
+  assert.equal(speech.split(' ').length < 40, true, 'short enough for quick playback')
+})

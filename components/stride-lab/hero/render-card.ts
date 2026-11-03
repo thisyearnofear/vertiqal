@@ -26,6 +26,7 @@ export interface CardInput {
   sport: Sport
   pick: string | null
   impression: boolean
+  caption?: string
   date: string
 }
 
@@ -163,6 +164,20 @@ export function renderCard(ctx: CanvasRenderingContext2D, input: CardInput) {
   ctx.fillStyle = theme.bone
   ctx.fillRect(0, PHOTO_HEIGHT, CARD_WIDTH, 2)
   ctx.globalAlpha = 1
+
+
+  // Caption headline
+  if (input.caption) {
+    ctx.fillStyle = theme.bone
+    ctx.shadowColor = theme.bone
+    ctx.shadowBlur = 8
+    ctx.textBaseline = 'alphabetic'
+    ctx.font = `600 48px ${theme.font}`
+    ctx.textAlign = 'left'
+    ctx.fillText(fit(ctx, input.caption, CARD_WIDTH - MARGIN * 2), MARGIN, PHOTO_HEIGHT + 110)
+    ctx.textAlign = 'left'
+    ctx.shadowBlur = 0
+  }
 
   ctx.fillStyle = theme.bone
   ctx.shadowColor = theme.bone
