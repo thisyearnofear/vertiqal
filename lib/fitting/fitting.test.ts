@@ -1212,7 +1212,7 @@ test('redis pipeline: surfaces command errors instead of treating them as zero',
 import { generateHeroCaption, captionToSpeech } from '../hero/narrator.ts'
 
 test('hero caption: running thresholds produce distinct narratives', () => {
-  const m = (label: string, value: number | null) => ({ id: 'm', label, value, unit: 'spm', hint: '', better: 'up' } as const)
+  const m = (label: string, value: number | null) => ({ id: 'm', label, value, unit: 'spm', hint: '', better: 'higher' as const } as const)
   const low = generateHeroCaption('running', [m('Cadence', 150), m('Overstride', 16), m('Foot strike', -12)])
   assert.ok(low.headline.length > 0, 'headline present')
   assert.equal(low.insights.length, 3, 'three insights from three metrics')
@@ -1226,7 +1226,7 @@ test('hero caption: running thresholds produce distinct narratives', () => {
 })
 
 test('hero caption: climbing thresholds produce distinct narratives', () => {
-  const m = (label: string, value: number | null) => ({ id: 'm', label, value, unit: 'deg', hint: '', better: 'down' } as const)
+  const m = (label: string, value: number | null) => ({ id: 'm', label, value, unit: 'deg', hint: '', better: 'higher' as const } as const)
   const steep = generateHeroCaption('climbing', [m('Toe-down angle', 28), m('Hip-to-wall', 35), m('Placement settle', 2.5)])
   assert.ok(steep.headline.toLowerCase().includes('steep') || steep.headline.toLowerCase().includes('tension'), 'steep toe narrative')
   assert.equal(steep.insights.length, 3)
@@ -1244,7 +1244,7 @@ test('hero caption: profile summary overrides default body', () => {
 })
 
 test('hero caption to speech: strips metric details for audio', () => {
-  const cap = generateHeroCaption('running', [{ label: 'Cadence', value: 165, unit: 'spm' }])
+  const cap = generateHeroCaption('running', [{ label: 'Cadence', value: 165, unit: 'spm', id: 'c', hint: '', better: 'higher' as const } as const])
   const speech = captionToSpeech(cap)
   assert.ok(speech.includes(cap.headline))
   assert.ok(speech.includes(cap.body))
