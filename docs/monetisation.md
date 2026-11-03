@@ -1,5 +1,7 @@
 # Monetisation and free-stage cost controls
 
+See [STRATEGY.md](STRATEGY.md) for the wedge, the economic loop and the kill criteria. This file covers cost controls and the revenue options it ranks.
+
 Status: **plan, not implemented.** As of 2026-10-01 vertiqal has no revenue path: the Buy button is a plain retailer link, there is no paywall or pricing, and the Fit Passport REST/MCP endpoints are free. Every fitting costs money; nothing earns it.
 
 ## Where cost comes from today
