@@ -31,6 +31,23 @@ export function redisConfig(env: Record<string, string | undefined> = process.en
   return { url: url.replace(/\/$/, ''), token }
 }
 
+/** Runs Redis commands in one round trip over the REST pipeline API and returns each command's result. */
+export async function redisPipeline(config: RedisConfig, commands: string[][]): Promise<unknown[]> {
+  const response = await fetch(`${config.url}/pipeline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(commands),
+    cache: 'no-store',
+    signal: AbortSignal.timeout(4000),
+  })
+  if (!response.ok) throw new Error(`redis returned ${response.status}`)
+  const replies = (await response.json()) as { result?: unknown; error?: string }[]
+  return replies.map((reply) => {
+    if (reply?.error) throw new Error(`redis: ${reply.error}`)
+    return reply?.result ?? null
+  })
+}
+
 /**
  * Counts with INCR + a window that is set once (NX), so the first request in a window decides how
  * long the window lasts and later requests extend nothing.
@@ -39,21 +56,13 @@ export function createRedisCounterStore(config: RedisConfig): CounterStore {
   return {
     name: 'redis',
     async hit(key: string, windowMs: number) {
-      const body = JSON.stringify([
+      const results = await redisPipeline(config, [
         ['INCR', key],
         ['PEXPIRE', key, String(windowMs), 'NX'],
         ['PTTL', key],
       ])
-      const response = await fetch(`${config.url}/pipeline`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
-        body,
-        cache: 'no-store',
-      })
-      if (!response.ok) throw new Error(`counter store returned ${response.status}`)
-      const results = (await response.json()) as { result?: number | null }[]
-      const count = Number(results?.[0]?.result ?? 0)
-      const ttlMs = Number(results?.[2]?.result ?? windowMs)
+      const count = Number(results[0] ?? 0)
+      const ttlMs = Number(results[2] ?? windowMs)
       const resetAt = Date.now() + (Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : windowMs)
       return { count, resetAt }
     },

@@ -73,7 +73,7 @@ const ANNOUNCED_MOODS = new Set<Mood>(['pleased', 'asking', 'working', 'sad'])
 const EMPTY_FRAME: FrameQuality = { person: false, hips: false, feet: false }
 const LABEL = 'text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved'
 const PRIVACY_LINE =
-  'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them. Your confirmed brief answers — never niggles, never video — are remembered in a cookie on this browser for next time. Typed sentences and the clip surface guess go to Grok only when you press those buttons.'
+  'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them. Your confirmed brief answers — never niggles, never video — are remembered in a cookie on this browser for next time. When you click through to a retailer, a random reference is attached so Forma can learn whether the size was right; it identifies no one. Typed sentences and the clip surface guess go to Grok only when you press those buttons.'
 
 const scrollToSection = (id: string) => {
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -93,14 +93,15 @@ const prefersStill = () => window.matchMedia('(prefers-reduced-motion: reduce)')
 export function StrideLab({
   initialPersona,
   initialBrief,
+  initialSport,
 }: {
   initialPersona: Persona
   initialBrief: RememberedBrief | null
+  initialSport: Sport
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [clip, setClip] = useState<Clip | null>(null)
   const [remembered, setRemembered] = useState<RememberedBrief | null>(initialBrief)
-  const initialSport = 'running'
   const [sport, setSport] = useState<Sport>(initialSport)
   const [providerId, setProviderId] = useState(POSE_PROVIDERS[0].id)
   const [sessionState, setSessionState] = useState<SessionState>({ status: 'loading' })

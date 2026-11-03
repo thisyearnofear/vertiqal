@@ -10,6 +10,7 @@ export type GuardedSurface =
   | 'voice'
   | 'pose-vlmrun'
   | 'passport-fit'
+  | 'outcome'
 
 export interface SurfacePolicy {
   visitorLimit: number
@@ -28,6 +29,8 @@ export const DEFAULT_SURFACE_POLICIES: Record<GuardedSurface, SurfacePolicy> = {
   voice: { visitorLimit: 30, globalDailyLimit: 600, windowMs: DAY_MS },
   'pose-vlmrun': { visitorLimit: 24, globalDailyLimit: 300, windowMs: DAY_MS },
   'passport-fit': { visitorLimit: 15, globalDailyLimit: 300, windowMs: DAY_MS },
+  // No model call and a single Redis write, so these are generous: a shopper clicks out a few times and reports once or twice.
+  outcome: { visitorLimit: 40, globalDailyLimit: 5000, windowMs: DAY_MS },
 }
 
 export const CAPACITY_MESSAGE = 'Forma is at capacity today — your measurement still works.'

@@ -24,7 +24,10 @@ Picks ──▶ /api/stock-check     signed product target + user-submitted size
      │                         └─▶ /api/stock-check/replay  polls for the session recording
      ├──▶ /api/basket/[runId]  agent-started Browser Use check, stops before checkout
      ├──▶ /api/passport        signed Fit Passport for the active fitting size → REST + /api/mcp for other agents
-     └──▶ /api/tryon           opt-in FLUX Kontext impression of the user in a pick
+     ├──▶ /api/tryon           opt-in FLUX Kontext impression of the user in a pick
+     └──▶ /api/outcome/link    issues a clickref + signed follow-up link just before the click-out
+                │
+                └──▶ /fit/[token] ──▶ /api/outcome   weeks later: how it fitted, or why it was not bought
 ```
 
 Measurement always comes from untouched frames. The hero card grade and try-on image are separate outputs and never feed back into metrics.
@@ -75,6 +78,9 @@ FreeMoCap remains a separate, optional offline reference system. No FreeMoCap co
 | `/api/passport` | POST | Issues a signed Fit Passport. |
 | `/api/passport/[token]` | GET | Reads a passport. |
 | `/api/passport/[token]/fit` | POST | Checks a given shoe against a passport. |
+| `/api/outcome/link` | POST | Issues an opaque Awin `clickref` and a signed follow-up URL for one shoe and size. Stores nothing. |
+| `/api/outcome` | POST | Records a fit outcome (or why it was not bought) for a signed follow-up link. Logged, and stored in Redis when configured. |
+| `/fit/[token]` | page | The follow-up page the shopper returns to; the token carries the shoe context, so it needs no account. |
 | `/api/mcp` | GET, POST, DELETE | MCP server exposing passport fit checks to other agents. |
 
 Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) passes through `lib/rate-limit.ts` (`guardRequest` / `guardSurfaceKey`, both async), backed by a shared Redis counter store (`lib/rate-limit/store.ts`; per-instance memory when none is configured, and a store outage fails open), enforcing per-visitor daily limits, global daily route capacity caps (`503` with `Forma is at capacity today — your measurement still works.`), and instant feature kill-switches (`FORMA_DISABLED_FEATURES`), while emitting structured cost and `limit_hit` events via `lib/cost-log.ts`.

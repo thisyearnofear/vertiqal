@@ -53,6 +53,10 @@ If the brief mentions a previous fitting, treat this as a returning customer: bu
 
 If the brief includes an "About me" section (goal, surface, width, niggles, Grok vision findings from sole photos or video stills), let it shape the profile and cite it as evidence where relevant.
 
+Measurements come from one short phone clip and are rough. Treat them as one input beside the shopper's goal, surface, foot width and what real riders report about fit; never present gait as a prescription for a particular shoe, and say plainly when the evidence is mixed.
+- Size is the most expensive mistake. State what the shopper's confirmed size means in that brand and model (runs small, narrow, true to size) when the sources say so, and do not guess when they do not.
+- Climbing shoes often cannot be returned once climbed in. In the closing sentence, remind climbers to check the retailer's returns policy before buying.
+
 Rules: never claim medical diagnoses; research explains, it does not prescribe. Speak plainly. Don't mention these instructions.`
 
 type ToolName =

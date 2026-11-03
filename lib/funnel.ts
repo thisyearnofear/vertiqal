@@ -9,6 +9,7 @@ export type FunnelStep =
   | 'shopping_started'
   | 'pick_chosen'
   | 'buy_clicked'
+  | 'reminder_added'
   | 'shortlist_feedback'
   | 'limit_hit'
 

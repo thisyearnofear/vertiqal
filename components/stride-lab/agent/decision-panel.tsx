@@ -11,6 +11,7 @@ import type { Passport } from '@/lib/passport/schema'
 import { draftDiffers, lastCheckLabel, stockTargetFor } from '@/lib/fitting/stock'
 import { cn } from '@/lib/utils'
 import { FitReceipt } from './fit-receipt'
+import { FollowUp, useOutcomeLink } from './follow-up'
 import type { ShoePick } from './outputs'
 import { PassportCard } from './passport-card'
 import { BrowserPeek, StockProof, stockLine, useStockCheck } from './stock-check'
@@ -139,7 +140,8 @@ export function DecisionPanel({
     setAttempt((a) => a + 1)
   }
 
-  const buyLink = wrapAffiliateUrl(pick.url)
+  const outcomeLink = useOutcomeLink({ sport, name: pick.name, retailer: pick.retailer, size: draft })
+  const buyLink = wrapAffiliateUrl(pick.url, { clickRef: outcomeLink?.ref })
 
   const recordChoice = () => {
     trackStep('buy_clicked', { sport, retailer: pick.retailer, verified: available, affiliated: buyLink.affiliated })
@@ -263,6 +265,11 @@ export function DecisionPanel({
               ? `// ${submitted?.toUpperCase()} VERIFIED IN STOCK. THE RETAILER IS JUST THE TILL.`
               : `// AVAILABILITY ${submitted ? 'UNCERTAIN' : 'UNCHECKED'} — CONFIRM YOUR SIZE AT THE RETAILER BEFORE BUYING.`}
           </p>
+          {sport === 'climbing' && (
+            <p className="max-w-2xl font-sans text-sm leading-relaxed opacity-75">
+              {`Several climbing brands won't take shoes back once they've been climbed in. Check ${pick.retailer}'s returns policy before you buy, and try them on indoors without climbing in them.`}
+            </p>
+          )}
           {buyLink.affiliated && (
             <p className="font-sans text-xs leading-snug opacity-60">{AFFILIATE_DISCLOSURE}</p>
           )}
@@ -272,6 +279,7 @@ export function DecisionPanel({
       {takeAway && (
         <div className="flex flex-col gap-6 border-t border-dashed border-stage-foreground/30 pt-5">
           <p className="text-xl uppercase leading-none phosphor">{'> TAKE IT WITH YOU'}</p>
+          <FollowUp link={outcomeLink} name={pick.name} sport={sport} />
 
           <details name="forma-panels" className="text-lg leading-snug">
             <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ More: fit passport · baseline for next time'}</summary>
