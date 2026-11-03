@@ -2,6 +2,7 @@ import { logCost } from '@/lib/cost-log'
 import { checkFit } from '@/lib/passport/fit'
 import { fitCheckSchema } from '@/lib/passport/schema'
 import { readPassport } from '@/lib/passport/token'
+import { MissingSecretError } from '@/lib/secrets'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 30
@@ -17,13 +18,21 @@ export function OPTIONS() {
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
-  const guard = guardRequest(request, 'passport-fit')
+  const guard = await guardRequest(request, 'passport-fit')
   if (!guard.allowed) {
     logCost('limit_hit', { surface: 'passport-fit', reason: guard.reason })
     return guardResponse(guard)
   }
   const { token } = await params
-  const passport = readPassport(token)
+  let passport
+  try {
+    passport = readPassport(token)
+  } catch (error) {
+    if (error instanceof MissingSecretError) {
+      return Response.json({ error: 'Fit passports are not configured on this deployment' }, { status: 503, headers: CORS })
+    }
+    throw error
+  }
   if (!passport) return Response.json({ error: 'Invalid or tampered passport' }, { status: 404, headers: CORS })
 
   const parsed = fitCheckSchema.safeParse(await request.json().catch(() => null))

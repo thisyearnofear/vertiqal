@@ -26,7 +26,7 @@ const promptFor = (shoe: string, sport: 'running' | 'climbing') =>
   ].join(' ')
 
 export async function POST(request: Request) {
-  const guard = guardRequest(request, 'tryon')
+  const guard = await guardRequest(request, 'tryon')
   if (!guard.allowed) {
     logCost('limit_hit', { surface: 'tryon', reason: guard.reason })
     return guardResponse(guard)

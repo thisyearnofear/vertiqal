@@ -61,7 +61,7 @@ const handler = createMcpHandler((server) => {
         logCost('mcp_call', { tool: 'check_fit', ok: false, reason: 'invalid_passport' })
         return failure('Invalid or tampered passport')
       }
-      const guard = guardSurfaceKey('passport-fit', passportId(opened.token))
+      const guard = await guardSurfaceKey('passport-fit', passportId(opened.token))
       if (!guard.allowed) {
         logCost('limit_hit', { surface: 'passport-fit', reason: guard.reason, sport: opened.passport.sport })
         return failure(guard.error)

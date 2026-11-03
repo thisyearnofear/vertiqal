@@ -15,7 +15,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return json
 }
 
-/** Issues (and caches) a signed passport; shared by the card and the WhatsApp handoff. */
+/** Issues (and caches) a signed passport; shared by the card and any other consumer of the issued link. */
 export function usePassport(passport: Passport | null) {
   const key = passport ? ['passport', JSON.stringify(passport)] : null
   return useSWR(key, ([, body]) => postJson<IssuedPassport>('/api/passport', JSON.parse(body)), {

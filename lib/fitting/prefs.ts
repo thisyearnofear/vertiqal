@@ -71,9 +71,8 @@ export function buildConfirmedPrefs(options: {
   sport: Sport
   voice: Voice
   depth: Depth
-  memberLines: string[]
 }): ShopperPrefs | null {
-  const { draft, notes, sport, voice, depth, memberLines } = options
+  const { draft, notes, sport, voice, depth } = options
   const pounds = parseBudgetPounds(draft.budgetPounds)
   const heightCm = parseHeightCm(draft.heightCm)
   const size = draft.size.trim()
@@ -84,6 +83,6 @@ export function buildConfirmedPrefs(options: {
     heightCm,
     voice,
     depth,
-    notes: [...contextLines(mergeDraftNotes(draft, notes), sport), ...memberLines],
+    notes: contextLines(mergeDraftNotes(draft, notes), sport),
   }
 }

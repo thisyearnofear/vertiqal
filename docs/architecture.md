@@ -24,13 +24,7 @@ Picks ──▶ /api/stock-check     signed product target + user-submitted size
      │                         └─▶ /api/stock-check/replay  polls for the session recording
      ├──▶ /api/basket/[runId]  agent-started Browser Use check, stops before checkout
      ├──▶ /api/passport        signed Fit Passport for the active fitting size → REST + /api/mcp for other agents
-     ├──▶ /api/tryon           opt-in FLUX Kontext impression of the user in a pick
-     └──▶ /api/wassist/handoff sends fitting + chosen pick to WhatsApp, writes the member cookie
-                                   │
-WhatsApp shopper ──▶ /api/wassist/webhook  (Wassist BYOA, text and/or photo) → "typing…" → reply agent (Grok vision + Tavily) → reply_callback
-Vercel Cron ─────▶ /api/wassist/checkin   daily: quiet ~12 days since their pick → one templated break-in check-in
-                                   │
-Next visit ──▶ /api/member         reads the cookie + shopper's recent WhatsApp lines → fed into the next scan
+     └──▶ /api/tryon           opt-in FLUX Kontext impression of the user in a pick
 ```
 
 Measurement always comes from untouched frames. The hero card grade and try-on image are separate outputs and never feed back into metrics.
@@ -78,16 +72,12 @@ FreeMoCap remains a separate, optional offline reference system. No FreeMoCap co
 | `/api/stock-check` | POST | Solari stealth-browser check of one size on one signed, allowlisted product target. Applies an in-process per-client request window, active-check cap, in-flight dedupe and short result cache. `lib/agent/stock-page.ts` gates the model judge: disallowed redirect targets, missing/non-2xx responses, bot walls, pages that never present the requested product, and pages with no size controls return blocked/unclear without a model call. Returns verdict, evidence, final URL, HTTP status, screenshot, source label and session id. |
 | `/api/stock-check/replay` | GET | Replay URL for a stock-check session (`?session=`). Returns `null` until the upload finishes. |
 | `/api/basket/[runId]` | GET | Status of a user-approved Browser Use basket check. |
-| `/api/member` | GET, POST, DELETE | Linked shopper (masked number, last pick, recent WhatsApp lines), record a pick, or forget. |
 | `/api/passport` | POST | Issues a signed Fit Passport. |
 | `/api/passport/[token]` | GET | Reads a passport. |
 | `/api/passport/[token]/fit` | POST | Checks a given shoe against a passport. |
 | `/api/mcp` | GET, POST, DELETE | MCP server exposing passport fit checks to other agents. |
-| `/api/wassist/handoff` | POST | Ensures this environment's BYOA agent exists for this origin. Verified members send straight away; anyone else gets a `connectUrl`, or — if the number already has a conversation — a `FORMA-XXXXXX` code plus a signed `link` token (`lib/wassist/link.ts`, HMAC of `{phone, code, t}`, 10-minute TTL). The fitting is sent only after that code appears on a SHOPPER line in the transcript, then the member cookie is written with `verifiedAt`. |
-| `/api/wassist/webhook` | POST | Inbound WhatsApp messages, optionally with a photo (Wassist-hosted JPEG/PNG/WebP up to 5 MB only). Returns a silent response right away, shows "typing…" every 8 s, and replies through `reply_callback` inside `after()`. Authenticated by an HMAC token in the URL; bare link codes get a fixed ack, other replies are capped at 25/number/day (per instance) and cost-logged. |
-| `/api/wassist/checkin` | GET | Vercel Cron job. Sends the break-in check-in template to shoppers with a pick whose chat has been quiet for 12–13 days. Requires `Authorization: Bearer $CRON_SECRET` and does nothing without `WASSIST_CHECKIN_TEMPLATE`. |
 
-Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) passes through `lib/rate-limit.ts` (`guardRequest` / `guardSurfaceKey`), enforcing per-visitor daily limits, global daily route capacity caps (`503` with `Forma is at capacity today — your measurement still works.`), and instant feature kill-switches (`FORMA_DISABLED_FEATURES`), while emitting structured cost and `limit_hit` events via `lib/cost-log.ts`.
+Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) passes through `lib/rate-limit.ts` (`guardRequest` / `guardSurfaceKey`, both async), backed by a shared Redis counter store (`lib/rate-limit/store.ts`; per-instance memory when none is configured, and a store outage fails open), enforcing per-visitor daily limits, global daily route capacity caps (`503` with `Forma is at capacity today — your measurement still works.`), and instant feature kill-switches (`FORMA_DISABLED_FEATURES`), while emitting structured cost and `limit_hit` events via `lib/cost-log.ts`.
 
 ## Extension points
 
@@ -98,8 +88,6 @@ Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vl
 ## Data and privacy
 
 - No database. Passports are signed tokens (`lib/passport/token.ts`), so they carry their own data.
-- Shopper memory is a signed, httpOnly `vq_member` cookie (`lib/member/cookie.ts`) holding the WhatsApp number and last pick. It is written only after a link code proves phone possession (`verifiedAt` set); older cookies without it are treated as guests by `/api/member`. The Wassist conversation is the long-term memory, and guests are never tracked. The number is masked in every response.
-- WhatsApp photos are downloaded only from Wassist hosts, passed to Grok for that one reply, and never stored. Later turns see them as `[sent a photo]`.
-- The check-in is sent at most once per shopper. The template text in the transcript is the marker, so no extra state is kept.
+- Shopper memory is limited to the `vertiqal-brief` cookie (confirmed brief answers, never niggles or video). There are no accounts.
 - Stock checks send only the product URL and size to Solari. Screenshots are returned inline and not stored.
 - Video stays in the browser. Only frames the user explicitly sends (vision notes, VLM Run refinement, try-on) leave the device, one request at a time.

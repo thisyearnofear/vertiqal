@@ -25,7 +25,7 @@ const SYSTEM = {
 }
 
 export async function POST(request: Request) {
-  const guard = guardRequest(request, 'vision')
+  const guard = await guardRequest(request, 'vision')
   if (!guard.allowed) {
     logCost('limit_hit', { surface: 'vision', reason: guard.reason })
     return guardResponse(guard)
@@ -36,13 +36,13 @@ export async function POST(request: Request) {
 
   const started = Date.now()
   try {
-    const model = await resolveModel('agent')
-    if (!model) {
+    const resolved = await resolveModel('agent')
+    if (!resolved) {
       logCost('paid_call', { route: 'vision', ok: false, ms: Date.now() - started, kind, sport, images: images.length, reason: 'no_model_available' })
       return Response.json({ error: 'Forma’s model is unreachable right now — try again shortly.' }, { status: 503 })
     }
     const { output } = await generateText({
-      model,
+      model: resolved.model,
       system: SYSTEM[kind](sport),
       messages: [
         {

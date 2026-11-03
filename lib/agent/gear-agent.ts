@@ -1,5 +1,5 @@
 import 'server-only'
-import { ToolLoopAgent, stepCountIs, tool, type InferAgentUIMessage, type ModelMessage } from 'ai'
+import { ToolLoopAgent, stepCountIs, tool, type InferAgentUIMessage, type LanguageModel, type ModelMessage } from 'ai'
 import { z } from 'zod'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'
@@ -49,7 +49,7 @@ Keep any text between tool calls to one short sentence, in the requested voice.
 - recommendProducts: exactly 3 picks, each a different model (a GORE-TEX, wide or gender version is the same model), best fit first. Only use product-page URLs from searchProducts results, never review or forum links from other tools; never invent or edit URLs. Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
 - Finish with one short sentence, in the requested voice, inviting the shopper to choose one. Forma checks their size is in stock once they choose, so never send them off to a retailer yourself.
 
-If the brief mentions a previous fitting or things they told Forma on WhatsApp, treat this as a returning customer: build on what they chose last time and what they said since (e.g. if they reported a problem with that shoe, steer away from it and say why).
+If the brief mentions a previous fitting, treat this as a returning customer: build on what they chose last time (e.g. if they reported a problem with that shoe, steer away from it and say why).
 
 If the brief includes an "About me" section (goal, surface, width, niggles, Grok vision findings from sole photos or video stills), let it shape the profile and cite it as evidence where relevant.
 
@@ -87,7 +87,7 @@ function promptTextOf(messages: ModelMessage[]) {
   return first.content.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('\n')
 }
 
-export function createGearAgent(model: string) {
+export function createGearAgent(model: LanguageModel) {
   return new ToolLoopAgent({
   model,
   instructions: INSTRUCTIONS,
@@ -173,7 +173,18 @@ export function createGearAgent(model: string) {
           })
           return { picks: [], error: problem }
         }
-        return { picks: picks.map((p) => ({ ...p, stockToken: issueStockToken({ productName: p.name, productUrl: p.url }) })) }
+        // A missing STOCK_CHECK_SECRET must not kill the shortlist: the picks still stand, the size
+        // check simply refuses to run (403/503) instead of silently authorising itself.
+        const withTokens = picks.map((p) => {
+          let stockToken = ''
+          try {
+            stockToken = issueStockToken({ productName: p.name, productUrl: p.url })
+          } catch (error) {
+            logCost('shortlist_rejected', { kind: 'stock-token-unavailable', picks: picks.length, error: String(error) })
+          }
+          return { ...p, stockToken }
+        })
+        return { picks: withTokens }
       },
     }),
   },

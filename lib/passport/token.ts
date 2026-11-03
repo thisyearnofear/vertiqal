@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { deflateRawSync, inflateRawSync } from 'node:zlib'
+import { requireSecret } from '../secrets.ts'
 import { passportSchema, type Passport } from './schema.ts'
 
 export const DEMO_PASSPORTS: Record<'demo-running' | 'demo-climbing', Passport> = {
@@ -107,8 +108,7 @@ export function tokenFrom(input: string) {
  * vertiqal issued it, so bots can trust it without a database lookup.
  */
 function secret() {
-  const key = process.env.PASSPORT_SECRET ?? process.env.WASSIST_API_KEY
-  if (!key) throw new Error('No signing secret configured for fit passports')
+  const key = requireSecret('PASSPORT_SECRET', 'fit passports')
   return createHmac('sha256', key).update('vertiqal-fit-passport').digest()
 }
 

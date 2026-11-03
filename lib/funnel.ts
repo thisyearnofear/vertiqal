@@ -9,7 +9,6 @@ export type FunnelStep =
   | 'shopping_started'
   | 'pick_chosen'
   | 'buy_clicked'
-  | 'whatsapp_sent'
   | 'shortlist_feedback'
   | 'limit_hit'
 

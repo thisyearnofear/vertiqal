@@ -19,6 +19,7 @@
     "*.{js,jsx,ts,tsx,mjs}": "eslint --fix"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "3.0.55",
     "@ai-sdk/react": "^4.0.117",
     "@base-ui/react": "^1.5.0",
     "@mediapipe/tasks-vision": "^1.0.1",

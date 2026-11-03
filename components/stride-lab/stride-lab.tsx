@@ -10,7 +10,6 @@ import { briefFromReadout, type ShopperPrefs } from '@/lib/agent/brief'
 import { nextDepth, type Depth } from '@/lib/agent/depth'
 import { cueFor } from '@/lib/coach'
 import { trackStep } from '@/lib/funnel'
-import { memberContext, type MemberView } from '@/lib/member/schema'
 import {
   FALLBACK_HEIGHT_CM,
   analysisHeight,
@@ -54,7 +53,6 @@ import { ProviderPicker } from './provider-picker'
 import { MovementTwin } from './twin/movement-twin'
 import { ValidationControls } from './validation-controls'
 import { useLiveCamera } from './use-live-camera'
-import { useMember } from './use-member'
 import { useVoice } from './use-voice'
 
 interface Clip {
@@ -94,22 +92,20 @@ const prefersStill = () => window.matchMedia('(prefers-reduced-motion: reduce)')
 
 export function StrideLab({
   initialPersona,
-  initialMember,
   initialBrief,
 }: {
   initialPersona: Persona
-  initialMember: MemberView
   initialBrief: RememberedBrief | null
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [clip, setClip] = useState<Clip | null>(null)
   const [remembered, setRemembered] = useState<RememberedBrief | null>(initialBrief)
-  const initialSport = initialMember.last?.sport ?? 'running'
+  const initialSport = 'running'
   const [sport, setSport] = useState<Sport>(initialSport)
   const [providerId, setProviderId] = useState(POSE_PROVIDERS[0].id)
   const [sessionState, setSessionState] = useState<SessionState>({ status: 'loading' })
   const [providerStatus, setProviderStatus] = useState<string | null>(null)
-  const [initialDraft] = useState(() => draftFromRemembered(initialBrief, initialSport, initialMember.last?.size ?? null))
+  const [initialDraft] = useState(() => draftFromRemembered(initialBrief, initialSport, null))
   const [prefDraft, setPrefDraft] = useState<PrefDraft>(initialDraft)
   const [calibrationCm, setCalibrationCm] = useState(() => parseHeightCm(initialDraft.heightCm) ?? FALLBACK_HEIGHT_CM)
   const [tracker, setTracker] = useState(() => createTracker(initialSport, parseHeightCm(initialDraft.heightCm) ?? FALLBACK_HEIGHT_CM))
@@ -158,7 +154,6 @@ export function StrideLab({
   })
   const agent = useGearAgent()
   const speak = useVoice(voiceOn)
-  const { member, forget } = useMember(initialMember)
 
   useEffect(() => {
     let cancelled = false
@@ -183,7 +178,6 @@ export function StrideLab({
   }, [providerId])
 
   const readout = useMemo(() => readoutOf(snapshot, sport), [snapshot, sport])
-  const memberLines = useMemo(() => memberContext(member), [member])
   const agentOutputs = useMemo(() => outputsOf(agent.messages), [agent.messages])
   const picks = useMemo(() => agentOutputs?.picks ?? [], [agentOutputs])
   const [providerMismatch, setProviderMismatch] = useState(false)
@@ -619,7 +613,7 @@ export function StrideLab({
             : null
 
   const buildPrefs = (runDepth: Depth): ShopperPrefs | null =>
-    buildConfirmedPrefs({ draft: prefDraft, notes, sport, voice: persona.voice, depth: runDepth, memberLines })
+    buildConfirmedPrefs({ draft: prefDraft, notes, sport, voice: persona.voice, depth: runDepth })
 
   const submitSearch = () => {
     setAttempted(true)
@@ -813,11 +807,6 @@ export function StrideLab({
     const buyLink = () => [...document.querySelectorAll<HTMLAnchorElement>('[data-buy-link]')].find((a) => a.getClientRects().length > 0)
     if (kind === 'buy' || kind === 'open') buyLink()?.click()
     else if (kind === 'shortlist') choose(null)
-    else if (kind === 'whatsapp') {
-      const target = document.getElementById('forma-whatsapp')
-      target?.scrollIntoView({ block: 'center', behavior: prefersStill() ? 'auto' : 'smooth' })
-      target?.querySelector<HTMLElement>('input, button')?.focus({ preventScroll: true })
-    }
   }
 
   const stripAction = example
@@ -862,38 +851,6 @@ export function StrideLab({
           e.target.value = ''
         }}
       />
-
-      {member.linked && (
-        <aside aria-label="Welcome back" className="housing flex flex-col gap-3 rounded-2xl px-5 py-4 md:flex-row md:items-center md:justify-between md:px-7">
-          <div className="flex min-w-0 flex-col gap-1">
-            <p className={LABEL}>{`Welcome back · ${member.phone}`}</p>
-            <p className="text-pretty text-sm leading-relaxed text-foreground">
-              {member.last
-                ? `Last time you chose the ${member.last.name} in ${member.last.size}.`
-                : 'Forma has your WhatsApp chat on file.'}
-              {member.said.length > 0 && (
-                <span className="text-muted-foreground">{` You told Forma: “${member.said.at(-1)}”`}</span>
-              )}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-4">
-            <button
-              type="button"
-              onClick={startFresh}
-              className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              Start another fitting
-            </button>
-            <button
-              type="button"
-              onClick={() => void forget()}
-              className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              Forget me
-            </button>
-          </div>
-        </aside>
-      )}
 
       <section aria-label="Movement analysis" className="housing flex flex-col gap-3 rounded-2xl p-3 md:gap-4 md:p-5">
         {example ? (
@@ -1129,7 +1086,7 @@ export function StrideLab({
                       sport={sport}
                       draft={prefDraft}
                       notes={notes}
-                      likelySize={member.last?.size ?? null}
+                      likelySize={null}
                       onDraft={answerDraft}
                       onNotes={answerNotes}
                       onSkip={() => skipQuestion(question)}
@@ -1224,7 +1181,6 @@ export function StrideLab({
             <AgentPanel
               agent={agent}
               sport={sport}
-              member={member}
               choice={choice}
               onChoose={choose}
               onPinBaseline={measuredReady ? () => setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today' }) : undefined}
