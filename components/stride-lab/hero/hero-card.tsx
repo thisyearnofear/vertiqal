@@ -2,7 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import useSWRMutation from 'swr/mutation'
-import { Download, Footprints, Share2 } from 'lucide-react'
+import { Download, Footprints, Share2, Volume2, VolumeX } from 'lucide-react'
+import { speak, stopSpeaking, isSpeaking } from '@/lib/voice/speak'
+import { generateHeroCaption, captionToSpeech } from '@/lib/hero/narrator'
 import type { HeroFrame } from '@/lib/hero/frame'
 import type { Readout, Sport } from '@/lib/metrics/readout'
 import { Button } from '@/components/ui/button'
