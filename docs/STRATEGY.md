@@ -4,7 +4,7 @@ Written 2026-11-03. Market figures come from web-search snippets (Tavily), not f
 
 ## The honest starting point
 
-- 0 users, no revenue path switched on, and the LLM provider is currently unavailable.
+- 0 users, no revenue path switched on. The LLM provider is Featherless AI via `FORMA_LLM_*` — `Qwen/Qwen2.5-72B-Instruct` for the agent loop and brief parsing, `Qwen/Qwen3-VL-32B-Instruct` for image calls. Brief parsing and vision are stable in production (smoke 2026-11-04). The **full agent fitting loop is currently flaky** on this model (~1 clean run in 4: it sometimes grounds a pick to a review URL and the guard rejects it until the 120 s budget runs out) — see [architecture § Model resolution](architecture.md#model-resolution).
 - The pose measurement is unvalidated against real footage (see README, *Motion validation*).
 - The evidence that gait analysis predicts the right shoe is weak. The best-supported criterion in the literature is the "comfort filter" (pick what feels most comfortable); studies of gait-based recommendation are mixed, with at least one reporting improved *perceived comfort* ([PMC12782347](https://pmc.ncbi.nlm.nih.gov/articles/PMC12782347), [PMC8959543](https://pmc.ncbi.nlm.nih.gov/articles/PMC8959543)). Read from search snippets only.
 
@@ -62,11 +62,11 @@ free fitting  →  verified-in-stock pick  →  tracked click-out  →  purchase
 Two things make this a loop and not a funnel:
 
 1. **Outcome data.** Awin reports approved *and declined* transactions and carries a `clickref` field per click ([Awin transaction report](https://success.awin.com/s/article/Publisher-Transaction-Report)); a returned order may be partially adjusted ([why rejected](https://success.awin.com/s/article/Why-was-my-transaction-rejected)). With a random per-fitting `clickref`, the affiliate network becomes the instrument that measures whether Forma-referred purchases are returned less. That measurement is the only honest basis for the B2B pitch (an 18% industry return rate costing 15–30% of order value is the retailer's real pain).
-2. **The follow-up that produced fit outcomes was deleted with Wassist** (the 12-day "how are they feeling" check-in). It needs a replacement that needs no accounts: a one-tap "how did they fit?" link tied to the Fit Passport URL the user already holds, stored in the KV store.
+2. **The follow-up that produced fit outcomes was deleted with Wassist** (the 12-day "how are they feeling" check-in). It has been replaced with an account-less outcome loop: click-out issues a random `clickref` plus a signed `/fit/<token>` link, the shopper gets a calendar reminder and a copyable link, and reports land in the KV store when one is configured (logged only until then). See *Decisions made* below.
 
 ### Unit economics (modelled; verify with `pnpm cost:report`)
 
-- Assumed cost of a fitting that reaches a size check: roughly £0.10–0.15 (LLM + ~6 searches + one browser check). This is cheap; **cost is not the problem.**
+- Assumed cost of a fitting that reaches a size check: roughly £0.10–0.15 (LLM + ~6 searches + one browser check). With Featherless Qwen2.5-72B ($0.37/$0.40 per M tokens) the LLM share is a few pence; a measured full agent run on 2026-11-04 cost well under £0.05 in tokens. This is cheap; **cost is not the problem.**
 - Assumed revenue per purchase: £130 × 5% × (1 − 18% reversed) × 60% attributed ≈ £3.20.
 - Break-even: about 4% of fittings must end in a tracked purchase just to cover marginal cost, with **zero** acquisition cost.
 - Consequence: **affiliate income cannot fund paid acquisition.** An £80 TikTok budget is ~£80 of pure spend unless a click costs under a few pence. Growth must be organic until revenue per user rises. This is the real answer to "spend for spend's sake": the spend is small, but the revenue per user is also small, and only B2B per-order fees or a paid product raise it.

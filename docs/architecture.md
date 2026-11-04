@@ -12,12 +12,12 @@ lib/pose (browser)            MediaPipe every frame ── optional VLM Run refi
 lib/metrics (browser)         cadence, foot strike, overstride │ reach, hip position, precision │ framing quality
   │                           ├─▶ lib/pose/twin-3d: 3D Movement Twin rig, biomechanical vectors & agent fit pins (Three.js, on-device)
   │                           ├─▶ lib/hero: best frame → hero card (canvas, on-device)
-  │                           └─▶ fitting-notes: footfall stills → /api/vision (opt-in, Grok vision)
+  │                           └─▶ fitting-notes: footfall stills → /api/vision (opt-in, resolved vision model)
   ▼
 lib/fitting (browser)         stage flow + confirmed brief: size, budget, calibrated height, goal, surface
   │                           └─▶ synthetic example bypasses this path and calls no APIs
   ▼
-/api/agent                    gear agent (AI SDK + Grok 4.7, falling back per `lib/agent/models.ts`), streams tool steps to the UI
+/api/agent                    gear agent (AI SDK + resolved model per `lib/agent/models.ts`, currently Featherless), streams tool steps to the UI
   │  tools: buildGearProfile → research / stock / rider reports / athletes (Tavily) → recommendProducts
   ▼
 Picks ──▶ /api/stock-check     signed product target + user-submitted size → retailer policy/rate limit/cache → Solari (UK egress) → page verification → Grok verdict + screenshot
@@ -30,11 +30,20 @@ Picks ──▶ /api/stock-check     signed product target + user-submitted size
                 └──▶ /fit/[token] ──▶ /api/outcome   weeks later: how it fitted, or why it was not bought
 ```
 
+The **share loop** is client-side and free: the locked readout picks a best frame (`lib/hero/frame.ts`), `lib/hero/narrator.ts` writes a headline, caption and standout metric from sport-specific rules (no LLM), and `render-card.ts` draws the 1080×1350 social card; `lib/voice/speak.ts` narrates it with browser speech synthesis. Pinning a card as a baseline and filming again runs `lib/hero/comparison.ts` → `render-compare.ts` (1080×1080 before/after card), and the outcome page offers a film-again CTA with a 30-day `.ics` calendar reminder.
+
 Measurement always comes from untouched frames. The hero card grade and try-on image are separate outputs and never feed back into metrics.
 
-### Model fallback
+### Model resolution
 
-Every language-model call goes through `lib/agent/models.ts`: an ordered candidate chain per role — `agent` (reasoning/tool use, default `grok-4.7 → gemini-2.5-flash → gpt-5-mini → deepseek-v3.1`) and `fast` (extraction/judging, default `grok-4.20-non-reasoning → gemini-2.5-flash-lite → nova-2-lite → gpt-5-nano`). The first model answering a probe is cached for the instance; a total miss is retried after 60s. Chains are env-overridable via `FORMA_AGENT_MODELS` / `FORMA_FAST_MODELS`, so a restricted or unfunded model degrades to a working one instead of halting the fitting. Single-purpose models with no substitute (Grok TTS, FLUX Kontext) fail with shopper-readable copy, never raw gateway errors.
+Every language-model call goes through `lib/agent/models.ts`, which resolves one of three roles — `agent` (multi-step tool loop), `fast` (cheap text extraction/judging) and `vision` (image-bearing calls). An OpenAI-compatible provider (`FORMA_LLM_BASE_URL` / `FORMA_LLM_API_KEY` / `FORMA_LLM_MODEL`) serves `agent` and `fast` when configured; `vision` uses `FORMA_LLM_VISION_MODEL` when set, else falls back to the agent chain. Current production on Featherless: `Qwen/Qwen2.5-72B-Instruct` (agent + fast) and `Qwen/Qwen3-VL-32B-Instruct` (vision — the 72B text model cannot read images). Without a compatible provider, Vercel AI Gateway chains run per role: `agent` (default `grok-4.7 → gemini-2.5-flash → gpt-5-mini → deepseek-v3.1`) and `fast` (default `grok-4.20-non-reasoning → gemini-2.5-flash-lite → nova-2-lite → gpt-5-nano`), both multimodal-first so images are covered. The first model answering a probe is cached for the instance; a total miss is retried after 60s. Chains are env-overridable via `FORMA_AGENT_MODELS` / `FORMA_FAST_MODELS` (prefix `compatible:` to force the OpenAI-compatible provider for one role), so a restricted or unfunded model degrades to a working one instead of halting the fitting. Single-purpose models with no substitute (Grok TTS, FLUX Kontext) fail with shopper-readable copy, never raw gateway errors.
+
+Callers: `agent` → `/api/agent` gear loop, `/api/brief` text parse, passport `check_fit`; `fast` → none currently (stock judge moved to vision because it carries a screenshot); `vision` → `/api/vision`, `/api/brief?kind=surface`, and the Solari stock judge.
+
+**Featherless quirks (current provider):**
+- No `json_schema` structured outputs, only `json_object`. The brief, vision, surface and stock-judge calls pass `providerOptions: { openaiCompatible: { structuredOutputs: false } }`, spell the exact JSON keys in the system prompt, and rely on tolerant Zod validation. `briefParseSchema` (`lib/fitting/brief-parse.ts`) additionally preprocesses small-model output: alias keys (`budget`, `foot_width`, `current_shoe`), numbers inside strings like `"under 150 pounds"`, and still rejects goal/surface/width values outside the listed options.
+- `Qwen/Qwen2-7B-Instruct` parses briefs fine but will **not** drive the multi-step tool loop. The agent role needs a larger tool-capable model.
+- **Known limit — full agent reliability:** `Qwen/Qwen2.5-72B-Instruct` reliably does brief extraction and vision, but its multi-step fitting loop is flaky (observed ~1 pass in 4 runs on 2026-11-04): it sometimes grounds a pick to a review/community URL instead of a `searchProducts` product page, and the `shortlistProblem` guard then rejects it until the 120 s budget runs out. Stronger tool models on Featherless (`meta-llama/Llama-3.3-70B-Instruct`) are gated behind HuggingFace OAuth; `Mistral-Small-3.2-24B` answers in prose instead of calling tools. If agent reliability matters, point the `agent` role at a gateway model (`FORMA_AGENT_MODELS=gateway:google/gemini-2.5-flash`) or unlock the Llama model.
 
 ## Fitting-state rules
 
@@ -67,8 +76,8 @@ FreeMoCap remains a separate, optional offline reference system. No FreeMoCap co
 | Route | Method | Purpose |
 | --- | --- | --- |
 | `/api/agent` | POST | Streams the gear agent run. |
-| `/api/vision` | POST | Grok vision notes on footfall stills (opt-in). |
-| `/api/brief` | POST | `kind: 'text'` parses one shopper sentence into draft brief fields (`lib/fitting/brief-parse.ts`); `kind: 'surface'` suggests a surface from one clip still. Both opt-in per button press; example mode never calls it. |
+| `/api/vision` | POST | Vision notes on footfall stills via the `vision` model role (opt-in; `Qwen/Qwen3-VL-32B-Instruct` in production). |
+| `/api/brief` | POST | `kind: 'text'` parses one shopper sentence into draft brief fields (`lib/fitting/brief-parse.ts`; the schema preprocesses small-model output — alias keys, money strings — and rejects out-of-list values); `kind: 'surface'` suggests a surface from one clip still. Both opt-in per button press; example mode never calls it. |
 | `/api/voice` | POST | Grok TTS for Forma's spoken lines. |
 | `/api/pose/vlmrun` | GET, POST | GET reports whether the key is configured; POST refines keypoints for sampled frames. |
 | `/api/tryon` | POST | One-frame try-on impression via AI Gateway. Nothing is stored. |

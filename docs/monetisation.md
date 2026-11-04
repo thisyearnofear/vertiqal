@@ -8,10 +8,12 @@ Status: **plan, not implemented.** As of 2026-10-01 vertiqal has no revenue path
 
 | Surface | Paid calls | Current guard |
 | --- | --- | --- |
-| `/api/agent` (gear agent) | Grok 4.7 multi-step tool loop + Tavily searches (more at Deep: research, athletes) | Server-side `agentRequestSchema` validation (`{ brief, prefs }`, ≤32 KB body, ignores client `messages`), `stopWhen: stepCountIs(14)`, cost-logged (`agent_run`), plus `lib/rate-limit.ts` per-visitor (6/day; 2/day Deep) and global daily capacity caps (`250`/day; `80`/day Deep). |
-| `/api/stock-check` | Solari browser session + Grok judge | Signed product target + retailer allowlist + 6 checks / 10 min per client key, **in-memory per serverless instance** |
+| `/api/agent` (gear agent) | Resolved model (currently Featherless `Qwen/Qwen2.5-72B-Instruct`, ~$0.37/$0.40 per M tokens) multi-step tool loop + Tavily searches (more at Deep: research, athletes) | Server-side `agentRequestSchema` validation (`{ brief, prefs }`, ≤32 KB body, ignores client `messages`), `stopWhen: stepCountIs(14)`, cost-logged (`agent_run`), plus `lib/rate-limit.ts` per-visitor (6/day; 2/day Deep) and global daily capacity caps (`250`/day; `80`/day Deep). |
+| `/api/stock-check` | Solari browser session + `vision` model judge (screenshot) | Signed product target + retailer allowlist + 6 checks / 10 min per client key, **in-memory per serverless instance** |
 | `/api/tryon` | FLUX Kontext Pro image generation | `lib/rate-limit.ts` (3/visitor/day, 60 global/day), cost-logged via `paid_call` |
-| `/api/vision`, `/api/brief` | Grok vision / text | `lib/rate-limit.ts` (`vision`: 6/visitor/day, 150 global/day; `brief`: 10/visitor/day, 300 global/day), cost-logged via `paid_call` |
+| `/api/vision`, `/api/brief` (surface) | `vision` model (Featherless `Qwen3-VL-32B-Instruct`, ~$0.10/M) | `lib/rate-limit.ts` (`vision`: 6/visitor/day, 150 global/day; `brief`: 10/visitor/day, 300 global/day), cost-logged via `paid_call` |
+| `/api/brief` (text) | `agent` model text extraction | cost-logged via `paid_call` |
+| Hero frame caption + narration | **Zero** — rule-based caption (`lib/hero/narrator.ts`) and browser speech synthesis (`lib/voice/speak.ts`); comparison cards likewise | No guard needed |
 | `/api/voice` | Grok TTS per spoken line | 240-char cap + `lib/rate-limit.ts` (30/visitor/day, 600 global/day), cost-logged via `paid_call` |
 | `/api/pose/vlmrun` | VLM Run keypoint refinement | Key presence + `lib/rate-limit.ts` (24/visitor/day, 300 global/day), cost-logged via `paid_call` |
 | `/api/mcp` (`get_fit_passport`), `/api/passport/[token]` | Read passport (no model calls) | HMAC-signed tokens (`mcp_call` logged) |
@@ -72,7 +74,7 @@ The free stage exists to learn two things: **how people use it** (funnel drop-of
 
 Every LLM-backed route (`agent`, `brief`, `vision`, `passport-fit`, the stock verdict) resolves a model through `lib/agent/models.ts`. If no candidate answers, those routes return 503 and on-device measurement keeps working.
 
-1. Check the logs for `"reason":"no_model_available"`; a `402 insufficient_funds` from the AI Gateway means the credit balance is empty.
-2. Point `FORMA_LLM_BASE_URL`, `FORMA_LLM_API_KEY` and `FORMA_LLM_MODEL` at any OpenAI-compatible provider. It is tried first and no code change is needed, only the env vars and a redeploy.
+1. Check the logs for `"reason":"no_model_available"`; a `402 insufficient_funds` from the AI Gateway means the credit balance is empty. Production currently runs on Featherless (`FORMA_LLM_BASE_URL=https://api.featherless.ai/v1`, `FORMA_LLM_MODEL=Qwen/Qwen2.5-72B-Instruct`, `FORMA_LLM_VISION_MODEL=Qwen/Qwen3-VL-32B-Instruct`).
+2. Point `FORMA_LLM_BASE_URL`, `FORMA_LLM_API_KEY` and `FORMA_LLM_MODEL` at any OpenAI-compatible provider. It is tried first and no code change is needed, only the env vars and a redeploy. Pick a tool-call-capable model — small ones (e.g. Qwen2-7B) parse briefs but never call `recommendProducts`; the 72B drives the loop but is flaky at grounding pick URLs (see [architecture § Model resolution](architecture.md#model-resolution)). Set `FORMA_LLM_VISION_MODEL` to a multimodal model for image calls.
 3. Set `FORMA_DISABLE_GATEWAY=1` to stop probing a dead gateway.
 4. A total failure is re-probed after 60 s, so recovery does not need a restart.
