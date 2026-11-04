@@ -47,6 +47,8 @@ import { CAPACITY_MESSAGE, DEFAULT_SURFACE_POLICIES, createSurfaceGuard, disable
 import { createMemoryCounterStore, createRedisCounterStore, redisConfig } from '../rate-limit/store.ts'
 import { MissingSecretError, hasSecret } from '../secrets.ts'
 import { parseChain, parseSpec } from '../agent/model-spec.ts'
+import type { ModelMessage } from 'ai'
+import { GEAR_TOOL_NAMES, matchToolName, phantomToolCall, repairToolArgs } from '../agent/tool-repair.ts'
 import { buildErrorReport, redactPath } from '../error-report.ts'
 import { CLICK_REF_PATTERN } from '../outcome/schema.ts'
 import { OUTCOME_LINK_TTL_MS, issueOutcomeToken, newClickRef, readOutcomeToken } from '../outcome/token.ts'
@@ -1158,6 +1160,48 @@ test('model specs: bare ids use the gateway, prefixed ids pick a provider, junk 
     ],
     'unknown provider names survive parsing and are filtered at resolution',
   )
+})
+
+test('tool repair: name matching, arg coercion and phantom detection', () => {
+  // Exact and normalised name matching
+  assert.equal(matchToolName('searchProducts', GEAR_TOOL_NAMES), 'searchProducts')
+  assert.equal(matchToolName('search_products', GEAR_TOOL_NAMES), 'searchProducts')
+  assert.equal(matchToolName('SEARCHPRODUCTS', GEAR_TOOL_NAMES), 'searchProducts')
+  assert.equal(matchToolName('recommend-products', GEAR_TOOL_NAMES), 'recommendProducts')
+  assert.equal(matchToolName('noSuchTool', GEAR_TOOL_NAMES), null)
+  assert.equal(matchToolName('', GEAR_TOOL_NAMES), null)
+
+  // searchProducts: alias keys collapse to {query}
+  assert.deepEqual(repairToolArgs('searchProducts', { queries: ['trail shoes'] }), { query: 'trail shoes' })
+  assert.deepEqual(repairToolArgs('searchProducts', { q: 'road shoes' }), { query: 'road shoes' })
+  assert.deepEqual(repairToolArgs('searchProducts', { query: 'ok query' }), { query: 'ok query' })
+
+  // checkCommunity: string model -> array, missing focus -> ''
+  assert.deepEqual(repairToolArgs('checkCommunity', { models: 'Ghost 16' }), { models: ['Ghost 16'], focus: '' })
+
+  // checkAthletes/checkEvidence: sport falls back from the prompt messages
+  const climbing: ModelMessage[] = [{ role: 'user' as const, content: 'Sport: climbing' }]
+  assert.equal((repairToolArgs('checkAthletes', { models: 'Miura' }, climbing) as { sport: string }).sport, 'climbing')
+  assert.equal(
+    (repairToolArgs('checkEvidence', { metrics: 'edging', question: 'downturned shoes edging performance' }, climbing) as { sport: string }).sport,
+    'climbing',
+  )
+  assert.equal((repairToolArgs('checkAthletes', { models: ['Ghost'] }) as { sport: string }).sport, 'running')
+
+  // recommendProducts: missing reason strings are filled, structure preserved
+  const picks = repairToolArgs('recommendProducts', { picks: [{ name: 'Ghost 16', url: 'https://x' }] }) as { picks: { reason: string }[] }
+  assert.equal(picks.picks[0].reason, '')
+
+  // phantomToolCall: a trailing NoSuchToolError result names the tool to unlock
+  const toolMsg = (toolName: string, output: { type: string; value: unknown }): ModelMessage => ({
+    role: 'tool' as const,
+    content: [{ type: 'tool-result' as const, toolCallId: 'c1', toolName, output } as never],
+  })
+  const phantomMsgs = [toolMsg('searchProducts', { type: 'error-text', value: 'AI_NoSuchToolError: Model tried to call unavailable tool' })]
+  assert.equal(phantomToolCall(phantomMsgs, GEAR_TOOL_NAMES), 'searchProducts')
+  // ...but only for known tools, and only the most recent tool message
+  assert.equal(phantomToolCall([toolMsg('flyToMoon', { type: 'error-text', value: 'AI_NoSuchToolError' })], GEAR_TOOL_NAMES), null)
+  assert.equal(phantomToolCall([toolMsg('searchProducts', { type: 'json', value: { results: [] } })], GEAR_TOOL_NAMES), null)
 })
 
 test('error reports: queries and long path segments never reach the log', () => {
