@@ -20,7 +20,7 @@ lib/fitting (browser)         stage flow + confirmed brief: size, budget, calibr
 /api/agent                    gear agent (AI SDK + resolved model per `lib/agent/models.ts`, currently Featherless), streams tool steps to the UI
   │  tools: buildGearProfile → research / stock / rider reports / athletes (Tavily) → recommendProducts
   ▼
-Picks ──▶ /api/stock-check     signed product target + user-submitted size → retailer policy/rate limit/cache → Solari (UK egress) → page verification → Grok verdict + screenshot
+Picks ──▶ /api/stock-check     signed product target + user-submitted size → retailer policy/rate limit/cache → Solari (UK egress) → page verification → vision-model verdict + screenshot
      │                         └─▶ /api/stock-check/replay  polls for the session recording
      ├──▶ /api/basket/[runId]  agent-started Browser Use check, stops before checkout
      ├──▶ /api/passport        signed Fit Passport for the active fitting size → REST + /api/mcp for other agents
@@ -51,7 +51,7 @@ Callers: `agent` → `/api/agent` gear loop, `/api/brief` text parse, passport `
 
 - `session.ts` derives the visible stage, supplies the next-action rail, decides whether a measurement can submit, and plans a re-analysis or recapture when height/provider inputs change.
 - `prefs.ts` validates the required brief (size, budget, 120–220 cm height, goal and surface) before `/api/agent` runs. Foot width and niggles remain optional.
-- `example.ts` supplies the synthetic, clearly labelled six-stage walkthrough (AI-generated running clip fixture plus synthetic measurements, brief, concepts and an un-run receipt template; see README for attribution). The running example draws a local 2D pose overlay over the generated clip — at most 12 fps while it plays and the tab is visible — but reports framing only and never touches measurements, hosted providers or TTS. Example mode cannot authorise research, stock, passport or WhatsApp calls.
+- `example.ts` supplies the synthetic, clearly labelled six-stage walkthrough (AI-generated running clip fixture plus synthetic measurements, brief, concepts and an un-run receipt template; see README for attribution). The running example draws a local 2D pose overlay over the generated clip — at most 12 fps while it plays and the tab is visible — but reports framing only and never touches measurements, hosted providers or TTS. Example mode cannot authorise research, stock or passport calls.
 - `stock.ts` separates a typed draft size from the explicitly submitted size and carries the server-issued product token, so an old verdict, passport or arbitrary URL cannot be applied to a new request.
 - `camera.ts` releases late `getUserMedia` streams that resolve after capture is stopped or superseded.
 
