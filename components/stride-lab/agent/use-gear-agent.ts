@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import type { GearAgentUIMessage } from '@/lib/agent/gear-agent'
@@ -29,11 +29,13 @@ function moodOf(messages: GearAgentUIMessage[], status: string, hasError: boolea
 export function useGearAgent() {
   const [sentBrief, setSentBrief] = useState<MovementBrief | null>(null)
   const [prefs, setPrefs] = useState<ShopperPrefs | null>(null)
+  const retriedRef = useRef(false)
   const chat = useChat<GearAgentUIMessage>({ transport })
   const { sendMessage, setMessages, stop } = chat
 
   const send = useCallback(
     (brief: MovementBrief, nextPrefs: ShopperPrefs) => {
+      retriedRef.current = false
       setSentBrief(brief)
       setPrefs(nextPrefs)
       setMessages([])
@@ -42,7 +44,29 @@ export function useGearAgent() {
     [sendMessage, setMessages],
   )
 
+  // Open-weight models occasionally end the run in prose with no shortlist (cost logs show these
+  // as agent_run with zero recommendProducts calls, or a rejected shortlist followed by text).
+  // The route rebuilds the prompt from the body on every POST, so a fresh retry is safe; do it
+  // once, silently, before surfacing an empty result.
+  useEffect(() => {
+    if (chat.status !== 'ready' || chat.error || !sentBrief || !prefs || retriedRef.current) return
+    const hasPicks = chat.messages.some(
+      (m) =>
+        m.role === 'assistant' &&
+        m.parts.some((p) => {
+          if (p.type !== 'tool-recommendProducts' || p.state !== 'output-available') return false
+          const output = p.output as { picks?: unknown[] } | undefined
+          return Array.isArray(output?.picks) && output.picks.length > 0
+        }),
+    )
+    if (hasPicks) return
+    retriedRef.current = true
+    setMessages([])
+    void sendMessage({ text: briefToPrompt(sentBrief, prefs) }, { body: { brief: sentBrief, prefs } })
+  }, [chat.status, chat.messages, chat.error, sentBrief, prefs, sendMessage, setMessages])
+
   const reset = useCallback(() => {
+    retriedRef.current = false
     void stop()
     setMessages([])
     setSentBrief(null)
