@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
   const started = Date.now()
   try {
-    const resolved = await resolveModel(kind === 'surface' ? 'vision' : 'agent')
+    const resolved = await resolveModel(kind === 'surface' ? 'vision' : 'fast')
     if (!resolved) {
       logCost('paid_call', { route: 'brief', ok: false, ms: Date.now() - started, kind, sport, reason: 'no_model_available' })
       return Response.json({ error: 'Forma’s model is unreachable right now — try again shortly.' }, { status: 503 })

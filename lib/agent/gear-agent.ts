@@ -104,7 +104,9 @@ export function createGearAgent(model: LanguageModel) {
   // Cap each step's generation. Tool-call JSON is tiny and the longest legit output is the
   // closing narrative (~1k tokens); a cap stops a model that starts reasoning out loud from
   // burning the whole wall-clock budget on one step (observed on shared open-weight hosts).
-  maxOutputTokens: 4_096,
+  // 8k leaves headroom for reasoning tokens while staying under the 8192 output limit that the
+  // Hetzner-hosted Qwen3.6-A3B endpoint enforces (a lower cap truncated the final answer).
+  maxOutputTokens: 8_000,
   tools: {
     checkEvidence: tool({
       description:

@@ -142,12 +142,22 @@ const providers = new Map<string, ReturnType<typeof createOpenAICompatible>>()
  * accepts the vLLM `chat_template_kwargs` extension to switch it off. HOWEVER, with thinking off
  * Qwen3 degrades to writing tool calls as plain text instead of emitting real tool_calls (observed
  * 2026-11-04 in the live agent loop), so thinking is left ON by default. Set FORMA_QWEN_NO_THINK=1
- * to try it for non-tool surfaces. Only injected for qwen3 model ids so other providers' chat
+ * to try it for non-tool surfaces, or FORMA_QWEN_NO_THINK_MODELS=<substring-list> to target
+ * specific qwen3 models only. Only injected for qwen3 model ids so other providers' chat
  * endpoints never see an unknown field.
  */
 function disableQwenThinking(args: Record<string, unknown>): Record<string, unknown> {
-  if (env('FORMA_QWEN_NO_THINK') !== '1') return args
-  if (typeof args.model !== 'string' || !/qwen3/i.test(args.model)) return args
+  const model = typeof args.model === 'string' ? args.model : ''
+  if (!model || !/qwen3/i.test(model)) return args
+  // FORMA_QWEN_NO_THINK_MODELS=a3b,qwen3.6  → disable thinking only for models whose id contains
+  // one of the listed substrings (case-insensitive). Lets a non-reasoning model like
+  // Qwen3.6-35B-A3B run in its native fast mode while a reasoning fallback (Qwen3.8-27B) keeps
+  // thinking on. Without it, FORMA_QWEN_NO_THINK=1 applies to every qwen3* model.
+  const only = env('FORMA_QWEN_NO_THINK_MODELS')
+  const enabled = only
+    ? only.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean).some((s) => model.toLowerCase().includes(s))
+    : env('FORMA_QWEN_NO_THINK') === '1'
+  if (!enabled) return args
   const extra = (args.chat_template_kwargs ?? {}) as Record<string, unknown>
   return { ...args, chat_template_kwargs: { enable_thinking: false, ...extra } }
 }
