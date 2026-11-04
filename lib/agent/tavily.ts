@@ -26,6 +26,11 @@ export interface SearchHit {
   snippet: string
 }
 
+// Snippets go into the agent's context and are re-prefilled on every later step. On shared
+// open-weight hosts a fat context is the difference between a 40 s fitting and one that times
+// out, so keep them tight: 5 results, 240 chars each.
+const SNIPPET_CHARS = 240
+
 /** Where runners and climbers actually talk about how shoes wear, fit and fail. */
 const COMMUNITY_DOMAINS = [
   'reddit.com',
@@ -77,8 +82,8 @@ function preferProductPages(hits: SearchHit[]): SearchHit[] {
 }
 
 export const searchWeb = (query: string) =>
-  tavily(query, RETAILER_DOMAINS, 8, 'advanced').then(preferProductPages)
-export const searchCommunity = (query: string) => tavily(query, COMMUNITY_DOMAINS)
+  tavily(query, RETAILER_DOMAINS, 5, 'advanced').then(preferProductPages)
+export const searchCommunity = (query: string) => tavily(query, COMMUNITY_DOMAINS, 5)
 export const searchResearch = (query: string) => tavily(query, RESEARCH_DOMAINS, 5)
 /** Unrestricted search, for athlete and race-kit coverage that lives on news and brand sites. */
 export const searchOpen = (query: string) => tavily(query, [], 4)
@@ -119,7 +124,7 @@ async function tavily(
     const hits = (data.results ?? []).map((r) => ({
       title: r.title,
       url: r.url,
-      snippet: r.content.slice(0, 400),
+      snippet: r.content.slice(0, SNIPPET_CHARS),
     }))
     if (hits.length > 0) {
       searchCache.set(key, hits)
