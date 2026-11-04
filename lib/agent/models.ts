@@ -92,11 +92,31 @@ function chainFor(role: ModelRole): ModelSpec[] {
 
 let compatibleProvider: ReturnType<typeof createOpenAICompatible> | null = null
 
+/**
+ * Qwen3-family models think out loud by default: every step of the tool loop emits a long
+ * `reasoning` trace before the answer, which burns output tokens and wall-clock time and can push
+ * a 14-step fitting past the route's 120 s budget. Featherless accepts the vLLM
+ * `chat_template_kwargs` extension to switch it off, and grounding quality holds (verified
+ * 2026-11-04: with thinking off, Qwen3-32B still copied all three product URLs exactly and
+ * skipped the review/community links). Only injected for qwen3 model ids so other providers'
+ * chat endpoints never see an unknown field.
+ */
+function disableQwenThinking(args: Record<string, unknown>): Record<string, unknown> {
+  if (typeof args.model !== 'string' || !/qwen3/i.test(args.model)) return args
+  const extra = (args.chat_template_kwargs ?? {}) as Record<string, unknown>
+  return { ...args, chat_template_kwargs: { enable_thinking: false, ...extra } }
+}
+
 function modelFor(spec: ModelSpec): LanguageModel {
   if (spec.provider === 'gateway') return gateway(spec.id)
   const baseURL = env('FORMA_LLM_BASE_URL') ?? ''
   const apiKey = env('FORMA_LLM_API_KEY') ?? ''
-  compatibleProvider ??= createOpenAICompatible({ name: env('FORMA_LLM_NAME') ?? 'llm', baseURL, apiKey })
+  compatibleProvider ??= createOpenAICompatible({
+    name: env('FORMA_LLM_NAME') ?? 'llm',
+    baseURL,
+    apiKey,
+    transformRequestBody: disableQwenThinking,
+  })
   return compatibleProvider(spec.id)
 }
 
