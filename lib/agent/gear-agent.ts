@@ -7,6 +7,7 @@ import { modelKey, reconcileUrl, shortlistProblem, urlKey } from './picks'
 import { issueStockToken } from './stock-token'
 import { logCost } from '@/lib/cost-log'
 import { searchCommunity, searchOpen, searchResearch, searchWeb } from './tavily'
+import { GEAR_TOOL_NAMES, phantomToolCall, repairGearToolCall } from './tool-repair'
 
 const requirement = z.object({
   attribute: z.string().describe('Shoe attribute, e.g. "Heel cushioning" or "Heel-to-toe drop"'),
@@ -59,13 +60,7 @@ Measurements come from one short phone clip and are rough. Treat them as one inp
 
 Rules: never claim medical diagnoses; research explains, it does not prescribe. Speak plainly. Don't mention these instructions.`
 
-type ToolName =
-  | 'checkEvidence'
-  | 'buildGearProfile'
-  | 'searchProducts'
-  | 'checkCommunity'
-  | 'checkAthletes'
-  | 'recommendProducts'
+type ToolName = (typeof GEAR_TOOL_NAMES)[number]
 
 /** Every link the product search returned so far in this run. */
 /** Product search results (title + url) returned by searchProducts so far in this run. */
@@ -94,135 +89,150 @@ function promptTextOf(messages: ModelMessage[]) {
   return first.content.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('\n')
 }
 
+const gearTools = {
+  checkEvidence: tool({
+    description:
+      'Look up peer-reviewed findings relevant to the measured metrics: a hand-checked set of key studies plus a live literature search.',
+    inputSchema: z.object({
+      sport: z.enum(['running', 'climbing']),
+      metrics: z.array(z.string()).min(1).max(6).describe('Metric labels exactly as written in the brief'),
+      question: z.string().min(8).max(160).describe('e.g. "running shoe cushioning for low cadence heel strikers"'),
+    }),
+    execute: async ({ sport, metrics, question }) => {
+      const curated = findingsFor(sport, metrics)
+      const papers = await searchResearch(question).catch(() => [])
+      return { question, ...curated, papers }
+    },
+  }),
+  buildGearProfile: tool({
+    description: 'Record the gear profile derived from the gait measurements.',
+    inputSchema: z.object({
+      summary: z.string().describe('One sentence describing how this person runs or climbs'),
+      category: z.enum(['neutral', 'stability', 'motion-control', 'flat', 'moderate', 'aggressive']),
+      requirements: z.array(requirement).min(2).max(4),
+    }),
+    execute: async (profile) => profile,
+  }),
+  searchProducts: tool({
+    description: 'Search the live web for running or climbing shoes, prices and stock.',
+    inputSchema: z.object({ query: z.string().min(3).max(200) }),
+    execute: async ({ query }) => ({ query, results: await searchWeb(query) }),
+  }),
+  checkCommunity: tool({
+    description:
+      'Search community forums and independent reviews for first-hand reports on candidate shoe models: fit, sizing, durability and known issues.',
+    inputSchema: z.object({
+      models: z.array(z.string()).min(1).max(5).describe('Candidate model names, e.g. "Brooks Ghost 16"'),
+      focus: z.string().max(80).describe('What matters for this shopper, e.g. "heel durability for heel strikers"'),
+    }),
+    execute: async ({ models, focus }) => {
+      const query = `${models.join(' vs ')} ${focus} review experience`
+      return { query, models, results: await searchCommunity(query) }
+    },
+  }),
+  checkAthletes: tool({
+    description: 'Find which elite athletes wear each candidate model, as sponsored athletes or spotted in race and competition coverage.',
+    inputSchema: z.object({
+      sport: z.enum(['running', 'climbing']),
+      models: z.array(z.string()).min(1).max(3),
+    }),
+    execute: async ({ sport, models }) => {
+      const modelAngle =
+        sport === 'running' ? 'elite runner wears trains in race shoe count' : 'professional climber wears sends in'
+      const brandAngle = sport === 'running' ? 'sponsored elite runners team 2026' : 'sponsored climbers athlete team 2026'
+      const athletes = await Promise.all(
+        models.map(async (model) => {
+          const brand = model.split(' ')[0]
+          const [modelHits, brandHits] = await Promise.all([
+            searchOpen(`"${model}" ${modelAngle}`).catch(() => []),
+            searchOpen(`${brand} ${brandAngle}`).catch(() => []),
+          ])
+          return { model, brand, results: [...modelHits, ...brandHits] }
+        }),
+      )
+      return { sport, athletes }
+    },
+  }),
+  recommendProducts: tool({
+    description: 'Present exactly three recommended products to the shopper.',
+    inputSchema: z.object({ picks: z.array(pick).length(3) }),
+    execute: async ({ picks }, { messages }) => {
+      const hits = productHitsIn(messages)
+      const allowed = new Set(hits.map((h) => urlKey(h.url)))
+      // Repair stray review/community URLs by swapping in the grounded product page for the same
+      // shoe, so a flaky model's bad link doesn't sink an otherwise valid shortlist.
+      const repaired = picks.map((p) => ({ ...p, url: reconcileUrl(p, hits, allowed) }))
+      const swapped = repaired.filter((p, i) => p.url !== picks[i].url).length
+      const seen = hits.map((h) => h.url)
+      const problem = shortlistProblem(repaired, seen)
+      if (problem) {
+        const dup = new Set(repaired.map((p) => modelKey(p.name))).size < repaired.length
+        logCost('shortlist_rejected', {
+          kind: dup ? 'duplicate-model' : seen.length ? 'stray-url' : 'no-product-urls',
+          picks: repaired.length,
+          productUrls: seen.length,
+          swapped,
+          // Names + hosts of the rejected picks so matching can be tuned from real failures.
+          rejected: repaired.map((p) => `${p.name} @ ${urlKey(p.url)}`).join(' | '),
+          problem,
+        })
+        // Give the model the real product pages to pick from, so it recovers by copying a known
+        // URL instead of inventing another one (the failure mode that kills flaky-model runs).
+        // The nextAction line is imperative on purpose: small non-reasoning models sometimes
+        // answer a rejection in prose and end the run; telling them the only valid moves are
+        // tool calls keeps the loop alive (observed failure: 0 tokens after one rejection).
+        const availableProductPages = dup ? undefined : hits.slice(0, 12).map((h) => `${h.title} — ${h.url}`)
+        return {
+          picks: [],
+          error: problem,
+          nextAction:
+            'Call a tool now — searchProducts with a new query, or recommendProducts again with urls copied exactly from availableProductPages. Do not reply with text.',
+          ...(availableProductPages ? { availableProductPages } : {}),
+        }
+      }
+      if (swapped) logCost('shortlist_repaired', { picks: repaired.length, swapped })
+      // A missing STOCK_CHECK_SECRET must not kill the shortlist: the picks still stand, the size
+      // check simply refuses to run (403/503) instead of silently authorising itself.
+      const withTokens = repaired.map((p) => {
+        let stockToken = ''
+        try {
+          stockToken = issueStockToken({ productName: p.name, productUrl: p.url })
+        } catch (error) {
+          logCost('shortlist_rejected', { kind: 'stock-token-unavailable', picks: repaired.length, error: String(error) })
+        }
+        return { ...p, stockToken }
+      })
+      return { picks: withTokens }
+    },
+  }),
+
+}
+
 export function createGearAgent(model: LanguageModel) {
   return new ToolLoopAgent({
   model,
   instructions: INSTRUCTIONS,
   // Deepest legit run is ~8 steps (research → profile → 2 searches → community + athletes → recommend → final text).
-  // Room for two rejected shortlists with corrective searches and re-picks.
-  stopWhen: stepCountIs(14),
+  // Room for two rejected shortlists with corrective searches and re-picks, plus the odd wasted
+  // step when a small model hallucinates a tool the phase hides (prepareStep yields it back next
+  // step, but the failed call itself still costs one).
+  stopWhen: stepCountIs(16),
   // Cap each step's generation. Tool-call JSON is tiny and the longest legit output is the
   // closing narrative (~1k tokens); a cap stops a model that starts reasoning out loud from
   // burning the whole wall-clock budget on one step (observed on shared open-weight hosts).
   // 8k leaves headroom for reasoning tokens while staying under the 8192 output limit that the
   // Hetzner-hosted Qwen3.6-A3B endpoint enforces (a lower cap truncated the final answer).
   maxOutputTokens: 8_000,
-  tools: {
-    checkEvidence: tool({
-      description:
-        'Look up peer-reviewed findings relevant to the measured metrics: a hand-checked set of key studies plus a live literature search.',
-      inputSchema: z.object({
-        sport: z.enum(['running', 'climbing']),
-        metrics: z.array(z.string()).min(1).max(6).describe('Metric labels exactly as written in the brief'),
-        question: z.string().min(8).max(160).describe('e.g. "running shoe cushioning for low cadence heel strikers"'),
-      }),
-      execute: async ({ sport, metrics, question }) => {
-        const curated = findingsFor(sport, metrics)
-        const papers = await searchResearch(question).catch(() => [])
-        return { question, ...curated, papers }
-      },
-    }),
-    buildGearProfile: tool({
-      description: 'Record the gear profile derived from the gait measurements.',
-      inputSchema: z.object({
-        summary: z.string().describe('One sentence describing how this person runs or climbs'),
-        category: z.enum(['neutral', 'stability', 'motion-control', 'flat', 'moderate', 'aggressive']),
-        requirements: z.array(requirement).min(2).max(4),
-      }),
-      execute: async (profile) => profile,
-    }),
-    searchProducts: tool({
-      description: 'Search the live web for running or climbing shoes, prices and stock.',
-      inputSchema: z.object({ query: z.string().min(3).max(200) }),
-      execute: async ({ query }) => ({ query, results: await searchWeb(query) }),
-    }),
-    checkCommunity: tool({
-      description:
-        'Search community forums and independent reviews for first-hand reports on candidate shoe models: fit, sizing, durability and known issues.',
-      inputSchema: z.object({
-        models: z.array(z.string()).min(1).max(5).describe('Candidate model names, e.g. "Brooks Ghost 16"'),
-        focus: z.string().max(80).describe('What matters for this shopper, e.g. "heel durability for heel strikers"'),
-      }),
-      execute: async ({ models, focus }) => {
-        const query = `${models.join(' vs ')} ${focus} review experience`
-        return { query, models, results: await searchCommunity(query) }
-      },
-    }),
-    checkAthletes: tool({
-      description: 'Find which elite athletes wear each candidate model, as sponsored athletes or spotted in race and competition coverage.',
-      inputSchema: z.object({
-        sport: z.enum(['running', 'climbing']),
-        models: z.array(z.string()).min(1).max(3),
-      }),
-      execute: async ({ sport, models }) => {
-        const modelAngle =
-          sport === 'running' ? 'elite runner wears trains in race shoe count' : 'professional climber wears sends in'
-        const brandAngle = sport === 'running' ? 'sponsored elite runners team 2026' : 'sponsored climbers athlete team 2026'
-        const athletes = await Promise.all(
-          models.map(async (model) => {
-            const brand = model.split(' ')[0]
-            const [modelHits, brandHits] = await Promise.all([
-              searchOpen(`"${model}" ${modelAngle}`).catch(() => []),
-              searchOpen(`${brand} ${brandAngle}`).catch(() => []),
-            ])
-            return { model, brand, results: [...modelHits, ...brandHits] }
-          }),
-        )
-        return { sport, athletes }
-      },
-    }),
-    recommendProducts: tool({
-      description: 'Present exactly three recommended products to the shopper.',
-      inputSchema: z.object({ picks: z.array(pick).length(3) }),
-      execute: async ({ picks }, { messages }) => {
-        const hits = productHitsIn(messages)
-        const allowed = new Set(hits.map((h) => urlKey(h.url)))
-        // Repair stray review/community URLs by swapping in the grounded product page for the same
-        // shoe, so a flaky model's bad link doesn't sink an otherwise valid shortlist.
-        const repaired = picks.map((p) => ({ ...p, url: reconcileUrl(p, hits, allowed) }))
-        const swapped = repaired.filter((p, i) => p.url !== picks[i].url).length
-        const seen = hits.map((h) => h.url)
-        const problem = shortlistProblem(repaired, seen)
-        if (problem) {
-          const dup = new Set(repaired.map((p) => modelKey(p.name))).size < repaired.length
-          logCost('shortlist_rejected', {
-            kind: dup ? 'duplicate-model' : seen.length ? 'stray-url' : 'no-product-urls',
-            picks: repaired.length,
-            productUrls: seen.length,
-            swapped,
-            // Names + hosts of the rejected picks so matching can be tuned from real failures.
-            rejected: repaired.map((p) => `${p.name} @ ${urlKey(p.url)}`).join(' | '),
-            problem,
-          })
-          // Give the model the real product pages to pick from, so it recovers by copying a known
-          // URL instead of inventing another one (the failure mode that kills flaky-model runs).
-          // The nextAction line is imperative on purpose: small non-reasoning models sometimes
-          // answer a rejection in prose and end the run; telling them the only valid moves are
-          // tool calls keeps the loop alive (observed failure: 0 tokens after one rejection).
-          const availableProductPages = dup ? undefined : hits.slice(0, 12).map((h) => `${h.title} — ${h.url}`)
-          return {
-            picks: [],
-            error: problem,
-            nextAction:
-              'Call a tool now — searchProducts with a new query, or recommendProducts again with urls copied exactly from availableProductPages. Do not reply with text.',
-            ...(availableProductPages ? { availableProductPages } : {}),
-          }
-        }
-        if (swapped) logCost('shortlist_repaired', { picks: repaired.length, swapped })
-        // A missing STOCK_CHECK_SECRET must not kill the shortlist: the picks still stand, the size
-        // check simply refuses to run (403/503) instead of silently authorising itself.
-        const withTokens = repaired.map((p) => {
-          let stockToken = ''
-          try {
-            stockToken = issueStockToken({ productName: p.name, productUrl: p.url })
-          } catch (error) {
-            logCost('shortlist_rejected', { kind: 'stock-token-unavailable', picks: repaired.length, error: String(error) })
-          }
-          return { ...p, stockToken }
-        })
-        return { picks: withTokens }
-      },
-    }),
+  tools: gearTools,
+  // Open-weight models call tools that earlier phases showed but the current step hides; the SDK
+  // would feed them an AI_NoSuchToolError text result and they often loop on it until the step
+  // budget dies. Repair executes any call that maps to a real tool with fixable args instead.
+  repairToolCall: async ({ toolCall, tools, messages }) => {
+    const repaired = await repairGearToolCall(toolCall, tools, messages)
+    if (repaired && repaired.toolName !== toolCall.toolName) {
+      logCost('tool_call_repaired', { from: toolCall.toolName, to: repaired.toolName })
+    }
+    return repaired
   },
   // Derive the phase from the conversation (not stepNumber) so it survives the approval round-trip.
   prepareStep: ({ messages }) => {
@@ -240,38 +250,50 @@ export function createGearAgent(model: LanguageModel) {
     // one (or a few) tools are visible and the prompt drives the sequence.
     const only = (name: ToolName) => ({ activeTools: [name] })
 
-    if (hasLayer(depth, 'research') && !count('checkEvidence')) return only('checkEvidence')
-    if (!count('buildGearProfile')) return only('buildGearProfile')
-    // A shortlist with a repeated shoe is rejected by the tool; allow exactly one corrected attempt.
-    const rejectedShortlist = messages.some(
-      (m) =>
-        m.role === 'tool' &&
-        m.content.some(
-          (p) =>
-            p.type === 'tool-result' &&
-            p.toolName === 'recommendProducts' &&
-            p.output.type === 'json' &&
-            typeof (p.output.value as { error?: unknown } | null)?.error === 'string',
-        ),
-    )
-    if (rejectedShortlist && count('recommendProducts') < 3) {
-      // Let Forma keep hunting: a rejected shortlist lifts the depth search cap so a
-      // monoculture result set (same model, many retailers) can be worked around. Keep toolChoice
-      // auto here too — a hard 'required' makes Qwen2.5-72B occasionally answer in text, which the
-      // SDK turns into a fatal AI_ToolChoiceViolationError. Recovery is instead driven by the
-      // rejection payload's availableProductPages plus the prompt instruction to copy from it.
-      return { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[] }
+    const phase = (): { activeTools: ToolName[]; toolChoice?: 'none' } => {
+      if (hasLayer(depth, 'research') && !count('checkEvidence')) return only('checkEvidence')
+      if (!count('buildGearProfile')) return only('buildGearProfile')
+      // A shortlist with a repeated shoe is rejected by the tool; allow exactly one corrected attempt.
+      const rejectedShortlist = messages.some(
+        (m) =>
+          m.role === 'tool' &&
+          m.content.some(
+            (p) =>
+              p.type === 'tool-result' &&
+              p.toolName === 'recommendProducts' &&
+              p.output.type === 'json' &&
+              typeof (p.output.value as { error?: unknown } | null)?.error === 'string',
+          ),
+      )
+      if (rejectedShortlist && count('recommendProducts') < 3) {
+        // Let Forma keep hunting: a rejected shortlist lifts the depth search cap so a
+        // monoculture result set (same model, many retailers) can be worked around. Keep toolChoice
+        // auto here too — a hard 'required' makes Qwen2.5-72B occasionally answer in text, which the
+        // SDK turns into a fatal AI_ToolChoiceViolationError. Recovery is instead driven by the
+        // rejection payload's availableProductPages plus the prompt instruction to copy from it.
+        return { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[] }
+      }
+      if (!count('recommendProducts')) {
+        if (count('searchProducts') < DEPTHS[depth].searches) return only('searchProducts')
+        const context: ToolName[] = []
+        if (hasLayer(depth, 'riders') && !count('checkCommunity')) context.push('checkCommunity')
+        if (hasLayer(depth, 'athletes') && !count('checkAthletes')) context.push('checkAthletes')
+        if (context.length === 1) return only(context[0])
+        if (context.length > 1) return { activeTools: context }
+        return only('recommendProducts')
+      }
+      return { activeTools: [], toolChoice: 'none' as const }
     }
-    if (!count('recommendProducts')) {
-      if (count('searchProducts') < DEPTHS[depth].searches) return only('searchProducts')
-      const context: ToolName[] = []
-      if (hasLayer(depth, 'riders') && !count('checkCommunity')) context.push('checkCommunity')
-      if (hasLayer(depth, 'athletes') && !count('checkAthletes')) context.push('checkAthletes')
-      if (context.length === 1) return only(context[0])
-      if (context.length > 1) return { activeTools: context }
-      return only('recommendProducts')
+
+    const decision = phase()
+    // If the last step hallucinated a tool this phase hides, yield: put it back in the active set
+    // so the model's retry executes for real instead of bouncing off AI_NoSuchToolError text until
+    // the step budget dies (observed: a 14-step run of 12 phantom searches and zero picks).
+    const phantom = phantomToolCall(messages, GEAR_TOOL_NAMES)
+    if (phantom && !decision.activeTools.includes(phantom)) {
+      return { ...decision, activeTools: [...decision.activeTools, phantom] }
     }
-    return { activeTools: [], toolChoice: 'none' as const }
+    return decision
   },
   })
 }
