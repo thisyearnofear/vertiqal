@@ -24,7 +24,7 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 
 | Service | Role |
 | --- | --- |
-| Featherless AI | Primary LLM host via `FORMA_LLM_*`: `Qwen/Qwen2.5-72B-Instruct` for the agent tool loop and brief parsing, `Qwen/Qwen3-VL-32B-Instruct` for image calls (vision notes, surface guess, stock-judge screenshot). Hero-card captions and narration are generated on-device and cost nothing. Full agent loop is currently flaky on this model — see [architecture](docs/architecture.md#model-resolution). |
+| Featherless AI | Primary LLM host via `FORMA_LLM_*`: `Qwen/Qwen2.5-72B-Instruct` for the agent tool loop and brief parsing, `Qwen/Qwen3-VL-32B-Instruct` for image calls (vision notes, surface guess, stock-judge screenshot). Hero-card captions and narration are generated on-device and cost nothing. The full agent loop completes in ~40–60 s when the provider is responsive but intermittently times out on shared-infra latency — see [architecture](docs/architecture.md#model-resolution). |
 | Vercel AI Gateway | Fallback LLM chains when the OpenAI-compatible provider is down (`FORMA_AGENT_MODELS` / `FORMA_FAST_MODELS`), plus Grok TTS (Forma's spoken lines) and FLUX Kontext (try-on). See [architecture](docs/architecture.md#model-resolution). |
 | MediaPipe Pose | On-device keypoints, every frame. |
 | VLM Run (Orion) | Optional hosted keypoint refinement on sampled frames of uploaded clips. |
@@ -120,7 +120,7 @@ The six-stage walkthrough is an illustrated journey, not a genuine recorded fitt
 
 ### Compact workspace verification
 
-Automated checks last run 2026-11-04: `pnpm typecheck` clean, `pnpm test:fitting` 72/72, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Production smoke: base + brief-parse + vision checks pass reliably; the **full agent fitting (`pnpm smoke --full`) is flaky** on Featherless Qwen2.5-72B (~1 clean run in 4) — see [architecture](docs/architecture.md#model-resolution). Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
+Automated checks last run 2026-11-04: `pnpm typecheck` clean, `pnpm test:fitting` 73/73, `pnpm test:pose` 34/34, `pnpm build` clean, `git diff --check` clean. Production smoke: base + brief-parse + vision checks pass reliably; the **full agent fitting (`pnpm smoke --full`) completes in ~40–60 s when Featherless is responsive but intermittently times out** under shared-infra latency — crash and grounding bugs are fixed, see [architecture](docs/architecture.md#model-resolution). Manual browser checklist still pending: desktop/mobile dock overlap and scrolling plus settings sheet; example play/pause, overlay toggle, tab hide and scroll-away behaviour; closing the example restores action-button focus, and camera setup focuses the height field; running and climbing upload and capture countdown. The synthetic examples do not establish measurement accuracy; genuine footage, research and stock evidence, calibrated comparison and revenue validation remain separate pending workstreams.
 
 ## Solari cookbook patterns applied
 
