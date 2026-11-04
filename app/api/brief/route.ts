@@ -41,12 +41,14 @@ export async function POST(request: Request) {
   const { kind, sport } = parsed.data
 
   const started = Date.now()
-  try {
-    const resolved = await resolveModel(kind === 'surface' ? 'vision' : 'fast')
-    if (!resolved) {
-      logCost('paid_call', { route: 'brief', ok: false, ms: Date.now() - started, kind, sport, reason: 'no_model_available' })
-      return Response.json({ error: 'Forma’s model is unreachable right now — try again shortly.' }, { status: 503 })
-    }
+  const role = kind === 'surface' ? 'vision' : 'fast'
+
+  // One call-level fallback: if the resolved model errors (a provider hiccup, an unparseable
+  // completion), probe the rest of the chain with the failed model skipped and retry once. This
+  // converts a transient single-provider failure into a pass on the backup instead of a 502.
+  const runOnce = async (skip?: readonly string[]) => {
+    const resolved = await resolveModel(role, skip ? { skip } : undefined)
+    if (!resolved) return { resolved: null as Awaited<ReturnType<typeof resolveModel>>, output: null }
     if (kind === 'text') {
       const { output } = await generateText({
         model: resolved.model,
@@ -56,8 +58,7 @@ export async function POST(request: Request) {
         output: Output.object({ schema: briefParseSchema(sport) }),
         abortSignal: AbortSignal.timeout(20_000),
       })
-      logCost('paid_call', { route: 'brief', ok: true, ms: Date.now() - started, kind, sport })
-      return Response.json(output)
+      return { resolved, output }
     }
 
     const [, mediaType, data] = parsed.data.image.match(DATA_URL)!
@@ -77,10 +78,29 @@ export async function POST(request: Request) {
       output: Output.object({ schema: surfaceSchema(sport) }),
       abortSignal: AbortSignal.timeout(20_000),
     })
-    logCost('paid_call', { route: 'brief', ok: true, ms: Date.now() - started, kind, sport })
-    return Response.json(output)
+    return { resolved, output }
+  }
+
+  try {
+    const first = await runOnce()
+    if (!first.resolved) {
+      logCost('paid_call', { route: 'brief', ok: false, ms: Date.now() - started, kind, sport, reason: 'no_model_available' })
+      return Response.json({ error: 'Forma’s model is unreachable right now — try again shortly.' }, { status: 503 })
+    }
+    logCost('paid_call', { route: 'brief', ok: true, ms: Date.now() - started, kind, sport, model: first.resolved.label })
+    return Response.json(first.output)
   } catch (error) {
-    logCost('paid_call', { route: 'brief', ok: false, ms: Date.now() - started, kind, sport })
+    const failedLabel = (await resolveModel(role))?.label ?? 'unknown'
+    logCost('paid_call', { route: 'brief', ok: false, ms: Date.now() - started, kind, sport, model: failedLabel, error: friendlyModelError(error) })
+    try {
+      const retry = await runOnce([failedLabel])
+      if (retry.resolved) {
+        logCost('paid_call', { route: 'brief', ok: true, ms: Date.now() - started, kind, sport, model: retry.resolved.label, fallback: true })
+        return Response.json(retry.output)
+      }
+    } catch {
+      // fall through to the 502 below
+    }
     return Response.json({ error: friendlyModelError(error) }, { status: 502 })
   }
 }

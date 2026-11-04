@@ -212,8 +212,9 @@ export interface ResolvedModel {
 const resolved = new Map<ModelRole, { model: ResolvedModel | null; at: number }>()
 const probing = new Map<ModelRole, Promise<ResolvedModel | null>>()
 
-async function probe(role: ModelRole): Promise<ResolvedModel | null> {
+async function probe(role: ModelRole, skip?: readonly string[]): Promise<ResolvedModel | null> {
   for (const spec of chainFor(role)) {
+    if (skip?.includes(spec.id)) continue
     if (!resolvable(spec)) continue
     try {
       const model = modelFor(spec)
@@ -231,22 +232,32 @@ async function probe(role: ModelRole): Promise<ResolvedModel | null> {
   return null
 }
 
-/** Returns the first reachable model for the role, or null when nothing answered. */
-export function resolveModel(role: ModelRole): Promise<ResolvedModel | null> {
-  const hit = resolved.get(role)
-  if (hit && (hit.model !== null || Date.now() - hit.at < FAILURE_TTL_MS)) {
-    return Promise.resolve(hit.model)
+/**
+ * Returns the first reachable model for the role, or null when nothing answered. Pass
+ * `{ skip: [label] }` after a call on the cached winner failed: the rest of the chain is probed
+ * (bypassing the cache) and the survivor serves THIS request without being pinned — the next
+ * request still prefers the original winner, so a transient hiccup on the lead provider does not
+ * permanently demote it.
+ */
+export function resolveModel(role: ModelRole, opts?: { skip?: readonly string[] }): Promise<ResolvedModel | null> {
+  const skip = opts?.skip
+  if (!skip || skip.length === 0) {
+    const hit = resolved.get(role)
+    if (hit && (hit.model !== null || Date.now() - hit.at < FAILURE_TTL_MS)) {
+      return Promise.resolve(hit.model)
+    }
+    let pending = probing.get(role)
+    if (!pending) {
+      pending = probe(role)
+      probing.set(role, pending)
+      void pending.finally(() => probing.delete(role))
+    }
+    return pending.then((model) => {
+      resolved.set(role, { model, at: Date.now() })
+      return model
+    })
   }
-  let pending = probing.get(role)
-  if (!pending) {
-    pending = probe(role)
-    probing.set(role, pending)
-    void pending.finally(() => probing.delete(role))
-  }
-  return pending.then((model) => {
-    resolved.set(role, { model, at: Date.now() })
-    return model
-  })
+  return probe(role, skip)
 }
 
 /** Short label for logs/UI when a fallback is serving. */

@@ -128,26 +128,42 @@ export function repairToolArgs(toolName: string, raw: unknown, messages?: ModelM
 /**
  * The SDK answers a call to a tool hidden by activeTools with an "AI_NoSuchToolError" text result,
  * and weak models often retry the same hidden tool until the step budget dies (observed: a 14-step
- * run of 12 phantom searchProducts calls and zero picks). Detect the most recent such phantom call
- * so prepareStep can yield — adding the tool back to the next step's active set makes the retry
- * execute for real, which is what the model was asking for anyway. Only names in `known` qualify:
- * yielding to an invented tool would just produce another NoSuchToolError.
+ * run of 12 phantom searchProducts calls and zero picks). Detect such phantom calls so prepareStep
+ * can yield — adding the tool back to the next step's active set makes the retry execute for real,
+ * which is what the model was asking for anyway. Only names in `known` qualify: yielding to an
+ * invented tool would just produce another NoSuchToolError. Counting ALL phantoms (not just the
+ * last) lets prepareStep cap how many times it yields before forcing the phase gate.
  */
-export function phantomToolCall<T extends string>(messages: ModelMessage[] | undefined, known: readonly T[]): T | null {
-  if (!messages) return null
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]
+function isErrorText(p: unknown): { toolName?: unknown } | null {
+  if (typeof p !== 'object' || p === null) return null
+  const part = p as { type?: unknown; output?: { type?: unknown; value?: unknown }; toolName?: unknown }
+  if (part.type !== 'tool-result') return null
+  const out = part.output as { type?: string; value?: unknown } | undefined
+  if (out?.type !== 'error-text') return null
+  if (!/NoSuchToolError|tried to call unavailable/i.test(String(out.value ?? ''))) return null
+  return part
+}
+
+/** Every tool call the SDK answered with AI_NoSuchToolError text, oldest first. */
+export function phantomToolCalls(messages: ModelMessage[] | undefined): string[] {
+  if (!messages) return []
+  const names: string[] = []
+  for (const m of messages) {
     if (m.role !== 'tool' || !Array.isArray(m.content)) continue
     for (const p of m.content) {
-      if (p.type !== 'tool-result') continue
-      const out = p.output as { type?: string; value?: unknown } | undefined
-      if (out?.type !== 'error-text') continue
-      const text = String(out.value ?? '')
-      if (!/NoSuchToolError|tried to call unavailable/i.test(text)) continue
-      const name = (p as { toolName?: unknown }).toolName
-      if (typeof name === 'string' && (known as readonly string[]).includes(name)) return name as T
+      const err = isErrorText(p)
+      const name = err?.toolName
+      if (err && typeof name === 'string') names.push(name)
     }
-    return null // only the most recent tool message is relevant
+  }
+  return names
+}
+
+
+export function phantomToolCall<T extends string>(messages: ModelMessage[] | undefined, known: readonly T[]): T | null {
+  const names = phantomToolCalls(messages)
+  for (let i = names.length - 1; i >= 0; i--) {
+    if ((known as readonly string[]).includes(names[i])) return names[i] as T
   }
   return null
 }
