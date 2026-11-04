@@ -212,10 +212,12 @@ export function createGearAgent(model: LanguageModel) {
         : [],
     )
     const count = (name: ToolName) => called.filter((c) => c === name).length
-    const only = (name: ToolName) => ({
-      activeTools: [name],
-      toolChoice: { type: 'tool' as const, toolName: name },
-    })
+    // Restrict which tools are visible per phase, but do NOT set a hard toolChoice. Open-weight
+    // models (Qwen3) sometimes answer a forced-tool step with plain text, and the AI SDK turns that
+    // into a fatal AI_ToolChoiceViolationError that kills the whole run. With only activeTools set,
+    // a text answer just ends the loop gracefully; the phase ordering still holds because exactly
+    // one (or a few) tools are visible and the prompt drives the sequence.
+    const only = (name: ToolName) => ({ activeTools: [name] })
 
     if (hasLayer(depth, 'research') && !count('checkEvidence')) return only('checkEvidence')
     if (!count('buildGearProfile')) return only('buildGearProfile')
@@ -234,7 +236,7 @@ export function createGearAgent(model: LanguageModel) {
     if (rejectedShortlist && count('recommendProducts') < 3) {
       // Let Forma keep hunting: a rejected shortlist lifts the depth search cap so a
       // monoculture result set (same model, many retailers) can be worked around.
-      return { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[], toolChoice: 'required' as const }
+      return { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[] }
     }
     if (!count('recommendProducts')) {
       if (count('searchProducts') < DEPTHS[depth].searches) return only('searchProducts')
@@ -242,7 +244,7 @@ export function createGearAgent(model: LanguageModel) {
       if (hasLayer(depth, 'riders') && !count('checkCommunity')) context.push('checkCommunity')
       if (hasLayer(depth, 'athletes') && !count('checkAthletes')) context.push('checkAthletes')
       if (context.length === 1) return only(context[0])
-      if (context.length > 1) return { activeTools: context, toolChoice: 'required' as const }
+      if (context.length > 1) return { activeTools: context }
       return only('recommendProducts')
     }
     return { activeTools: [], toolChoice: 'none' as const }
