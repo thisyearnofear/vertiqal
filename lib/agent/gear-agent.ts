@@ -3,7 +3,7 @@ import { ToolLoopAgent, stepCountIs, tool, type InferAgentUIMessage, type Langua
 import { z } from 'zod'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'
-import { modelKey, shortlistProblem } from './picks'
+import { modelKey, reconcileUrl, shortlistProblem, urlKey } from './picks'
 import { issueStockToken } from './stock-token'
 import { logCost } from '@/lib/cost-log'
 import { searchCommunity, searchOpen, searchResearch, searchWeb } from './tavily'
@@ -68,17 +68,20 @@ type ToolName =
   | 'recommendProducts'
 
 /** Every link the product search returned so far in this run. */
-function productUrlsIn(messages: ModelMessage[]) {
+/** Product search results (title + url) returned by searchProducts so far in this run. */
+function productHitsIn(messages: ModelMessage[]): { title: string; url: string }[] {
   return messages.flatMap((m) =>
     m.role === 'tool'
       ? m.content.flatMap((p) => {
           if (p.type !== 'tool-result' || p.toolName !== 'searchProducts') return []
           // ModelMessage tool-results carry the raw output value; tolerate the
           // {type:'json', value} envelope too in case the shape shifts.
-          const out = p.output as { type?: string; value?: unknown; results?: { url?: unknown }[] } | null
-          const payload = out?.type === 'json' ? (out.value as { results?: { url?: unknown }[] } | null) : out
+          const out = p.output as { type?: string; value?: unknown; results?: { title?: unknown; url?: unknown }[] } | null
+          const payload = out?.type === 'json' ? (out.value as typeof out | null) : out
           const results = payload?.results ?? []
-          return results.flatMap((r) => (typeof r.url === 'string' ? [r.url] : []))
+          return results.flatMap((r) =>
+            typeof r.url === 'string' ? [{ title: typeof r.title === 'string' ? r.title : '', url: r.url }] : [],
+          )
         })
       : [],
   )
@@ -166,25 +169,33 @@ export function createGearAgent(model: LanguageModel) {
       description: 'Present exactly three recommended products to the shopper.',
       inputSchema: z.object({ picks: z.array(pick).length(3) }),
       execute: async ({ picks }, { messages }) => {
-        const seen = [...productUrlsIn(messages)]
-        const problem = shortlistProblem(picks, seen)
+        const hits = productHitsIn(messages)
+        const allowed = new Set(hits.map((h) => urlKey(h.url)))
+        // Repair stray review/community URLs by swapping in the grounded product page for the same
+        // shoe, so a flaky model's bad link doesn't sink an otherwise valid shortlist.
+        const repaired = picks.map((p) => ({ ...p, url: reconcileUrl(p, hits, allowed) }))
+        const swapped = repaired.filter((p, i) => p.url !== picks[i].url).length
+        const seen = hits.map((h) => h.url)
+        const problem = shortlistProblem(repaired, seen)
         if (problem) {
-          const dup = new Set(picks.map((p) => modelKey(p.name))).size < picks.length
+          const dup = new Set(repaired.map((p) => modelKey(p.name))).size < repaired.length
           logCost('shortlist_rejected', {
             kind: dup ? 'duplicate-model' : seen.length ? 'stray-url' : 'no-product-urls',
-            picks: picks.length,
+            picks: repaired.length,
             productUrls: seen.length,
+            swapped,
           })
           return { picks: [], error: problem }
         }
+        if (swapped) logCost('shortlist_repaired', { picks: repaired.length, swapped })
         // A missing STOCK_CHECK_SECRET must not kill the shortlist: the picks still stand, the size
         // check simply refuses to run (403/503) instead of silently authorising itself.
-        const withTokens = picks.map((p) => {
+        const withTokens = repaired.map((p) => {
           let stockToken = ''
           try {
             stockToken = issueStockToken({ productName: p.name, productUrl: p.url })
           } catch (error) {
-            logCost('shortlist_rejected', { kind: 'stock-token-unavailable', picks: picks.length, error: String(error) })
+            logCost('shortlist_rejected', { kind: 'stock-token-unavailable', picks: repaired.length, error: String(error) })
           }
           return { ...p, stockToken }
         })
