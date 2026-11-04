@@ -48,7 +48,7 @@ import { createMemoryCounterStore, createRedisCounterStore, redisConfig } from '
 import { MissingSecretError, hasSecret } from '../secrets.ts'
 import { parseChain, parseSpec } from '../agent/model-spec.ts'
 import type { ModelMessage } from 'ai'
-import { GEAR_TOOL_NAMES, matchToolName, phantomToolCall, phantomToolCalls, repairToolArgs } from '../agent/tool-repair.ts'
+import { GEAR_TOOL_NAMES, matchToolName, phantomToolCall, phantomToolCalls, repairGearToolCall, repairToolArgs } from '../agent/tool-repair.ts'
 import { buildErrorReport, redactPath } from '../error-report.ts'
 import { CLICK_REF_PATTERN } from '../outcome/schema.ts'
 import { OUTCOME_LINK_TTL_MS, issueOutcomeToken, newClickRef, readOutcomeToken } from '../outcome/token.ts'
@@ -1209,6 +1209,54 @@ test('tool repair: name matching, arg coercion and phantom detection', () => {
   ]
   assert.deepEqual(phantomToolCalls(two), ['searchProducts', 'checkCommunity'])
   assert.equal(phantomToolCall(two, GEAR_TOOL_NAMES), 'checkCommunity', 'most recent known phantom wins')
+})
+
+test('tool repair budgets: single-use repeats and stuck runs are refused, not executed', async () => {
+  const { z } = await import('zod')
+  const tools = {
+    searchProducts: { inputSchema: z.object({ query: z.string() }) },
+    checkCommunity: { inputSchema: z.object({ models: z.array(z.string()), focus: z.string() }) },
+    recommendProducts: { inputSchema: z.object({ picks: z.array(z.object({ name: z.string(), url: z.string() })) }) },
+  }
+  const call = (toolName: string, input: unknown) => ({
+    type: 'tool-call' as const,
+    toolCallId: `c-${Math.random()}`,
+    toolName,
+    input: JSON.stringify(input),
+  })
+  const assistantCall = (toolName: string): ModelMessage => ({
+    role: 'assistant' as const,
+    content: [{ type: 'tool-call' as const, toolCallId: 'a1', toolName, input: '{}' } as never],
+  })
+  const errResult = (toolName: string): ModelMessage => ({
+    role: 'tool' as const,
+    content: [{ type: 'tool-result' as const, toolCallId: 'a1', toolName, output: { type: 'error-text', value: 'AI_NoSuchToolError' } } as never],
+  })
+
+  // A hidden checkCommunity call repairs fine the first time (real data feeds grounding)...
+  const first = await repairGearToolCall(call('checkCommunity', { models: ['Ghost 16'], focus: 'fit' }), tools, [])
+  assert.equal(first?.toolName, 'checkCommunity')
+  // ...but a second attempt is refused — the tool already ran once this run.
+  const second = await repairGearToolCall(call('checkCommunity', { models: ['Ghost 16'], focus: 'fit' }), tools, [assistantCall('checkCommunity')])
+  assert.equal(second, null)
+
+  // Six searches in, the run is stuck: searches must become phantoms, not execute again.
+  const sixSearches = Array.from({ length: 6 }, () => assistantCall('searchProducts'))
+  assert.equal(await repairGearToolCall(call('searchProducts', { query: 'ghost 17' }), tools, sixSearches), null)
+  // ...while recommendProducts repairs stay open — that is the exit the rescue wants.
+  const pick = await repairGearToolCall(
+    call('recommendProducts', { picks: [{ name: 'Ghost 16', url: 'https://x.co/p' }, { name: 'A', url: 'https://x.co/a' }, { name: 'B', url: 'https://x.co/b' }] }),
+    tools,
+    sixSearches,
+  )
+  assert.equal(pick?.toolName, 'recommendProducts')
+
+  // Three phantoms is the other stuck trigger: context tools are refused too.
+  const threeErrs = [errResult('checkCommunity'), errResult('checkCommunity'), errResult('checkCommunity')]
+  assert.equal(await repairGearToolCall(call('checkCommunity', { models: ['G'], focus: 'f' }), tools, threeErrs), null)
+  // Below every threshold a hidden call still repairs — first off-phase calls stay lenient.
+  const ok = await repairGearToolCall(call('search_products', { query: 'trail shoes uk' }), tools, [])
+  assert.equal(ok?.toolName, 'searchProducts')
 })
 
 test('error reports: queries and long path segments never reach the log', () => {

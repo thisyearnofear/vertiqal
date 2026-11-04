@@ -168,10 +168,31 @@ export function phantomToolCall<T extends string>(messages: ModelMessage[] | und
   return null
 }
 
+/** Tools the depth plan runs at most once; a repeat attempt is always off-phase spinning. */
+const SINGLE_USE_TOOLS: ReadonlySet<string> = new Set(['checkEvidence', 'buildGearProfile', 'checkCommunity', 'checkAthletes'])
+
+/** Assistant tool calls per name so far in this run (including calls that ended in error text). */
+function callCounts(messages: ModelMessage[] | undefined): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const m of messages ?? []) {
+    if (m.role !== 'assistant' || !Array.isArray(m.content)) continue
+    for (const p of m.content) {
+      if (p.type === 'tool-call') counts.set(p.toolName, (counts.get(p.toolName) ?? 0) + 1)
+    }
+  }
+  return counts
+}
+
 /**
  * Repair callback for ToolLoopAgent. Returns a callable tool invocation when the attempted one maps
  * to a real tool with schema-valid (or schema-fixable) arguments, otherwise null so the SDK's
  * standard error text reaches the model.
+ *
+ * A repaired call EXECUTES, so repair must enforce the same budgets prepareStep tracks — otherwise
+ * a weak model spins forever on off-phase calls that return real results, never producing the
+ * error-text phantoms the stuck detection counts (observed: a 132s run of repeated context checks
+ * that died at the step cap without recommending). Refusing returns the SDK's error text, which
+ * registers as a phantom and pushes the run toward the rescue gate instead of feeding the loop.
  */
 export async function repairGearToolCall(
   toolCall: RawToolCall,
@@ -180,6 +201,12 @@ export async function repairGearToolCall(
 ): Promise<RawToolCall | null> {
   const target = matchToolName(toolCall.toolName, Object.keys(tools))
   if (!target) return null
+  const counts = callCounts(messages)
+  // Mirrors the rescue trigger in prepareStep: once the run is stuck, the only repair allowed is
+  // the one the rescue wants — recommendProducts. Everything else becomes a phantom.
+  const stuck = (counts.get('searchProducts') ?? 0) >= 6 || phantomToolCalls(messages).length >= 3
+  if (stuck && target !== 'recommendProducts') return null
+  if (SINGLE_USE_TOOLS.has(target) && (counts.get(target) ?? 0) >= 1) return null
   let args: unknown
   try {
     args = typeof toolCall.input === 'string' ? JSON.parse(toolCall.input) : toolCall.input
