@@ -128,5 +128,9 @@ export function briefToPrompt(brief: MovementBrief, prefs: ShopperPrefs) {
     `Voice: speak to me as ${VOICE_PROFILE[prefs.voice].prompt}.`,
     `Depth: ${prefs.depth}`,
     `Find me the right ${brief.sport === 'running' ? 'running shoe' : 'climbing shoe'}.`,
+    // Small non-reasoning models (e.g. Qwen3.6-A3B with thinking off) occasionally answer a
+    // rich system prompt in prose without touching a tool; one explicit imperative line keeps
+    // them on the workflow. Harmless for larger models.
+    'Work with your tools in order: buildGearProfile first, then searchProducts for real product pages, then recommendProducts with the final shortlist.',
   ].join('\n')
 }
