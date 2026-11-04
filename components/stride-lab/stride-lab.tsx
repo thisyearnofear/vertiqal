@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
-import { Box, Camera, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
+import { Box, Calendar, Camera, Film, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
 import { forgetBrief, saveBrief, savePersona } from '@/app/actions'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -1294,6 +1294,47 @@ export function StrideLab({
         {choice && hero && visible.takeAway && (
           <div id="hero-frame" className="scroll-mt-6">
             <HeroCard frame={hero} readout={panelReadout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
+          </div>
+        )}
+
+        {/* Film-again prompt — shown after baseline is pinned, before re-film */}
+        {baseline && hero && previousHeroRef.current === hero.id && (
+          <div id="hero-film-again" className="scroll-mt-6">
+            <div className="housing rounded-2xl p-4 md:p-6">
+              <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved flex items-center gap-2">
+                <span className="led" data-state="on" aria-hidden /> Film again
+              </p>
+              <h2 className="mt-2 text-balance text-xl font-semibold text-foreground">See what changed</h2>
+              <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
+                {`You filmed on ${new Date(baseline.readout.events > 0 ? Date.now() : Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Film yourself again and Forma will compare your movement — side by side, before and after.`}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button variant="outline" size="lg" className="gap-2" onClick={() => {
+                  // Reset hero to trigger a new capture
+                  setHero(null)
+                }}>
+                  <Film aria-hidden className="size-4" />
+                  Film again
+                </Button>
+                <Button variant="outline" size="lg" className="gap-2" onClick={() => {
+                  // Download a .ics reminder for 30 days from now
+                  const future = new Date()
+                  future.setDate(future.getDate() + 30)
+                  const formatted = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+                  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Forma//EN', 'BEGIN:VEVENT', `DTSTART:${formatted(future)}`, `DTEND:${formatted(new Date(future.getTime() + 3600000))}`, `SUMMARY:Film yourself again — Forma`, `DESCRIPTION:Film a clip of your ${sport} and upload it to Forma to see how your movement has changed.`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
+                  const blob = new Blob([ics], { type: 'text/calendar' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `forma-film-reminder-${future.toISOString().split('T')[0]}.ics`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}>
+                  <Calendar aria-hidden className="size-4" />
+                  30-day reminder
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 
