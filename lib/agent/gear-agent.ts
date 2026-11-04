@@ -263,8 +263,10 @@ export function createGearAgent(resolved: ResolvedModel) {
     if (!count('recommendProducts') && (phantoms.length >= 3 || count('searchProducts') >= 6)) {
       const hits = productHitsIn(messages)
       const pages = [...new Map(hits.map((h) => [urlKey(h.url), `${h.title} — ${h.url}`])).values()].slice(0, 12)
+      // The SDK rejects system messages inside the conversation (AI_InvalidPromptError), so the
+      // directive rides as a user turn — small models follow it just as well.
       const alreadyRescued = messages.some(
-        (m) => m.role === 'system' && typeof m.content === 'string' && m.content.startsWith(RESCUE_MARKER),
+        (m) => m.role === 'user' && typeof m.content === 'string' && m.content.startsWith(RESCUE_MARKER),
       )
       const escalation = await rescueModel()
       return {
@@ -276,7 +278,7 @@ export function createGearAgent(resolved: ResolvedModel) {
               messages: [
                 ...messages,
                 {
-                  role: 'system' as const,
+                  role: 'user' as const,
                   content: `${RESCUE_MARKER} Stop searching — you already have enough. Call recommendProducts NOW with exactly three picks, copying each url verbatim from these product pages found earlier: ${pages.join(' | ') || '(none found — give your three best-known models with uk retailer urls)'}. If the shoe you wanted is not listed, pick the closest one that is. Do not call any other tool.`,
                 },
               ],
