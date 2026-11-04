@@ -48,7 +48,7 @@ import { createMemoryCounterStore, createRedisCounterStore, redisConfig } from '
 import { MissingSecretError, hasSecret } from '../secrets.ts'
 import { parseChain, parseSpec } from '../agent/model-spec.ts'
 import type { ModelMessage } from 'ai'
-import { GEAR_TOOL_NAMES, matchToolName, phantomToolCall, repairToolArgs } from '../agent/tool-repair.ts'
+import { GEAR_TOOL_NAMES, matchToolName, phantomToolCall, phantomToolCalls, repairToolArgs } from '../agent/tool-repair.ts'
 import { buildErrorReport, redactPath } from '../error-report.ts'
 import { CLICK_REF_PATTERN } from '../outcome/schema.ts'
 import { OUTCOME_LINK_TTL_MS, issueOutcomeToken, newClickRef, readOutcomeToken } from '../outcome/token.ts'
@@ -1202,6 +1202,13 @@ test('tool repair: name matching, arg coercion and phantom detection', () => {
   // ...but only for known tools, and only the most recent tool message
   assert.equal(phantomToolCall([toolMsg('flyToMoon', { type: 'error-text', value: 'AI_NoSuchToolError' })], GEAR_TOOL_NAMES), null)
   assert.equal(phantomToolCall([toolMsg('searchProducts', { type: 'json', value: { results: [] } })], GEAR_TOOL_NAMES), null)
+  // phantomToolCalls counts every hallucination, oldest first (prepareStep caps yields on it)
+  const two = [
+    toolMsg('searchProducts', { type: 'error-text', value: 'AI_NoSuchToolError' }),
+    toolMsg('checkCommunity', { type: 'error-text', value: 'Model tried to call unavailable tool' }),
+  ]
+  assert.deepEqual(phantomToolCalls(two), ['searchProducts', 'checkCommunity'])
+  assert.equal(phantomToolCall(two, GEAR_TOOL_NAMES), 'checkCommunity', 'most recent known phantom wins')
 })
 
 test('error reports: queries and long path segments never reach the log', () => {

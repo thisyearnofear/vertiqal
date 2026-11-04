@@ -7,7 +7,7 @@ import { modelKey, reconcileUrl, shortlistProblem, urlKey } from './picks'
 import { issueStockToken } from './stock-token'
 import { logCost } from '@/lib/cost-log'
 import { searchCommunity, searchOpen, searchResearch, searchWeb } from './tavily'
-import { GEAR_TOOL_NAMES, phantomToolCall, repairGearToolCall } from './tool-repair'
+import { GEAR_TOOL_NAMES, phantomToolCall, phantomToolCalls, repairGearToolCall } from './tool-repair'
 
 const requirement = z.object({
   attribute: z.string().describe('Shoe attribute, e.g. "Heel cushioning" or "Heel-to-toe drop"'),
@@ -271,7 +271,12 @@ export function createGearAgent(model: LanguageModel) {
         // auto here too — a hard 'required' makes Qwen2.5-72B occasionally answer in text, which the
         // SDK turns into a fatal AI_ToolChoiceViolationError. Recovery is instead driven by the
         // rejection payload's availableProductPages plus the prompt instruction to copy from it.
-        return { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[] }
+        // Cap corrective searching so a model that keeps re-searching still converges on a pick.
+        return {
+          activeTools: (count('searchProducts') < 6
+            ? ['searchProducts', 'recommendProducts']
+            : ['recommendProducts']) as ToolName[],
+        }
       }
       if (!count('recommendProducts')) {
         if (count('searchProducts') < DEPTHS[depth].searches) return only('searchProducts')
@@ -288,9 +293,12 @@ export function createGearAgent(model: LanguageModel) {
     const decision = phase()
     // If the last step hallucinated a tool this phase hides, yield: put it back in the active set
     // so the model's retry executes for real instead of bouncing off AI_NoSuchToolError text until
-    // the step budget dies (observed: a 14-step run of 12 phantom searches and zero picks).
+    // the step budget dies (observed: a 14-step run of 12 phantom searches and zero picks). Cap the
+    // yields though — observed failure #2 was a model that used the unlocked search as an escape
+    // hatch, searching 15 times and never recommending; after three hallucinations the phase gate
+    // goes hard again and the only visible move is the one the depth plan calls for.
     const phantom = phantomToolCall(messages, GEAR_TOOL_NAMES)
-    if (phantom && !decision.activeTools.includes(phantom)) {
+    if (phantom && phantomToolCalls(messages).length <= 3 && !decision.activeTools.includes(phantom)) {
       return { ...decision, activeTools: [...decision.activeTools, phantom] }
     }
     return decision
