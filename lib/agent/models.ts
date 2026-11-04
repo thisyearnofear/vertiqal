@@ -162,6 +162,18 @@ function disableQwenThinking(args: Record<string, unknown>): Record<string, unkn
   return { ...args, chat_template_kwargs: { enable_thinking: false, ...extra } }
 }
 
+/**
+ * Provider fetch with a hard per-call timeout. Without it one hung upstream call can eat the
+ * whole 300s function budget in silence (measured: a run killed at the Vercel timeout with no
+ * agent_run log). With it, a call >90s fails fast and the run ends with an error the client
+ * can retry, instead of stalling to the wall-clock limit.
+ */
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const timeout = AbortSignal.timeout(90_000)
+  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+  return fetch(input, { ...init, signal })
+}
+
 function providerInstance(config: ProviderConfig): ReturnType<typeof createOpenAICompatible> {
   let instance = providers.get(config.name)
   if (!instance) {
@@ -170,6 +182,7 @@ function providerInstance(config: ProviderConfig): ReturnType<typeof createOpenA
       baseURL: config.baseUrl,
       apiKey: config.apiKey,
       transformRequestBody: disableQwenThinking,
+      fetch: fetchWithTimeout,
     })
     providers.set(config.name, instance)
   }
