@@ -1,7 +1,7 @@
 import 'server-only'
 import { generateText, gateway, type LanguageModel } from 'ai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { parseChain, type ModelProvider, type ModelSpec } from './model-spec'
+import { parseChain, type ModelSpec } from './model-spec'
 
 /**
  * Model resolution with pluggable providers.
@@ -15,23 +15,33 @@ import { parseChain, type ModelProvider, type ModelSpec } from './model-spec'
  *
  * A candidate is a spec:
  *   gateway:<id>              a Vercel AI Gateway model (the default when no provider is named)
- *   openai-compatible:<id>    any OpenAI-compatible endpoint (xAI, OpenAI, Groq, Together,
- *                             OpenRouter, LM Studio, Ollama, vLLM, …) configured by
- *                             FORMA_LLM_BASE_URL + FORMA_LLM_API_KEY
+ *   openai-compatible:<id>    the primary OpenAI-compatible provider (FORMA_LLM_*)
+ *   compatible:<id>           alias of the above
+ *   <name>:<id>               any provider matched by its configured name — the primary
+ *                             (FORMA_LLM_NAME, default "llm") or the secondary
+ *                             (FORMA_LLM2_NAME, default "llm2"). e.g. "hetzner:Qwen3.8-27B"
+ *                             when FORMA_LLM2_NAME=hetzner.
  *
  * Configuration:
- *   FORMA_AGENT_MODELS        comma-separated specs for the agent role, first = preferred
- *   FORMA_FAST_MODELS         comma-separated specs for the fast role
- *   FORMA_LLM_BASE_URL        base URL of the OpenAI-compatible provider (e.g. https://api.x.ai/v1)
+ *   FORMA_AGENT_MODELS        comma-separated specs for the agent role; when set, this chain is
+ *                             authoritative (nothing is auto-prepended)
+ *   FORMA_FAST_MODELS         same for the fast role
+ *   FORMA_LLM_BASE_URL        base URL of the primary OpenAI-compatible provider
  *   FORMA_LLM_API_KEY         key for that provider
- *   FORMA_LLM_MODEL           model id to prefer on that provider
- *   FORMA_LLM_VISION_MODEL    optional model id for image-bearing calls on that provider
+ *   FORMA_LLM_MODEL           model id to prefer on that provider (auto-leads the default chains)
+ *   FORMA_LLM_NAME            provider name used in specs (default "llm")
+ *   FORMA_LLM_VISION_MODEL    optional model id for image-bearing calls on the primary provider
  *                             (e.g. Qwen/Qwen3-VL-32B-Instruct); falls back to the agent chain
+ *   FORMA_LLM2_BASE_URL       base URL of an optional SECONDARY OpenAI-compatible provider
+ *   FORMA_LLM2_API_KEY        key for the secondary provider
+ *   FORMA_LLM2_NAME           provider name used in specs (default "llm2"); the secondary is only
+ *                             used when named in a *_MODELS chain — it is never auto-prepended
  *   FORMA_DISABLE_GATEWAY     set to 1 to skip gateway candidates entirely
  *
- * When FORMA_LLM_BASE_URL, FORMA_LLM_API_KEY and FORMA_LLM_MODEL are all set, that provider is
- * tried first and the gateway stays as the fallback — so a newly sourced provider can take over
- * with three env vars and no code change.
+ * When FORMA_LLM_BASE_URL, FORMA_LLM_API_KEY and FORMA_LLM_MODEL are all set, that provider leads
+ * the default chains and the gateway stays as the fallback — so a newly sourced provider can take
+ * over with three env vars and no code change. A second provider (e.g. a self-hosted box) can be
+ * layered in front with FORMA_LLM2_* plus an explicit FORMA_AGENT_MODELS chain.
  */
 
 type ModelRole = 'agent' | 'fast' | 'vision'
@@ -59,12 +69,33 @@ const PROBE_TIMEOUT_MS = 10_000
 
 const env = (name: string) => process.env[name]?.trim() || undefined
 
-/** The configured OpenAI-compatible provider, when one is set up. */
-function directSpec(): ModelSpec | null {
+interface ProviderConfig {
+  /** Name used to address this provider in model specs. */
+  name: string
+  baseUrl: string
+  apiKey: string
+}
+
+/** The primary OpenAI-compatible provider (FORMA_LLM_*), when fully configured. */
+function primaryConfig(): ProviderConfig | null {
   const baseUrl = env('FORMA_LLM_BASE_URL')
   const apiKey = env('FORMA_LLM_API_KEY')
+  if (!baseUrl || !apiKey) return null
+  return { name: env('FORMA_LLM_NAME') ?? 'llm', baseUrl, apiKey }
+}
+
+/** The optional secondary provider (FORMA_LLM2_*), when fully configured. */
+function secondaryConfig(): ProviderConfig | null {
+  const baseUrl = env('FORMA_LLM2_BASE_URL')
+  const apiKey = env('FORMA_LLM2_API_KEY')
+  if (!baseUrl || !apiKey) return null
+  return { name: env('FORMA_LLM2_NAME') ?? 'llm2', baseUrl, apiKey }
+}
+
+/** Spec for the primary provider's default model, when one is named. */
+function directSpec(): ModelSpec | null {
   const model = env('FORMA_LLM_MODEL')
-  if (!baseUrl || !apiKey || !model) return null
+  if (!primaryConfig() || !model) return null
   return { provider: 'openai-compatible', id: model }
 }
 
@@ -73,24 +104,37 @@ function gatewayEnabled() {
   return Boolean(env('AI_GATEWAY_API_KEY'))
 }
 
-function chainFor(role: ModelRole): ModelSpec[] {
-  if (role === 'vision') {
-    // Image-bearing calls need a multimodal model. When one is named on the compatible provider
-    // it leads; otherwise the agent chain runs (gateway defaults are multimodal-first).
-    const direct = directSpec()
-    const visionModel = env('FORMA_LLM_VISION_MODEL')
-    const visionSpec: ModelSpec | null = direct && visionModel ? { provider: 'openai-compatible', id: visionModel } : null
-    const fallback = chainFor('agent')
-    return visionSpec ? [visionSpec, ...fallback] : fallback
-  }
-  const raw = env(role === 'agent' ? 'FORMA_AGENT_MODELS' : 'FORMA_FAST_MODELS')
-  const configured = raw ? parseChain(raw) : DEFAULT_CHAINS[role]
-  const direct = directSpec()
-  const specs = direct ? [direct, ...configured] : configured
-  return specs.filter((spec) => (spec.provider === 'gateway' ? gatewayEnabled() : true))
+function dedupe(specs: ModelSpec[]): ModelSpec[] {
+  const seen = new Set<string>()
+  return specs.filter((spec) => {
+    const key = `${spec.provider}:${spec.id}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
-let compatibleProvider: ReturnType<typeof createOpenAICompatible> | null = null
+function chainFor(role: ModelRole): ModelSpec[] {
+  if (role === 'vision') {
+    // Image-bearing calls need a multimodal model. When one is named on the primary provider it
+    // leads; otherwise the agent chain runs (gateway defaults are multimodal-first).
+    const visionModel = env('FORMA_LLM_VISION_MODEL')
+    const visionSpec: ModelSpec | null = primaryConfig() && visionModel ? { provider: 'openai-compatible', id: visionModel } : null
+    const fallback = chainFor('agent')
+    return dedupe(visionSpec ? [visionSpec, ...fallback] : fallback)
+  }
+  const raw = env(role === 'agent' ? 'FORMA_AGENT_MODELS' : 'FORMA_FAST_MODELS')
+  if (raw) {
+    // An explicit chain is authoritative: it can name the primary, the secondary or the gateway in
+    // whatever order makes sense, and nothing is silently prepended.
+    return dedupe(parseChain(raw).filter((spec) => (spec.provider === 'gateway' ? gatewayEnabled() : true)))
+  }
+  const direct = directSpec()
+  const specs = direct ? [direct, ...DEFAULT_CHAINS[role]] : DEFAULT_CHAINS[role]
+  return dedupe(specs.filter((spec) => (spec.provider === 'gateway' ? gatewayEnabled() : true)))
+}
+
+const providers = new Map<string, ReturnType<typeof createOpenAICompatible>>()
 
 /**
  * Qwen3-family models think out loud by default: every step of the tool loop emits a long
@@ -108,17 +152,42 @@ function disableQwenThinking(args: Record<string, unknown>): Record<string, unkn
   return { ...args, chat_template_kwargs: { enable_thinking: false, ...extra } }
 }
 
+function providerInstance(config: ProviderConfig): ReturnType<typeof createOpenAICompatible> {
+  let instance = providers.get(config.name)
+  if (!instance) {
+    instance = createOpenAICompatible({
+      name: config.name,
+      baseURL: config.baseUrl,
+      apiKey: config.apiKey,
+      transformRequestBody: disableQwenThinking,
+    })
+    providers.set(config.name, instance)
+  }
+  return instance
+}
+
+/** True when this spec names a provider that is configured (or the gateway). */
+function resolvable(spec: ModelSpec): boolean {
+  if (spec.provider === 'gateway') return true
+  if (spec.provider === 'openai-compatible') return primaryConfig() !== null
+  const secondary = secondaryConfig()
+  if (secondary && spec.provider === secondary.name) return true
+  const primary = primaryConfig()
+  return Boolean(primary && spec.provider === primary.name)
+}
+
 function modelFor(spec: ModelSpec): LanguageModel {
   if (spec.provider === 'gateway') return gateway(spec.id)
-  const baseURL = env('FORMA_LLM_BASE_URL') ?? ''
-  const apiKey = env('FORMA_LLM_API_KEY') ?? ''
-  compatibleProvider ??= createOpenAICompatible({
-    name: env('FORMA_LLM_NAME') ?? 'llm',
-    baseURL,
-    apiKey,
-    transformRequestBody: disableQwenThinking,
-  })
-  return compatibleProvider(spec.id)
+  if (spec.provider === 'openai-compatible') {
+    const config = primaryConfig()
+    if (!config) throw new Error('primary OpenAI-compatible provider is not configured')
+    return providerInstance(config)(spec.id)
+  }
+  const secondary = secondaryConfig()
+  if (secondary && spec.provider === secondary.name) return providerInstance(secondary)(spec.id)
+  const primary = primaryConfig()
+  if (primary && spec.provider === primary.name) return providerInstance(primary)(spec.id)
+  throw new Error(`unknown provider "${spec.provider}" in model spec`)
 }
 
 /** A model plus how to describe it in logs. */
@@ -126,7 +195,8 @@ export interface ResolvedModel {
   model: LanguageModel
   /** e.g. "grok-4.7" or "spacexai/grok-4.7" */
   label: string
-  provider: ModelProvider
+  /** Provider token as configured, e.g. "gateway", "featherless", "hetzner". */
+  provider: string
 }
 
 const resolved = new Map<ModelRole, { model: ResolvedModel | null; at: number }>()
@@ -134,6 +204,7 @@ const probing = new Map<ModelRole, Promise<ResolvedModel | null>>()
 
 async function probe(role: ModelRole): Promise<ResolvedModel | null> {
   for (const spec of chainFor(role)) {
+    if (!resolvable(spec)) continue
     try {
       const model = modelFor(spec)
       await generateText({

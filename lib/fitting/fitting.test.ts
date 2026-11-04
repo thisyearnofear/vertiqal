@@ -1142,12 +1142,21 @@ test('model specs: bare ids use the gateway, prefixed ids pick a provider, junk 
   assert.deepEqual(parseSpec('gateway:openai/gpt-5-mini'), { provider: 'gateway', id: 'openai/gpt-5-mini' })
   assert.deepEqual(parseSpec(' openai-compatible:grok-4 '), { provider: 'openai-compatible', id: 'grok-4' })
   assert.deepEqual(parseSpec('compatible:llama3.1:8b'), { provider: 'openai-compatible', id: 'llama3.1:8b' }, 'ids may contain colons')
-  assert.equal(parseSpec('mystery:model'), null)
+  // Named providers (e.g. a secondary FORMA_LLM2_* box) parse even when unknown here —
+  // resolution against what is actually configured skips them later.
+  assert.deepEqual(parseSpec('hetzner:Qwen3.8-27B'), { provider: 'hetzner', id: 'Qwen3.8-27B' })
+  assert.deepEqual(parseSpec('mystery:model'), { provider: 'mystery', id: 'model' })
   assert.equal(parseSpec('gateway:'), null)
+  assert.equal(parseSpec(':model'), null, 'empty provider is junk')
   assert.equal(parseSpec('  '), null)
   assert.deepEqual(
     parseChain('compatible:a, ,b/c,bogus:d'),
-    [{ provider: 'openai-compatible', id: 'a' }, { provider: 'gateway', id: 'b/c' }],
+    [
+      { provider: 'openai-compatible', id: 'a' },
+      { provider: 'gateway', id: 'b/c' },
+      { provider: 'bogus', id: 'd' },
+    ],
+    'unknown provider names survive parsing and are filtered at resolution',
   )
 })
 

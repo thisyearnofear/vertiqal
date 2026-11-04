@@ -101,6 +101,10 @@ export function createGearAgent(model: LanguageModel) {
   // Deepest legit run is ~8 steps (research → profile → 2 searches → community + athletes → recommend → final text).
   // Room for two rejected shortlists with corrective searches and re-picks.
   stopWhen: stepCountIs(14),
+  // Cap each step's generation. Tool-call JSON is tiny and the longest legit output is the
+  // closing narrative (~1k tokens); a cap stops a model that starts reasoning out loud from
+  // burning the whole wall-clock budget on one step (observed on shared open-weight hosts).
+  maxOutputTokens: 4_096,
   tools: {
     checkEvidence: tool({
       description:
