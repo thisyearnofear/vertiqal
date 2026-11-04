@@ -46,7 +46,7 @@ Keep any text between tool calls to one short sentence, in the requested voice.
 - searchProducts: specific queries for current models that fit the profile, favouring UK retailers with product pages (not review roundups). To build a diverse shortlist, search one distinct candidate model at a time (e.g. "Brooks Ghost 16 buy") rather than broad category queries — broad queries return several retailers selling the same shoe.
 - checkCommunity (considered and deep): name the 3–5 strongest candidates. Drop or demote a candidate if riders consistently report a problem relevant to this shopper.
 - checkAthletes (deep): the same top 3 candidates. Call it in the same step as checkCommunity when both are offered.
-- recommendProducts: exactly 3 picks, each a different model (a GORE-TEX, wide or gender version is the same model), best fit first. Only use product-page URLs from searchProducts results, never review or forum links from other tools; never invent or edit URLs. Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
+- recommendProducts: exactly 3 picks, each a different model (a GORE-TEX, wide or gender version is the same model), best fit first. Only use product-page URLs from searchProducts results, never review or forum links from other tools; never invent or edit URLs. If a call is rejected, the response lists availableProductPages — copy your next picks' URLs exactly from that list (searching once more first only if nothing there fits). Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
 - Finish with one short sentence, in the requested voice, inviting the shopper to choose one. Forma checks their size is in stock once they choose, so never send them off to a retailer yourself.
 
 If the brief mentions a previous fitting, treat this as a returning customer: build on what they chose last time (e.g. if they reported a problem with that shoe, steer away from it and say why).
@@ -185,7 +185,10 @@ export function createGearAgent(model: LanguageModel) {
             productUrls: seen.length,
             swapped,
           })
-          return { picks: [], error: problem }
+          // Give the model the real product pages to pick from, so it recovers by copying a known
+          // URL instead of inventing another one (the failure mode that kills flaky-model runs).
+          const availableProductPages = dup ? undefined : hits.slice(0, 12).map((h) => `${h.title} — ${h.url}`)
+          return { picks: [], error: problem, ...(availableProductPages ? { availableProductPages } : {}) }
         }
         if (swapped) logCost('shortlist_repaired', { picks: repaired.length, swapped })
         // A missing STOCK_CHECK_SECRET must not kill the shortlist: the picks still stand, the size
