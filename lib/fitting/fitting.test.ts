@@ -36,7 +36,7 @@ import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent
 import { guardedStockVerdict, inspectStockPage, type StockPageEvidence } from '../agent/stock-page.ts'
 import { frameQuality, usableKeypoint } from '../pose/framing.ts'
 import { GaitTracker, MIN_STRIKES_FOR_SIGNALS, cadenceFromStrikes } from '../metrics/gait.ts'
-import { modelKey, shortlistProblem } from '../agent/picks.ts'
+import { modelKey, reconcileUrl, sameShoe, shortlistProblem, urlKey } from '../agent/picks.ts'
 import { narrate, shortShoeName } from './narration.ts'
 import { ClimbTracker } from '../metrics/climb.ts'
 import { AFFILIATE_DISCLOSURE, parseAffiliateMerchants, wrapAffiliateUrl } from '../agent/affiliate.ts'
@@ -666,6 +666,42 @@ test('shortlist guard: rejects the same model twice, accepts three different sho
   assert.equal(shortlistProblem(ok, searched), null, 'links match despite www, trailing slash, query or hash')
   const review = [ok[0], ok[1], p('New Balance Hierro v9', 'https://www.runnersworld.com/hierro-v9-review')]
   assert.match(shortlistProblem(review, searched) ?? '', /Hierro v9 has no product page/)
+})
+
+test('shortlist repair: stray review URL is swapped for the grounded product page', () => {
+  const hits = [
+    { title: 'Brooks Ghost 16 Mens Road Running Shoe', url: 'https://www.brooksrunning.com/en_gb/ghost-16/110418.html' },
+    { title: 'Hoka Clifton 9', url: 'https://www.runnersneed.com/p/hoka-mens-clifton-9-shoes-C22AGA0146.html' },
+    { title: 'Asics Gel Nimbus 27 Running Shoes', url: 'https://www.asics.com/gb/en-gb/gel-nimbus-27/c/as60100000.html' },
+  ]
+  const allowed = new Set(hits.map((h) => urlKey(h.url)))
+
+  // sameShoe matches across retail titles, ignoring case/punctuation/gender words
+  assert.ok(sameShoe('Brooks Ghost 16', 'Brooks Ghost 16 Mens Road Running Shoe'))
+  assert.ok(sameShoe('Hoka Clifton 9', 'HOKA Clifton 9 Mens Road Running Shoes'))
+  assert.ok(!sameShoe('Brooks Ghost 16', 'Brooks Ghost 15'), 'different versions are not the same shoe')
+  assert.ok(!sameShoe('Brooks Ghost 16', 'Asics Gel Nimbus 27'), 'different models never match')
+
+  // A pick already pointing at a product URL is untouched
+  const good = { name: 'Brooks Ghost 16', url: 'https://www.brooksrunning.com/en_gb/ghost-16/110418.html' }
+  assert.equal(reconcileUrl(good, hits, allowed), good.url)
+
+  // A pick citing a community/review URL (never returned by searchProducts) gets swapped to the
+  // grounded product page for the same shoe
+  const stray = { name: 'Brooks Ghost 16', url: 'https://www.reddit.com/r/RunningShoeGeeks/ghost16/' }
+  assert.equal(reconcileUrl(stray, hits, allowed), 'https://www.brooksrunning.com/en_gb/ghost-16/110418.html')
+
+  // A shoe with no product page in the results keeps its URL (still rejected downstream)
+  const unknown = { name: 'Nike Pegasus 41', url: 'https://www.reddit.com/r/RunningShoeGeeks/pegasus41/' }
+  assert.equal(reconcileUrl(unknown, hits, allowed), unknown.url)
+
+  // After repair the shortlist passes the guard
+  const repaired = [
+    { name: 'Brooks Ghost 16', url: reconcileUrl(stray, hits, allowed) },
+    { name: 'Hoka Clifton 9', url: 'https://www.runnersneed.com/p/hoka-mens-clifton-9-shoes-C22AGA0146.html' },
+    { name: 'Asics Gel Nimbus 27', url: 'https://www.asics.com/gb/en-gb/gel-nimbus-27/c/as60100000.html' },
+  ]
+  assert.equal(shortlistProblem(repaired, hits.map((h) => h.url)), null, 'repaired picks pass once URLs are grounded')
 })
 
 test('cadence: robust to hidden far foot, doubled contacts and stray detections', () => {

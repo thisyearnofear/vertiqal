@@ -40,3 +40,40 @@ export function shortlistProblem(picks: { name: string; url: string }[], product
   }
   return null
 }
+
+/**
+ * Does this search-result title plausibly name the same shoe as the pick? Compares the normalised
+ * model keys (brand + model + version; gender/waterproof/width/shoe-type stripped).
+ */
+export function sameShoe(pickName: string, title: string): boolean {
+  const a = modelKey(pickName)
+  const b = modelKey(title)
+  if (!a || !b) return false
+  if (a.includes(b) || b.includes(a)) return true
+  const at = new Set(a.split(' ').filter((t) => t.length > 1))
+  const bt = new Set(b.split(' ').filter((t) => t.length > 1))
+  if (!at.size) return false
+  // Version numbers must agree: Ghost 16 is not Ghost 15, even though the words overlap.
+  const numsA = [...at].filter((t) => /\d/.test(t))
+  const numsB = [...bt].filter((t) => /\d/.test(t))
+  if (numsA.length && numsB.length && !numsA.every((n) => numsB.includes(n))) return false
+  const overlap = [...at].filter((t) => bt.has(t)).length
+  return overlap >= 2 && overlap / at.size >= 0.6
+}
+
+/**
+ * Flaky models sometimes cite a review/forum link for a shoe that the product search DID return a
+ * real product page for. Rather than reject and burn another loop (which such models often fail to
+ * recover from), swap in the grounded product URL. Only URLs that actually came back from the
+ * product search are ever used, so nothing is invented; a pick with no matching product page keeps
+ * its URL and is still rejected by shortlistProblem.
+ */
+export function reconcileUrl(
+  pick: { name: string; url: string },
+  hits: { title: string; url: string }[],
+  allowed: Set<string>,
+): string {
+  if (allowed.has(urlKey(pick.url))) return pick.url
+  const match = hits.find((h) => sameShoe(pick.name, h.title))
+  return match ? match.url : pick.url
+}
