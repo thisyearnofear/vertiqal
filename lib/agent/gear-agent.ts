@@ -229,11 +229,10 @@ export function createGearAgent(resolved: ResolvedModel) {
   // step, but the failed call itself still costs one).
   stopWhen: stepCountIs(16),
   // Cap each step's generation. Tool-call JSON is tiny and the longest legit output is the
-  // closing narrative (~1k tokens); a cap stops a model that starts reasoning out loud from
-  // burning the whole wall-clock budget on one step (observed on shared open-weight hosts).
-  // 8k leaves headroom for reasoning tokens while staying under the 8192 output limit that the
-  // Hetzner-hosted Qwen3.6-A3B endpoint enforces (a lower cap truncated the final answer).
-  maxOutputTokens: 8_000,
+  // closing narrative (~1k tokens). A measured runaway emitted 8.4k output tokens over ~200s
+  // before the provider errored; 4k still leaves headroom for a reasoning model's chain
+  // (observed max ~3k) while halving the worst-case burn on one step.
+  maxOutputTokens: 4_000,
   tools: gearTools,
   // Open-weight models call tools that earlier phases showed but the current step hides; the SDK
   // would feed them an AI_NoSuchToolError text result and they often loop on it until the step
