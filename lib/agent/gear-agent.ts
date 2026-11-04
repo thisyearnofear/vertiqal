@@ -238,11 +238,11 @@ export function createGearAgent(model: LanguageModel) {
     )
     if (rejectedShortlist && count('recommendProducts') < 3) {
       // Let Forma keep hunting: a rejected shortlist lifts the depth search cap so a
-      // monoculture result set (same model, many retailers) can be worked around. Hard-required
-      // here because weak models otherwise shrug and stop after a single rejection. (Qwen3-style
-      // models that violate toolChoice would crash on this branch — the standard agent model
-      // Qwen2.5-72B honours it; see docs/architecture.md § Model resolution.)
-      return { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[], toolChoice: 'required' as const }
+      // monoculture result set (same model, many retailers) can be worked around. Keep toolChoice
+      // auto here too — a hard 'required' makes Qwen2.5-72B occasionally answer in text, which the
+      // SDK turns into a fatal AI_ToolChoiceViolationError. Recovery is instead driven by the
+      // rejection payload's availableProductPages plus the prompt instruction to copy from it.
+      return { activeTools: ['searchProducts', 'recommendProducts'] as ToolName[] }
     }
     if (!count('recommendProducts')) {
       if (count('searchProducts') < DEPTHS[depth].searches) return only('searchProducts')
