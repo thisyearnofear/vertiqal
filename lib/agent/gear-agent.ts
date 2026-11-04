@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'
 import { modelKey, reconcileUrl, shortlistProblem, urlKey } from './picks'
+import { resolveModel, type ResolvedModel } from './models'
 import { issueStockToken } from './stock-token'
 import { logCost } from '@/lib/cost-log'
 import { searchCommunity, searchOpen, searchResearch, searchWeb } from './tavily'
@@ -208,9 +209,19 @@ const gearTools = {
 
 }
 
-export function createGearAgent(model: LanguageModel) {
+const RESCUE_MARKER = 'FORMA-RESCUE:'
+
+export function createGearAgent(resolved: ResolvedModel) {
+  // When the loop gets stuck (a small model repeating hallucinated searches instead of
+  // recommending), escalate the remaining steps to the next candidate in the agent chain —
+  // a bigger reasoning model can read the accumulated context and just finish the job.
+  let rescuePromise: Promise<ResolvedModel | null> | null = null
+  const rescueModel = () => {
+    rescuePromise ??= resolveModel('agent', { skip: [resolved.label] }).catch(() => null)
+    return rescuePromise
+  }
   return new ToolLoopAgent({
-  model,
+  model: resolved.model,
   instructions: INSTRUCTIONS,
   // Deepest legit run is ~8 steps (research → profile → 2 searches → community + athletes → recommend → final text).
   // Room for two rejected shortlists with corrective searches and re-picks, plus the odd wasted
@@ -235,7 +246,7 @@ export function createGearAgent(model: LanguageModel) {
     return repaired
   },
   // Derive the phase from the conversation (not stepNumber) so it survives the approval round-trip.
-  prepareStep: ({ messages }) => {
+  prepareStep: async ({ messages }) => {
     const depth = depthFromPrompt(promptTextOf(messages))
     const called = messages.flatMap((m) =>
       m.role === 'assistant' && Array.isArray(m.content)
@@ -243,6 +254,35 @@ export function createGearAgent(model: LanguageModel) {
         : [],
     )
     const count = (name: ToolName) => called.filter((c) => c === name).length
+    // Stuck = the model is spinning on searches/hallucinations instead of shortlisting. Measured
+    // failure: A3B at ~90k cumulative input tokens repeating searchProducts 15× and never
+    // recommending. Rescue: hard-gate to recommendProducts, append one directive listing the real
+    // product pages already found, and run the rest of the loop on the escalation model. Cleared
+    // once a recommendProducts call exists so the closing text step is not re-gated.
+    const phantoms = phantomToolCalls(messages)
+    if (!count('recommendProducts') && (phantoms.length >= 3 || count('searchProducts') >= 6)) {
+      const hits = productHitsIn(messages)
+      const pages = [...new Map(hits.map((h) => [urlKey(h.url), `${h.title} — ${h.url}`])).values()].slice(0, 12)
+      const alreadyRescued = messages.some(
+        (m) => m.role === 'system' && typeof m.content === 'string' && m.content.startsWith(RESCUE_MARKER),
+      )
+      const escalation = await rescueModel()
+      return {
+        ...(escalation?.model ? { model: escalation.model } : {}),
+        activeTools: ['recommendProducts'] as ToolName[],
+        ...(alreadyRescued
+          ? {}
+          : {
+              messages: [
+                ...messages,
+                {
+                  role: 'system' as const,
+                  content: `${RESCUE_MARKER} Stop searching — you already have enough. Call recommendProducts NOW with exactly three picks, copying each url verbatim from these product pages found earlier: ${pages.join(' | ') || '(none found — give your three best-known models with uk retailer urls)'}. If the shoe you wanted is not listed, pick the closest one that is. Do not call any other tool.`,
+                },
+              ],
+            }),
+      }
+    }
     // Restrict which tools are visible per phase, but do NOT set a hard toolChoice. Open-weight
     // models (Qwen3) sometimes answer a forced-tool step with plain text, and the AI SDK turns that
     // into a fatal AI_ToolChoiceViolationError that kills the whole run. With only activeTools set,
@@ -298,7 +338,7 @@ export function createGearAgent(model: LanguageModel) {
     // hatch, searching 15 times and never recommending; after three hallucinations the phase gate
     // goes hard again and the only visible move is the one the depth plan calls for.
     const phantom = phantomToolCall(messages, GEAR_TOOL_NAMES)
-    if (phantom && phantomToolCalls(messages).length <= 3 && !decision.activeTools.includes(phantom)) {
+    if (phantom && phantoms.length < 3 && !decision.activeTools.includes(phantom)) {
       return { ...decision, activeTools: [...decision.activeTools, phantom] }
     }
     return decision

@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
   const steps: AgentStep[] = []
   return createAgentUIStreamResponse({
-    agent: createGearAgent(resolved.model),
+    agent: createGearAgent(resolved),
     uiMessages,
     abortSignal: request.signal,
     onStepEnd: (step) => {
