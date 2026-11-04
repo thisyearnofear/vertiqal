@@ -25,6 +25,8 @@ import { parseChain, type ModelProvider, type ModelSpec } from './model-spec'
  *   FORMA_LLM_BASE_URL        base URL of the OpenAI-compatible provider (e.g. https://api.x.ai/v1)
  *   FORMA_LLM_API_KEY         key for that provider
  *   FORMA_LLM_MODEL           model id to prefer on that provider
+ *   FORMA_LLM_VISION_MODEL    optional model id for image-bearing calls on that provider
+ *                             (e.g. Qwen/Qwen3-VL-32B-Instruct); falls back to the agent chain
  *   FORMA_DISABLE_GATEWAY     set to 1 to skip gateway candidates entirely
  *
  * When FORMA_LLM_BASE_URL, FORMA_LLM_API_KEY and FORMA_LLM_MODEL are all set, that provider is
@@ -32,9 +34,9 @@ import { parseChain, type ModelProvider, type ModelSpec } from './model-spec'
  * with three env vars and no code change.
  */
 
-type ModelRole = 'agent' | 'fast'
+type ModelRole = 'agent' | 'fast' | 'vision'
 
-const DEFAULT_CHAINS: Record<ModelRole, ModelSpec[]> = {
+const DEFAULT_CHAINS: Record<'agent' | 'fast', ModelSpec[]> = {
   // Reasoning + tool use across a multi-step fitting run. Multimodal-capable candidates first so
   // the same chain can serve image-bearing calls.
   agent: [
@@ -72,6 +74,15 @@ function gatewayEnabled() {
 }
 
 function chainFor(role: ModelRole): ModelSpec[] {
+  if (role === 'vision') {
+    // Image-bearing calls need a multimodal model. When one is named on the compatible provider
+    // it leads; otherwise the agent chain runs (gateway defaults are multimodal-first).
+    const direct = directSpec()
+    const visionModel = env('FORMA_LLM_VISION_MODEL')
+    const visionSpec: ModelSpec | null = direct && visionModel ? { provider: 'openai-compatible', id: visionModel } : null
+    const fallback = chainFor('agent')
+    return visionSpec ? [visionSpec, ...fallback] : fallback
+  }
   const raw = env(role === 'agent' ? 'FORMA_AGENT_MODELS' : 'FORMA_FAST_MODELS')
   const configured = raw ? parseChain(raw) : DEFAULT_CHAINS[role]
   const direct = directSpec()

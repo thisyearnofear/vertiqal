@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
   const started = Date.now()
   try {
-    const resolved = await resolveModel('agent')
+    const resolved = await resolveModel(kind === 'surface' ? 'vision' : 'agent')
     if (!resolved) {
       logCost('paid_call', { route: 'brief', ok: false, ms: Date.now() - started, kind, sport, reason: 'no_model_available' })
       return Response.json({ error: 'Forma’s model is unreachable right now — try again shortly.' }, { status: 503 })
@@ -63,7 +63,8 @@ export async function POST(request: Request) {
     const [, mediaType, data] = parsed.data.image.match(DATA_URL)!
     const { output } = await generateText({
       model: resolved.model,
-      system: `You are Forma, a ${sport} shoe fitter. This is one still from the shopper's own ${sport === 'running' ? 'running' : 'climbing'} video with a pose skeleton drawn on top. Say which listed ${sport === 'running' ? 'surface' : 'rock or wall type'} they are on, only if it is visible. If you cannot tell, return null with low confidence.`,
+      system: `You are Forma, a ${sport} shoe fitter. This is one still from the shopper's own ${sport === 'running' ? 'running' : 'climbing'} video with a pose skeleton drawn on top. Say which listed ${sport === 'running' ? 'surface' : 'rock or wall type'} they are on, only if it is visible. If you cannot tell, return null with low confidence. Return JSON only: {"surface": one of ${INTAKE_OPTIONS[sport].surfaces.join(', ')} or null, "confidence": "low" | "medium" | "high"}.`,
+      providerOptions: { openaiCompatible: { structuredOutputs: false } },
       messages: [
         {
           role: 'user',

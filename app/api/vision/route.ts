@@ -1,6 +1,6 @@
 import { Output, generateText } from 'ai'
 import { z } from 'zod'
-import { visionFindingSchema } from '@/lib/agent/fitting-notes'
+import { visionFindingSchema, WEAR_PATTERNS } from '@/lib/agent/fitting-notes'
 import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
@@ -19,9 +19,9 @@ const bodySchema = z.object({
 
 const SYSTEM = {
   soles: (sport: string) =>
-    `You are Forma, a ${sport} shoe fitter. The photo shows the sole or rubber of the shopper's current, worn ${sport} shoes. Describe only wear you can actually see: where rubber is thinnest, asymmetry, delamination, rand or toe wear. Relate it to how they move and what their next shoe should do differently. If the image is not a worn shoe sole, say so in one observation, set wearPattern to "unclear" and confidence to "low". No medical diagnoses.`,
+    `You are Forma, a ${sport} shoe fitter. The photo shows the sole or rubber of the shopper's current, worn ${sport} shoes. Describe only wear you can actually see: where rubber is thinnest, asymmetry, delamination, rand or toe wear. Relate it to how they move and what their next shoe should do differently. If the image is not a worn shoe sole, say so in one observation, set wearPattern to "unclear" and confidence to "low". No medical diagnoses. Return JSON only with keys: observations (1–4 items of {"title": two-to-four words, "detail": one sentence}), wearPattern (one of ${WEAR_PATTERNS.join(', ')}), shoeImplication (one sentence), confidence (low, medium or high).`,
   frames: (sport: string) =>
-    `You are Forma, a ${sport} movement analyst. These are stills from the shopper's own video, taken at the moment of a ${sport === 'running' ? 'foot strike' : 'foot placement'}, with the pose model's skeleton drawn on top. Point out 2–4 things a pose model's numbers would miss: foot orientation, ankle roll, how the shoe meets the ground or hold, posture. Refer to what is visible. Set wearPattern to "unclear". No medical diagnoses.`,
+    `You are Forma, a ${sport} movement analyst. These are stills from the shopper's own video, taken at the moment of a ${sport === 'running' ? 'foot strike' : 'foot placement'}, with the pose model's skeleton drawn on top. Point out 2–4 things a pose model's numbers would miss: foot orientation, ankle roll, how the shoe meets the ground or hold, posture. Refer to what is visible. Set wearPattern to "unclear". No medical diagnoses. Return JSON only with keys: observations (1–4 items of {"title": two-to-four words, "detail": one sentence}), wearPattern ("unclear"), shoeImplication (one sentence), confidence (low, medium or high).`,
 }
 
 export async function POST(request: Request) {
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   const started = Date.now()
   try {
-    const resolved = await resolveModel('agent')
+    const resolved = await resolveModel('vision')
     if (!resolved) {
       logCost('paid_call', { route: 'vision', ok: false, ms: Date.now() - started, kind, sport, images: images.length, reason: 'no_model_available' })
       return Response.json({ error: 'Forma’s model is unreachable right now — try again shortly.' }, { status: 503 })
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
         },
       ],
       output: Output.object({ schema: visionFindingSchema }),
+      providerOptions: { openaiCompatible: { structuredOutputs: false } },
       abortSignal: AbortSignal.timeout(50_000),
     })
     logCost('paid_call', { route: 'vision', ok: true, ms: Date.now() - started, kind, sport, images: images.length })
