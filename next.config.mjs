@@ -20,6 +20,13 @@ const nextConfig = {
   allowedDevOrigins: ['*.vercel.run'],
   // Solari's client wraps patchright (a Playwright fork) whose optional requires can't be bundled.
   serverExternalPackages: ['@solarisdk/browser', 'patchright-core'],
+  // The nested pnpm deps above were dropped from the traced serverless bundle — every stock-check
+  // request 500'd at module load in prod (Cannot find package) while local builds were fine.
+  // Force both packages into the file trace for the routes that import solari.ts.
+  outputFileTracingIncludes: {
+    '/api/stock-check': ['./node_modules/@solarisdk/browser/**/*', './node_modules/patchright-core/**/*'],
+    '/api/stock-check/replay': ['./node_modules/@solarisdk/browser/**/*', './node_modules/patchright-core/**/*'],
+  },
   async headers() {
     return [
       {
