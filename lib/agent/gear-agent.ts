@@ -190,11 +190,23 @@ export function createGearAgent(model: LanguageModel) {
             picks: repaired.length,
             productUrls: seen.length,
             swapped,
+            // Names + hosts of the rejected picks so matching can be tuned from real failures.
+            rejected: repaired.map((p) => `${p.name} @ ${urlKey(p.url)}`).join(' | '),
+            problem,
           })
           // Give the model the real product pages to pick from, so it recovers by copying a known
           // URL instead of inventing another one (the failure mode that kills flaky-model runs).
+          // The nextAction line is imperative on purpose: small non-reasoning models sometimes
+          // answer a rejection in prose and end the run; telling them the only valid moves are
+          // tool calls keeps the loop alive (observed failure: 0 tokens after one rejection).
           const availableProductPages = dup ? undefined : hits.slice(0, 12).map((h) => `${h.title} — ${h.url}`)
-          return { picks: [], error: problem, ...(availableProductPages ? { availableProductPages } : {}) }
+          return {
+            picks: [],
+            error: problem,
+            nextAction:
+              'Call a tool now — searchProducts with a new query, or recommendProducts again with urls copied exactly from availableProductPages. Do not reply with text.',
+            ...(availableProductPages ? { availableProductPages } : {}),
+          }
         }
         if (swapped) logCost('shortlist_repaired', { picks: repaired.length, swapped })
         // A missing STOCK_CHECK_SECRET must not kill the shortlist: the picks still stand, the size
