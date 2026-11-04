@@ -28,8 +28,8 @@ We are starting from zero. Every user count below is real, instrumented, and upd
 | Week | Starts | Users at start | Users at end | New this week | Cumulative | Milestone |
 |------|--------|----------------|--------------|---------------|------------|-----------|
 | 1 | Oct 20 | 0 | 0 | 0 | 0 | Core fitting loop, MCP server & cost logging live; baseline instrumented (Oct 23 check-in) |
-| 2 | Oct 27 | 0 | | | | ChatGPT Plugin eval verified + real consented clip validation + first 50 users |
-| 3 | Nov 3 | | | | | 3D Movement Twin live (AI Builder Hackathon) + Hero card share loop (200 cumulative users) |
+| 2 | Oct 27 | 0 | 0 | 0 | 0 | ChatGPT Plugin eval verified + real consented clip validation + first 50 users (not reached — see gap note) |
+| 3 | Nov 3 | 0 | | | | 3D Movement Twin live (AI Builder Hackathon) + Hero card share loop (200 cumulative users) |
 | 4 | Nov 10 | | | | | Run club / climbing gym community rollout + return users ≥ 10% of base |
 | 5 | Nov 17 | | | | | 500 cumulative users + affiliate Buy link wrapping live |
 | 6 | Nov 24 | | | | | 1,000 cumulative users |
@@ -58,3 +58,7 @@ Update this table every Friday. The "Users at end" for a week becomes "Users at 
 - This file is the single source of truth for Keiki × Maritime user tracking in Vertiqal. Do not restate the user-count table elsewhere.
 - Cost warning: every fitting costs money (Grok + Tavily + Solari + Grok TTS / FLUX Kontext). User growth must be paced against the $20k credit grant — see `docs/monetisation.md` for per-route caps.
 - Update weekly. If a week is missed, note the gap honestly rather than backfilling.
+
+## Gap note (week 2, closed Nov 3)
+
+Week 2 shipped the 3D Movement Twin rig, hero-card share loop, and a run of agent-reliability fixes (tool-call repair, shortlist grounding, stuck-loop rescue with model escalation, provider fallback for `/api/brief`) — but no distribution work ran, so the "first 50 users" milestone was not reached. User acquisition starts in week 3.
