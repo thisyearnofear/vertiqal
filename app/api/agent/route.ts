@@ -5,7 +5,7 @@ import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
-export const maxDuration = 120
+export const maxDuration = 300
 
 const MAX_BODY_BYTES = 32_768
 
