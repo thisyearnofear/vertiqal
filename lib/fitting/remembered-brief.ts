@@ -16,6 +16,8 @@ export const rememberedBriefSchema = z.object({
   heightCm: z.string().max(4),
   width: z.enum(['', 'narrow', 'standard', 'wide']),
   tier: z.enum(['free', 'pro']).optional(),
+  /** Server-issued HMAC over the tier claim — see lib/fitting/tier-proof.ts. */
+  tierProof: z.string().max(64).optional(),
   bySport: z.object({
     running: sportBriefSchema.optional(),
     climbing: sportBriefSchema.optional(),
@@ -50,6 +52,7 @@ export function rememberBrief(
     heightCm: draft.heightCm.trim().slice(0, 4),
     width: notes.width,
     tier: previous?.tier ?? 'free',
+    tierProof: previous?.tierProof,
     bySport: {
       running: sport === 'running' ? { goal: draft.goal, surface: draft.surface } : previous?.bySport.running,
       climbing: sport === 'climbing' ? { goal: draft.goal, surface: draft.surface } : previous?.bySport.climbing,

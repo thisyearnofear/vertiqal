@@ -1,8 +1,9 @@
 import { requestClientKey } from '@/lib/agent/stock-policy'
 import { counterStore } from '@/lib/rate-limit/store'
 import { BRIEF_COOKIE, parseRememberedBrief } from '@/lib/fitting/remembered-brief'
+import { tierFromProof } from '@/lib/fitting/tier-proof'
 import { vidFromRequest } from '@/lib/fitting/visitor'
-import { allowed, parseTier, quotaFor, type Feature, type Tier } from './entitlements'
+import { allowed, quotaFor, type Feature, type Tier } from './entitlements'
 
 const MONTH_MS = 30 * 24 * 60 * 60_000
 
@@ -19,7 +20,8 @@ function tierFromRequest(request: Request): Tier {
   const raw = cookieValue(BRIEF_COOKIE, request.headers.get('cookie'))
   if (!raw) return 'free'
   try {
-    return parseTier(parseRememberedBrief(decodeURIComponent(raw))?.tier)
+    const brief = parseRememberedBrief(decodeURIComponent(raw))
+    return tierFromProof(brief?.tier, brief?.tierProof)
   } catch {
     return 'free'
   }

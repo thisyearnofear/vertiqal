@@ -2,6 +2,8 @@
 
 import { cookies } from 'next/headers'
 import { BRIEF_COOKIE, rememberedBriefSchema, type RememberedBrief } from '@/lib/fitting/remembered-brief'
+import { tierProof } from '@/lib/fitting/tier-proof'
+import { paypalToolingReady } from '@/lib/paypal/toolkit'
 import { PERSONA_COOKIE, personaSchema, type Persona } from '@/lib/persona'
 
 const COOKIE_OPTIONS = {
@@ -32,7 +34,13 @@ export async function forgetBrief() {
   store.set(BRIEF_COOKIE, '', { ...COOKIE_OPTIONS, maxAge: 0 })
 }
 
-/** Tier rides the remembered-brief cookie so API routes can read it server-side. */
+/**
+ * Tier rides the remembered-brief cookie so API routes can read it server-side.
+ * 'pro' here is the demo activation only: once any payment path is configured,
+ * this action can only write 'free' — real Pro comes from the PayPal routes,
+ * which sign the claim after verifying with PayPal. An unsigned or badly
+ * signed 'pro' downgrades on read (tier-proof.ts).
+ */
 export async function setTier(tier: 'free' | 'pro') {
   const store = await cookies()
   const brief = rememberedBriefSchema.safeParse(
@@ -44,6 +52,14 @@ export async function setTier(tier: 'free' | 'pro') {
       }
     })(),
   )
-  const base = brief.success ? brief.data : { size: '', budgetPounds: '', heightCm: '', width: '', bySport: {} }
-  store.set(BRIEF_COOKIE, JSON.stringify({ ...base, tier }), COOKIE_OPTIONS)
+  const base: RememberedBrief = brief.success ? brief.data : { size: '', budgetPounds: '', heightCm: '', width: '', bySport: {} }
+  const payable =
+    paypalToolingReady() ||
+    Boolean(process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID?.trim()) ||
+    Boolean(process.env.NEXT_PUBLIC_PAYPAL_PRO_LINK?.trim())
+  const next: RememberedBrief =
+    tier === 'pro' && !payable
+      ? { ...base, tier: 'pro', tierProof: tierProof('pro') }
+      : { ...base, tier: 'free', tierProof: undefined }
+  store.set(BRIEF_COOKIE, JSON.stringify(next), COOKIE_OPTIONS)
 }

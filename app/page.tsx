@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { StrideLab } from '@/components/stride-lab/stride-lab'
-import { BRIEF_COOKIE, parseRememberedBrief } from '@/lib/fitting/remembered-brief'
+import { BRIEF_COOKIE } from '@/lib/fitting/remembered-brief'
+import { verifiedBrief } from '@/lib/fitting/tier-proof'
 import { PERSONA_COOKIE, parsePersona } from '@/lib/persona'
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
@@ -14,7 +15,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ [
         initialSport={requested === 'running' ? 'running' : 'climbing'}
         shareRef={typeof shareRef === 'string' ? shareRef : null}
         initialPersona={parsePersona(store.get(PERSONA_COOKIE)?.value)}
-        initialBrief={parseRememberedBrief(store.get(BRIEF_COOKIE)?.value)}
+        initialBrief={verifiedBrief(store.get(BRIEF_COOKIE)?.value)}
       />
     </div>
   )

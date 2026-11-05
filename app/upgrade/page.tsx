@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import Link from 'next/link'
-import { BRIEF_COOKIE, parseRememberedBrief } from '@/lib/fitting/remembered-brief'
+import { BRIEF_COOKIE } from '@/lib/fitting/remembered-brief'
+import { verifiedBrief } from '@/lib/fitting/tier-proof'
 import { setTier } from '@/app/actions'
 import { paypalToolingReady } from '@/lib/paypal/toolkit'
 import { ActivatePro } from './activate'
@@ -17,7 +18,7 @@ const PRO_FEATURES = [
 /** Forma Pro — the metered, hosted-AI tier. Payment provider hooks in via env. */
 export default async function UpgradePage() {
   const store = await cookies()
-  const tier = parseRememberedBrief(store.get(BRIEF_COOKIE)?.value)?.tier ?? 'free'
+  const tier = verifiedBrief(store.get(BRIEF_COOKIE)?.value)?.tier ?? 'free'
   const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ?? null
   const paymentUrl = process.env.NEXT_PUBLIC_PAYPAL_PRO_LINK ?? null
 
