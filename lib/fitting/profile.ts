@@ -1,7 +1,6 @@
 'use client'
 
-import type { BaselineReading } from './comparison'
-import { QUICK_ATHLETE_LOCK_MS } from './quick-athlete'
+import type { MetricReading } from './baseline'
 
 /**
  * The movement profile — metrics-only history of locked measurements. The
@@ -18,7 +17,7 @@ export interface ProfileSession {
   /** ISO timestamp of when the measurements were locked. */
   at: string
   sport: 'running' | 'climbing'
-  metrics: BaselineReading[]
+  metrics: MetricReading[]
 }
 
 const load = (): ProfileSession[] => {
@@ -45,7 +44,7 @@ export function readProfile(sport?: 'running' | 'climbing'): ProfileSession[] {
   return sport ? sessions.filter((s) => s.sport === sport) : sessions
 }
 
-export function appendSession(sport: 'running' | 'climbing', metrics: BaselineReading[]): ProfileSession[] {
+export function appendSession(sport: 'running' | 'climbing', metrics: MetricReading[]): ProfileSession[] {
   const sessions = [...load(), { at: new Date().toISOString(), sport, metrics }]
   save(sessions.slice(-MAX_SESSIONS))
   return sessions
