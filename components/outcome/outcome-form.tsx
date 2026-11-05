@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Calendar, Film, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,11 +14,50 @@ interface Props {
   size: string
 }
 
+/** Outcomes where fit failed — the agent that verified the purchase can unwind it. */
+const FIT_FAILED = new Set<Outcome>(['too-tight', 'too-loose', 'wrong-type', 'returned'])
+
+interface StoredPurchase {
+  orderId: string
+  captureId: string
+  product: string
+}
+
 export function OutcomeForm({ token, sport, name, retailer, size }: Props) {
   const router = useRouter()
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [reason, setReason] = useState<string | null>(null)
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+  const [purchase, setPurchase] = useState<StoredPurchase | null>(null)
+  const [refund, setRefund] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+
+  // The PayPal capture from this session, if any — a paid purchase can be refunded.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      try {
+        const raw = sessionStorage.getItem('forma-paypal-order')
+        if (raw) setPurchase(JSON.parse(raw) as StoredPurchase)
+      } catch {
+        // No stored capture — the refund offer just stays hidden.
+      }
+    })
+    return () => cancelAnimationFrame(id)
+  }, [])
+
+  const startRefund = async () => {
+    if (!purchase || refund === 'sending') return
+    setRefund('sending')
+    try {
+      const res = await fetch('/api/paypal/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ captureId: purchase.captureId, note: `Fit reported: ${outcome} — ${name} ${size}` }),
+      })
+      setRefund(res.ok ? 'done' : 'error')
+    } catch {
+      setRefund('error')
+    }
+  }
 
   const needsReason = outcome === 'not-bought'
   const ready = outcome !== null && (!needsReason || reason !== null)
@@ -110,6 +149,22 @@ export function OutcomeForm({ token, sport, name, retailer, size }: Props) {
               <ChevronRight aria-hidden className="size-3" />
             </Button>
           </div>
+
+          {purchase && outcome && FIT_FAILED.has(outcome) && (
+            <div className="well flex flex-col gap-2 rounded-lg p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Paid via PayPal</p>
+              <p className="text-pretty text-sm leading-relaxed text-foreground">
+                {refund === 'done'
+                  ? 'Refund started — PayPal will confirm it back to you.'
+                  : 'Forma misjudged the fit — it can start the refund on the order it prepared.'}
+              </p>
+              {refund !== 'done' && (
+                <Button variant="outline" size="sm" className="w-fit px-3 text-xs" disabled={refund === 'sending'} onClick={startRefund}>
+                  {refund === 'sending' ? 'Starting refund…' : refund === 'error' ? 'Refund failed — try again' : 'Refund via PayPal'}
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* Film again CTA — the retention loop */}
           <div className="border-t border-border pt-5">

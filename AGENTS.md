@@ -36,3 +36,5 @@ Tier sketch: free = measure + brief + stock check + one baseline (the funnel). P
 Engagement mechanics: persona/voice unlocks as fitting rewards; streak/cadence on the film-again loop (persisted baseline in `lib/fitting/baseline.ts` is the raw material).
 
 Do NOT: paywall the measurement itself (it's acquisition), sponsored picks (honest framing is the moat), per-user fit data sales (violates the privacy line).
+
+PayPal: `docs/paypal-integration.md` — Orders v2 + agent-toolkit plan; tier quotas in `lib/fitting/entitlements.ts`, usage metering in `lib/fitting/usage.ts`, 402 upsells via `components/upgrade-line.tsx`.

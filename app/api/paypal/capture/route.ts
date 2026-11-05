@@ -32,7 +32,9 @@ export async function POST(request: Request) {
   }
 
   // A product purchase is verified but buys no features — only 'pro' flips the tier.
-  if (parsed.data.purpose !== 'pro') return Response.json({ orderId: parsed.data.orderId, status: result.status })
+  if (parsed.data.purpose !== 'pro') {
+    return Response.json({ orderId: parsed.data.orderId, captureId: result.captureId, status: result.status })
+  }
 
   // Payment verified — merge pro into the remembered-brief cookie.
   const store = await cookies()

@@ -66,9 +66,18 @@ export function PayPalCheckout({ description, price, clientId, onBought }: { des
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ orderId: data.orderID, purpose: 'purchase' }),
           })
+          const captured = await res.json().catch(() => null)
           if (!res.ok) {
             setStatus('error')
             return
+          }
+          // Remember the capture so a later "they didn't fit" can unwind it — refund, not just regret.
+          if (captured?.captureId) {
+            try {
+              sessionStorage.setItem('forma-paypal-order', JSON.stringify({ orderId: data.orderID, captureId: captured.captureId, product: description }))
+            } catch {
+              // Session storage unavailable — the refund path just won't show.
+            }
           }
           setStatus('paid')
           onBought?.()

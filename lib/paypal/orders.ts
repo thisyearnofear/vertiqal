@@ -61,6 +61,8 @@ export async function createOrder(purchase: Purchase = PRO_PURCHASE): Promise<{ 
 export interface CaptureResult {
   ok: boolean
   status: string
+  /** The PayPal capture id — needed to refund the purchase later. */
+  captureId: string | null
 }
 
 /** Captures an approved order and verifies it completed — and, when `expected`
@@ -71,15 +73,15 @@ export async function captureOrder(orderId: string, expected: { currency_code: s
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   })
-  if (!res.ok) return { ok: false, status: `HTTP ${res.status}` }
+  if (!res.ok) return { ok: false, status: `HTTP ${res.status}`, captureId: null }
   const data = (await res.json()) as {
     status?: string
-    purchase_units?: { payments?: { captures?: { amount?: { currency_code?: string; value?: string } }[] } }[]
+    purchase_units?: { payments?: { captures?: { id?: string; amount?: { currency_code?: string; value?: string } }[] } }[]
   }
   const capture = data.purchase_units?.[0]?.payments?.captures?.[0]
   const paid =
     data.status === 'COMPLETED' &&
     (!expected ||
       (capture?.amount?.currency_code === expected.currency_code && capture.amount.value === expected.value))
-  return { ok: paid, status: data.status ?? 'UNKNOWN' }
+  return { ok: paid, status: data.status ?? 'UNKNOWN', captureId: capture?.id ?? null }
 }
