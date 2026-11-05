@@ -78,14 +78,14 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
       aria-labelledby="example-heading"
       className={cn(
         docked
-          ? 'absolute inset-0 z-10 flex flex-col overflow-hidden rounded-2xl'
+          ? 'absolute inset-0 z-10 flex flex-col overflow-hidden rounded-2xl font-mono text-stage-foreground'
           : 'housing scroll-mt-6 flex flex-col gap-5 rounded-2xl p-4 md:p-6',
       )}
     >
       <div
         className={cn(
           'flex flex-wrap items-start justify-between gap-4 px-1',
-          docked && 'items-center gap-3 bg-stage/75 px-4 py-3 backdrop-blur-md lg:mr-[42%]',
+          docked && 'absolute inset-x-0 top-0 z-20 items-center gap-3 px-4 py-3',
         )}
       >
         <div className="flex flex-col gap-1.5">
@@ -93,10 +93,14 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
             <span className="led" data-state="off" aria-hidden />
             Illustrative fitting · These are not your measurements
           </p>
-          <h2 id="example-heading" tabIndex={-1} className="text-balance text-xl font-semibold text-foreground focus-visible:outline-none">
+          <h2
+            id="example-heading"
+            tabIndex={-1}
+            className={cn('text-balance text-xl font-semibold text-foreground focus-visible:outline-none', docked && 'sr-only')}
+          >
             {stageHeadline}
           </h2>
-          <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
+          <p className={cn('max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground', docked && 'hidden')}>
             {sport === 'running'
               ? 'AI-generated footage plus an illustrative fitting. No live products or stock checked.'
               : 'Synthetic movement example. Not analysed from a real clip; no live products or stock checked.'}
@@ -116,9 +120,10 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
 
       <div
         className={cn(
-          'screen screen-readable flex flex-col gap-6 p-5 font-mono md:p-8',
-          docked &&
-            'mt-auto max-h-[45%] overflow-y-auto border-t border-stage-foreground/25 lg:absolute lg:inset-y-0 lg:right-0 lg:mt-0 lg:max-h-none lg:w-[42%] lg:border-l lg:border-t-0',
+          'flex flex-col gap-6 font-mono',
+          docked
+            ? 'mt-auto max-h-[72%] overflow-y-auto bg-gradient-to-t from-stage via-stage/85 to-transparent px-5 pt-14 pb-5 md:px-8'
+            : 'screen screen-readable p-5 md:p-8',
         )}
         aria-live="polite"
       >
