@@ -23,6 +23,7 @@ import {
   type PrefField,
 } from '@/lib/fitting/prefs'
 import { clearPersistedBaseline, loadBaseline, saveBaseline } from '@/lib/fitting/baseline'
+import { appendSession, profileSummary } from '@/lib/fitting/profile'
 import { REQUIRED_QUESTIONS, answeredCount, previousQuestion, questionPrompt } from '@/lib/fitting/brief-flow'
 import { draftFromRemembered, rememberBrief, type RememberedBrief } from '@/lib/fitting/remembered-brief'
 import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
@@ -185,6 +186,14 @@ export function StrideLab({
     return () => cancelAnimationFrame(id)
   }, [sport, baseline])
 
+  // Forma's memory: the delta between the two latest stamped sessions. Free
+  // tier keeps one session, so this stays null until pro history accumulates.
+  const [profileDelta, setProfileDelta] = useState<string | null>(null)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setProfileDelta(profileSummary(sport)))
+    return () => cancelAnimationFrame(id)
+  }, [sport, lockedReadout])
+
   const restartAnalysis = useCallback((nextSport: Sport, height: number) => {
     setTracker(createTracker(nextSport, height))
     setCalibrationCm(height)
@@ -249,6 +258,8 @@ export function StrideLab({
       trackStep('measurements_locked', { sport, source: clip ? 'clip' : 'camera' })
       if (line) void speak(line)
       setLockedReadout(nextReadout)
+      // Stamp the session into the movement profile; the tier caps how much history sticks.
+      appendSession(sport, nextReadout.metrics, remembered?.tier ?? 'free')
       // Pausing the clip would starve an active validation capture of frames.
       if (!clip || validation.status === 'recording') return
       const video = videoRef.current
@@ -257,7 +268,7 @@ export function StrideLab({
         setPlaying(false)
       }
     },
-    [liveActive, lockedReadout, sport, persona.voice, clip, speak, validation.status],
+    [liveActive, lockedReadout, sport, persona.voice, clip, speak, validation.status, remembered?.tier],
   )
 
   const releaseClip = () => {
@@ -653,6 +664,7 @@ export function StrideLab({
         nextPick: !fallbackFrom && choice ? (picks.find((_, i) => i > choiceIndex) ?? picks.find((p) => p.url !== choice.url))?.name ?? null : null,
         bought,
         checkout: Boolean(process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID),
+        profileDelta,
       })
   const settingsScope = visible.denseStage ? stage : 'setup'
   const tuning = tuningAt === settingsScope
@@ -1150,6 +1162,7 @@ export function StrideLab({
           sport={sport}
           heroPicks={heroPicks}
           themeKey={persona.phosphor}
+          profileDelta={profileDelta}
           onFilmAgain={() => setHero(null)}
         />
 

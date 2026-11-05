@@ -33,6 +33,8 @@ export interface ResultsState {
   bought: boolean
   /** PayPal is configured — Forma can offer to check out itself, not just link out. */
   checkout?: boolean
+  /** Session-over-session change from the movement profile, e.g. "Cadence up 6%". */
+  profileDelta?: string | null
 }
 
 /** "Hoka Speedgoat 6 Men's Trail Running Shoes" → "Hoka Speedgoat 6". */
@@ -74,6 +76,8 @@ export function narrate(state: ResultsState): Narration | null {
   const name = shortShoeName(state.choice.name)
   const { retailer } = state.choice
   const size = state.size.trim()
+  // Forma's memory: when the profile has a delta, it outranks the generic buy nudge.
+  const memory = state.profileDelta ? `${state.profileDelta} since your last film — whatever changed is working.` : null
 
   switch (state.stock.phase) {
     case 'idle':
@@ -98,7 +102,7 @@ export function narrate(state: ResultsState): Narration | null {
     case 'in_stock':
       return {
         title: 'In stock',
-        line: `The ${name} in ${size}${state.stock.price ? `, ${state.stock.price}` : ''} at ${retailer}. It's yours if you want it${state.checkout ? ' — I can check out for you via PayPal, or you can buy at the retailer' : ''}.`,
+        line: `The ${name} in ${size}${state.stock.price ? `, ${state.stock.price}` : ''} at ${retailer}. ${memory ?? `It's yours if you want it${state.checkout ? ' — I can check out for you via PayPal, or you can buy at the retailer' : ''}.`}`,
         mood: 'pleased',
         action: { kind: 'buy', label: `Buy at ${retailer}` },
       }
