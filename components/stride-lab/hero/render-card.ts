@@ -244,7 +244,7 @@ export function renderCard(ctx: CanvasRenderingContext2D, input: CardInput) {
   ctx.fillText(date, CARD_WIDTH - MARGIN, PHOTO_HEIGHT + 55)
   ctx.globalAlpha = 0.85
   ctx.font = `400 36px ${theme.font}`
-  ctx.fillText('forma', CARD_WIDTH - MARGIN, PHOTO_HEIGHT + 100)
+  ctx.fillText('forma · vertiqal.vercel.app', CARD_WIDTH - MARGIN, PHOTO_HEIGHT + 100)
   ctx.textAlign = 'left'
 
   // FOOTER — CTA line
