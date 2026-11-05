@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
 import { Box, Calendar, Camera, Film, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
 import { forgetBrief, saveBrief, savePersona } from '@/app/actions'
 import { Button } from '@/components/ui/button'
@@ -139,6 +140,7 @@ export function StrideLab({
   const [hero, setHero] = useState<HeroFrame | null>(null)
 
   const filmedDate = useMemo(() => new Date(), [baseline])
+  const still = useReducedMotion() ?? false
   const [notes, setNotes] = useState<FittingNotesState>(() => ({
     ...EMPTY_NOTES,
     goal: initialDraft.goal,
@@ -924,11 +926,31 @@ export function StrideLab({
               overlay={
                 live.phase === 'off' || live.phase === 'error' ? (
                   askDocked ? (
-                    <div className="housing absolute inset-x-3 bottom-3 z-10 max-h-[62%] overflow-y-auto rounded-xl p-4 shadow-xl md:inset-x-5 md:bottom-4 md:p-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">{askDocked.eyebrow}</p>
-                      <p className="mt-1.5 text-pretty text-base font-semibold leading-snug md:text-lg">{askDocked.prompt}</p>
-                      <div className="mt-3">{askDocked.controls}</div>
-                    </div>
+                    <motion.div
+                      key={`${question}-${stage}`}
+                      initial={still ? false : { opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, ease: 'easeOut' }}
+                      className="absolute inset-0 z-10 flex flex-col overflow-y-auto bg-stage/85 font-mono text-stage-foreground backdrop-blur-md"
+                      style={
+                        {
+                          '--foreground': 'var(--stage-foreground)',
+                          '--muted-foreground': 'var(--stage-muted)',
+                          '--border': 'color-mix(in oklch, var(--stage-foreground) 30%, transparent)',
+                          '--primary': 'var(--stage-foreground)',
+                          '--primary-foreground': 'var(--stage)',
+                          '--background': 'var(--stage)',
+                          '--card': 'var(--stage)',
+                          '--ring': 'var(--stage-foreground)',
+                        } as CSSProperties
+                      }
+                    >
+                      <div className="m-auto flex w-full max-w-2xl flex-col gap-3 p-5 md:gap-5 md:p-8">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70 engraved">{askDocked.eyebrow}</p>
+                        <p className="text-pretty text-xl font-semibold leading-snug phosphor md:text-2xl">{askDocked.prompt}</p>
+                        <div className="mt-1 md:mt-2">{askDocked.controls}</div>
+                      </div>
+                    </motion.div>
                   ) : undefined
                 ) : (
                   <LiveOverlay
