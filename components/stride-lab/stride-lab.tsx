@@ -897,7 +897,7 @@ export function StrideLab({
 
       <section aria-label="Movement analysis" className="housing flex flex-col gap-3 rounded-2xl p-3 md:gap-4 md:p-5">
         {example ? (
-          <div className="relative">
+          <div className="relative lg:pr-[42%]">
             <ExampleObserver
               sport={sport}
               themeKey={persona.phosphor}
@@ -931,7 +931,7 @@ export function StrideLab({
                       initial={still ? false : { opacity: 0, y: 14 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3, ease: 'easeOut' }}
-                      className="absolute inset-0 z-10 flex flex-col overflow-y-auto bg-stage/85 font-mono text-stage-foreground backdrop-blur-md"
+                      className="absolute inset-0 z-10 flex flex-col overflow-y-auto bg-stage/70 font-mono text-stage-foreground backdrop-blur-md"
                       style={
                         {
                           '--foreground': 'var(--stage-foreground)',
