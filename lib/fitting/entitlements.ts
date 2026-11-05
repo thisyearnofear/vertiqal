@@ -16,7 +16,7 @@ export type Feature =
   | 'surface-guess'    // vision surface suggestion from a keyframe
   | 'tryon'            // AI shoe try-on
   | 'voice'            // TTS coaching cues
-  | 'baseline-history' // longitudinal movement profile beyond one baseline
+  | 'profile-history'  // longitudinal movement profile beyond one baseline
 
 /** Monthly quota per feature per tier; Infinity = uncapped. */
 const QUOTAS: Record<Feature, Record<Tier, number>> = {
@@ -26,7 +26,7 @@ const QUOTAS: Record<Feature, Record<Tier, number>> = {
   'surface-guess':    { free: 1,        pro: Infinity },
   'tryon':            { free: 0,        pro: Infinity },
   'voice':            { free: Infinity, pro: Infinity },
-  'baseline-history': { free: 1,        pro: Infinity },
+  'profile-history':  { free: 1,        pro: Infinity },
 }
 
 export function quotaFor(feature: Feature, tier: Tier): number {

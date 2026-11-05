@@ -1,6 +1,7 @@
 'use client'
 
-import type { MetricReading } from '@/lib/metrics/readout'
+import type { MetricReading, Sport } from '@/lib/metrics/readout'
+import { quotaFor, type Tier } from './entitlements.ts'
 
 /**
  * The movement profile — metrics-only history of locked measurements. The
@@ -8,6 +9,8 @@ import type { MetricReading } from '@/lib/metrics/readout'
  * "film this again" plans have something to compare against.
  *
  * Same privacy stance as the remembered brief — numbers only, never video.
+ * Retention is the freemium line: free keeps the single latest pin, pro
+ * accumulates history up to MAX_SESSIONS.
  */
 
 const STORAGE_KEY = 'forma-profile'
@@ -16,7 +19,7 @@ const MAX_SESSIONS = 24
 export interface ProfileSession {
   /** ISO timestamp of when the measurements were locked. */
   at: string
-  sport: 'running' | 'climbing'
+  sport: Sport
   metrics: MetricReading[]
 }
 
@@ -39,19 +42,25 @@ const save = (sessions: ProfileSession[]) => {
   }
 }
 
-export function readProfile(sport?: 'running' | 'climbing'): ProfileSession[] {
+export function readProfile(sport?: Sport): ProfileSession[] {
   const sessions = load()
   return sport ? sessions.filter((s) => s.sport === sport) : sessions
 }
 
-export function appendSession(sport: 'running' | 'climbing', metrics: MetricReading[]): ProfileSession[] {
-  const sessions = [...load(), { at: new Date().toISOString(), sport, metrics }]
-  save(sessions.slice(-MAX_SESSIONS))
+/**
+ * Stamps a locked measurement into the profile. Sessions beyond the tier's
+ * `profile-history` quota are dropped oldest-first, so a free profile always
+ * reflects the latest film while pro accumulates the history deltas need.
+ */
+export function appendSession(sport: Sport, metrics: MetricReading[], tier: Tier = 'free'): ProfileSession[] {
+  const keep = Math.min(MAX_SESSIONS, quotaFor('profile-history', tier))
+  const sessions = [...load(), { at: new Date().toISOString(), sport, metrics }].slice(-keep)
+  save(sessions)
   return sessions
 }
 
 /** The most recent session before the latest one for a sport — the comparison point. */
-export function priorSession(sport: 'running' | 'climbing'): ProfileSession | null {
+export function priorSession(sport: Sport): ProfileSession | null {
   const sessions = readProfile(sport)
   return sessions.length >= 2 ? sessions[sessions.length - 2] : null
 }
@@ -65,7 +74,7 @@ export interface MetricDelta {
 }
 
 /** Per-metric change between the prior session and the latest for a sport. */
-export function profileDeltas(sport: 'running' | 'climbing'): MetricDelta[] {
+export function profileDeltas(sport: Sport): MetricDelta[] {
   const sessions = readProfile(sport)
   if (sessions.length < 2) return []
   const [prev, latest] = [sessions[sessions.length - 2], sessions[sessions.length - 1]]
@@ -79,7 +88,7 @@ export function profileDeltas(sport: 'running' | 'climbing'): MetricDelta[] {
 }
 
 /** Summary sentence for narration/artifacts — "Cadence up 6% since Nov". */
-export function profileSummary(sport: 'running' | 'climbing'): string | null {
+export function profileSummary(sport: Sport): string | null {
   const deltas = profileDeltas(sport).filter((d) => d.pct !== null && Math.abs(d.pct) >= 2)
   if (deltas.length === 0) return null
   const top = deltas.sort((a, b) => Math.abs(b.pct ?? 0) - Math.abs(a.pct ?? 0))[0]

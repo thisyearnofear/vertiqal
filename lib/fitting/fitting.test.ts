@@ -37,6 +37,8 @@ import { frameQuality, usableKeypoint } from '../pose/framing.ts'
 import { GaitTracker, MIN_STRIKES_FOR_SIGNALS, cadenceFromStrikes } from '../metrics/gait.ts'
 import { modelKey, reconcileUrl, sameShoe, shortlistProblem, urlKey } from '../agent/picks.ts'
 import { narrate, shortShoeName } from './narration.ts'
+import { appendSession, profileSummary, readProfile } from './profile.ts'
+import type { MetricReading } from '../metrics/readout.ts'
 import { ClimbTracker } from '../metrics/climb.ts'
 import { AFFILIATE_DISCLOSURE, parseAffiliateMerchants, wrapAffiliateUrl } from '../agent/affiliate.ts'
 import { tavilyCacheKey } from '../agent/tavily.ts'
@@ -234,6 +236,8 @@ test('narration: one short line and at most one action per results moment', () =
   const inStock = narrate({ ...base, stock: { phase: 'in_stock', price: '£135' } })!
   assert.match(inStock.line, /UK 10, £135 at SportsShoes/)
   assert.deepEqual(inStock.action, { kind: 'buy', label: 'Buy at SportsShoes' })
+  const withMemory = narrate({ ...base, stock: { phase: 'in_stock', price: '£135' }, profileDelta: 'Cadence up 6%' })!
+  assert.match(withMemory.line, /Cadence up 6% since your last film — whatever changed is working/)
   const soldOut = narrate({ ...base, stock: { phase: 'unavailable', price: null } })!
   assert.match(soldOut.line, /try the Brooks Cascadia 19 next/)
   assert.equal(soldOut.action, null, 'Forma moves on by itself while a fallback is left')
@@ -242,6 +246,34 @@ test('narration: one short line and at most one action per results moment', () =
   for (const phase of ['idle', 'checking', 'in_stock', 'unavailable', 'unsure', 'error'] as const) {
     const line = narrate({ ...base, stock: { phase, price: '£135' } })!.line
     assert.ok(line.split(/(?<=[.?!…])\s/).length <= 2, `${phase}: at most two sentences`)
+  }
+})
+
+test('movement profile: retention follows the tier quota and deltas compare the last two sessions', () => {
+  const store = new Map<string, string>()
+  const real = globalThis.localStorage
+  globalThis.localStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+    clear: () => store.clear(),
+    key: () => null,
+    get length() {
+      return store.size
+    },
+  } as Storage
+  try {
+    const cadence = (value: number): MetricReading[] => [{ id: 'cadence', label: 'Cadence', value, unit: 'spm', hint: '', better: 'higher' }]
+    appendSession('running', cadence(160), 'free')
+    appendSession('running', cadence(170), 'free')
+    assert.equal(readProfile('running').length, 1, 'free tier keeps the latest pin only')
+    assert.equal(profileSummary('running'), null, 'one session gives nothing to compare')
+    appendSession('running', cadence(180), 'pro')
+    appendSession('running', cadence(190), 'pro')
+    assert.equal(readProfile('running').length, 3, 'pro accumulates history')
+    assert.equal(profileSummary('running'), 'Cadence up 6%')
+  } finally {
+    globalThis.localStorage = real
   }
 })
 

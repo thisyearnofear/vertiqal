@@ -31,12 +31,14 @@ interface TakeAwayProps {
   sport: Sport
   heroPicks: ShoePick[]
   themeKey: string
+  /** Session-over-session change from the movement profile, e.g. "Cadence up 6%". */
+  profileDelta?: string | null
   /** Clears the hero so a fresh frame can be captured. */
   onFilmAgain: () => void
 }
 
 /** The personal artifacts after a fitting: hero card, film-again prompt, before/after compare. */
-export function TakeAway({ showHero, hero, baseline, panelReadout, sport, heroPicks, themeKey, onFilmAgain }: TakeAwayProps) {
+export function TakeAway({ showHero, hero, baseline, panelReadout, sport, heroPicks, themeKey, profileDelta, onFilmAgain }: TakeAwayProps) {
   const compareBaseline = useMemo<BaselineReading | null>(
     () =>
       baseline
@@ -71,6 +73,7 @@ export function TakeAway({ showHero, hero, baseline, panelReadout, sport, heroPi
             <h2 className="mt-2 text-balance text-xl font-semibold text-foreground">See what changed</h2>
             <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
               {`You filmed on ${new Date(baseline.capturedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Film yourself again and Forma will compare your movement — side by side, before and after.`}
+              {profileDelta ? ` ${profileDelta} since your last film.` : ''}
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Button variant="outline" size="lg" className="gap-2" onClick={onFilmAgain}>
