@@ -31,6 +31,8 @@ export interface ResultsState {
   nextPick: string | null
   /** The shopper went to the retailer, so Forma can offer the passport and the hero frame. */
   bought: boolean
+  /** PayPal is configured — Forma can offer to check out itself, not just link out. */
+  checkout?: boolean
 }
 
 /** "Hoka Speedgoat 6 Men's Trail Running Shoes" → "Hoka Speedgoat 6". */
@@ -96,7 +98,7 @@ export function narrate(state: ResultsState): Narration | null {
     case 'in_stock':
       return {
         title: 'In stock',
-        line: `The ${name} in ${size}${state.stock.price ? `, ${state.stock.price}` : ''} at ${retailer}. It's yours if you want it.`,
+        line: `The ${name} in ${size}${state.stock.price ? `, ${state.stock.price}` : ''} at ${retailer}. It's yours if you want it${state.checkout ? ' — I can check out for you via PayPal, or you can buy at the retailer' : ''}.`,
         mood: 'pleased',
         action: { kind: 'buy', label: `Buy at ${retailer}` },
       }
