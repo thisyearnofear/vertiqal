@@ -1,6 +1,6 @@
 'use client'
 
-import type { MetricReading } from './baseline'
+import type { MetricReading } from '@/lib/metrics/readout'
 
 /**
  * The movement profile — metrics-only history of locked measurements. The
@@ -70,10 +70,11 @@ export function profileDeltas(sport: 'running' | 'climbing'): MetricDelta[] {
   if (sessions.length < 2) return []
   const [prev, latest] = [sessions[sessions.length - 2], sessions[sessions.length - 1]]
   return latest.metrics.flatMap((m) => {
-    const before = prev.metrics.find((p) => p.metric === m.metric)
-    if (!before) return []
+    if (m.value === null) return []
+    const before = prev.metrics.find((p) => p.label === m.label)
+    if (!before || before.value === null) return []
     const delta = m.value - before.value
-    return [{ metric: m.metric, before: before.value, after: m.value, delta, pct: before.value !== 0 ? (delta / before.value) * 100 : null }]
+    return [{ metric: m.label, before: before.value, after: m.value, delta, pct: before.value !== 0 ? (delta / before.value) * 100 : null }]
   })
 }
 
