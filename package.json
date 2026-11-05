@@ -15,6 +15,7 @@
     "validate:motion": "node lib/pose/validation-cli.ts",
     "prepare": "husky",
     "smoke": "node scripts/smoke.mjs",
+    "agent-shop": "node scripts/agent-shop.mjs",
     "cost:report": "node scripts/cost-report.mjs"
   },
   "lint-staged": {
