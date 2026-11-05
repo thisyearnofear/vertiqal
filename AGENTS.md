@@ -22,3 +22,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Reach DOM nodes via refs passed down (`buyLinkRef`, `actionButtonsRef`, `panelRef`…), never `getElementById`/`querySelectorAll`.
 - `MovementTwin` (three.js) is `next/dynamic` `ssr: false` — keep it out of the initial bundle.
 - Blob downloads go through `lib/downloads.ts` (`downloadBlob` revokes after 1s — synchronous revoke can cancel the download).
+
+## Product strategy (2026-01)
+
+Positioning: **the gait lab in your browser that shows its work.** The space is all in-store hardware (Runners Need, Fit2Run) or B2B-to-retailers (Ochy) — nobody owns browser-based self-serve single-camera movement fitting with personality.
+
+Differentiators to defend: movement-not-measurements (the baseline-compare loop compounds), on-device privacy ("video never leaves this browser"), honest stock verification ("template, not verified"), shareable artifacts (hero/compare cards carry `?ref=` links, attributed via `share_landing` funnel step).
+
+Revenue model: **web app first, affiliate is a bonus.** Freemium boundary = on-device (free) vs hosted AI (metered — sole-wear vision, keyframe review, free-text brief parse, surface guess, try-on, TTS voice). Metering infra exists: `limit_hit` funnel step, `lib/fitting/surface-guard`, `lib/agent/stock-policy`.
+
+Tier sketch: free = measure + brief + stock check + one baseline (the funnel). Pro = longitudinal movement profile (multi-baseline history/trends), unlimited vision features, all personas, exportable fit passport.
+
+Engagement mechanics: persona/voice unlocks as fitting rewards; streak/cadence on the film-again loop (persisted baseline in `lib/fitting/baseline.ts` is the raw material).
+
+Do NOT: paywall the measurement itself (it's acquisition), sponsored picks (honest framing is the moat), per-user fit data sales (violates the privacy line).
