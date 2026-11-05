@@ -652,6 +652,7 @@ export function StrideLab({
         fallbackFrom,
         nextPick: !fallbackFrom && choice ? (picks.find((_, i) => i > choiceIndex) ?? picks.find((p) => p.url !== choice.url))?.name ?? null : null,
         bought,
+        checkout: Boolean(process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID),
       })
   const settingsScope = visible.denseStage ? stage : 'setup'
   const tuning = tuningAt === settingsScope
