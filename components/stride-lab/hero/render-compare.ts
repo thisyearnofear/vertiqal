@@ -257,12 +257,12 @@ export function renderCompareCard(ctx: CanvasRenderingContext2D, input: CompareC
   ctx.fillStyle = theme.highlight
   ctx.fillText('> FILM AGAIN TO SEE WHAT CHANGED', MARGIN, HALF + FOOTER_HEIGHT - 36)
 
-  // Brand
+  // Brand + link back — the card travels further than the app, so it carries the URL.
   ctx.globalAlpha = 0.4
   ctx.textAlign = 'right'
   ctx.font = `400 30px ${theme.font}`
   ctx.fillStyle = theme.bone
-  ctx.fillText('forma', COMPARE_WIDTH - MARGIN, HALF + FOOTER_HEIGHT - 36)
+  ctx.fillText('forma · vertiqal.vercel.app', COMPARE_WIDTH - MARGIN, HALF + FOOTER_HEIGHT - 36)
   ctx.textAlign = 'left'
 
   ctx.restore()
