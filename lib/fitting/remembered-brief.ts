@@ -15,6 +15,7 @@ export const rememberedBriefSchema = z.object({
   budgetPounds: z.string().max(8),
   heightCm: z.string().max(4),
   width: z.enum(['', 'narrow', 'standard', 'wide']),
+  tier: z.enum(['free', 'pro']).optional(),
   bySport: z.object({
     running: sportBriefSchema.optional(),
     climbing: sportBriefSchema.optional(),
@@ -48,6 +49,7 @@ export function rememberBrief(
     budgetPounds: draft.budgetPounds.trim().slice(0, 8),
     heightCm: draft.heightCm.trim().slice(0, 4),
     width: notes.width,
+    tier: previous?.tier ?? 'free',
     bySport: {
       running: sport === 'running' ? { goal: draft.goal, surface: draft.surface } : previous?.bySport.running,
       climbing: sport === 'climbing' ? { goal: draft.goal, surface: draft.surface } : previous?.bySport.climbing,
