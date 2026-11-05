@@ -85,7 +85,7 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
       <div
         className={cn(
           'flex flex-wrap items-start justify-between gap-4 px-1',
-          docked && 'items-center gap-3 bg-stage/75 px-4 py-3 backdrop-blur-md',
+          docked && 'items-center gap-3 bg-stage/75 px-4 py-3 backdrop-blur-md lg:mr-[42%]',
         )}
       >
         <div className="flex flex-col gap-1.5">
@@ -117,7 +117,8 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
       <div
         className={cn(
           'screen screen-readable flex flex-col gap-6 p-5 font-mono md:p-8',
-          docked && 'mt-auto max-h-[62%] overflow-y-auto border-t border-stage-foreground/25',
+          docked &&
+            'mt-auto max-h-[45%] overflow-y-auto border-t border-stage-foreground/25 lg:absolute lg:inset-y-0 lg:right-0 lg:mt-0 lg:max-h-none lg:w-[42%] lg:border-l lg:border-t-0',
         )}
         aria-live="polite"
       >
