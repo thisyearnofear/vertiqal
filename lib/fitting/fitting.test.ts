@@ -38,6 +38,7 @@ import { GaitTracker, MIN_STRIKES_FOR_SIGNALS, cadenceFromStrikes } from '../met
 import { modelKey, reconcileUrl, sameShoe, shortlistProblem, urlKey } from '../agent/picks.ts'
 import { narrate, shortShoeName } from './narration.ts'
 import { appendSession, profileSummary, readProfile } from './profile.ts'
+import { tierFromProof, tierProof, verifiedBrief } from './tier-proof.ts'
 import type { MetricReading } from '../metrics/readout.ts'
 import { ClimbTracker } from '../metrics/climb.ts'
 import { AFFILIATE_DISCLOSURE, parseAffiliateMerchants, wrapAffiliateUrl } from '../agent/affiliate.ts'
@@ -274,6 +275,25 @@ test('movement profile: retention follows the tier quota and deltas compare the 
     assert.equal(profileSummary('running'), 'Cadence up 6%')
   } finally {
     globalThis.localStorage = real
+  }
+})
+
+test('tier proof: a forged pro cookie downgrades to free, a signed one verifies', () => {
+  const saved = process.env.PASSPORT_SECRET
+  process.env.PASSPORT_SECRET = 'tier-proof-test-secret'
+  try {
+    const proof = tierProof('pro')
+    assert.equal(tierFromProof('pro', proof), 'pro')
+    assert.equal(tierFromProof('pro', 'forged'), 'free')
+    assert.equal(tierFromProof('pro', undefined), 'free', 'an unsigned pro claim is not trusted')
+    assert.equal(tierFromProof('free', undefined), 'free')
+    const base = { size: 'UK 9', budgetPounds: '', heightCm: '', width: '', bySport: {} }
+    assert.equal(verifiedBrief(JSON.stringify({ ...base, tier: 'pro' }))?.tier, 'free', 'unsigned cookie downgrades')
+    assert.equal(verifiedBrief(JSON.stringify({ ...base, tier: 'pro', tierProof: 'forged' }))?.tier, 'free')
+    assert.equal(verifiedBrief(JSON.stringify({ ...base, tier: 'pro', tierProof: proof }))?.tier, 'pro')
+  } finally {
+    if (saved === undefined) delete process.env.PASSPORT_SECRET
+    else process.env.PASSPORT_SECRET = saved
   }
 })
 

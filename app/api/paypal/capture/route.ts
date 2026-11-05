@@ -2,7 +2,8 @@ import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { logCost } from '@/lib/cost-log'
 import { captureOrder, PRO_PRICE } from '@/lib/paypal/orders'
-import { BRIEF_COOKIE, rememberedBriefSchema } from '@/lib/fitting/remembered-brief'
+import { BRIEF_COOKIE, rememberedBriefSchema, type RememberedBrief } from '@/lib/fitting/remembered-brief'
+import { tierProof } from '@/lib/fitting/tier-proof'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 const bodySchema = z.object({
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
       }
     })(),
   )
-  const base = brief.success ? brief.data : { size: '', budgetPounds: '', heightCm: '', width: '', bySport: {} }
-  store.set(BRIEF_COOKIE, JSON.stringify({ ...base, tier: 'pro' }), COOKIE_OPTIONS)
+  const base: RememberedBrief = brief.success ? brief.data : { size: '', budgetPounds: '', heightCm: '', width: '', bySport: {} }
+  store.set(BRIEF_COOKIE, JSON.stringify({ ...base, tier: 'pro', tierProof: tierProof('pro') }), COOKIE_OPTIONS)
   return Response.json({ tier: 'pro' })
 }
