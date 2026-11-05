@@ -269,7 +269,6 @@ export function DecisionPanel({
               <PayPalCheckout
                 description={`${pick.name} (${sport} shoe) — Forma verified`}
                 price={price}
-                clientId={PAYPAL_CLIENT_ID}
                 onBought={onBought}
               />
             )}
