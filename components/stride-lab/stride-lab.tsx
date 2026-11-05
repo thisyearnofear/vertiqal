@@ -124,7 +124,6 @@ export function StrideLab({
   const [lockedReadout, setLockedReadout] = useState<Readout | null>(null)
   const [playing, setPlaying] = useState(true)
   const [baseline, setBaseline] = useState<Baseline | null>(null)
-  const previousHeroRef = useRef<number | null>(null)
   const [persona, setPersona] = useState(initialPersona)
   // Settings belong to the phase they were opened in (setting up, or one results stage), so they close
   // by themselves once the fitting moves into results instead of riding along under the shortlist.
@@ -139,12 +138,7 @@ export function StrideLab({
   const [keyframes, setKeyframes] = useState<Keyframe[]>([])
   const [hero, setHero] = useState<HeroFrame | null>(null)
 
-  // Track hero frame changes for baseline comparison detection
-  useEffect(() => {
-    if (hero && hero.id !== previousHeroRef.current) {
-      previousHeroRef.current = hero.id
-    }
-  }, [hero])
+  const filmedDate = useMemo(() => new Date(), [baseline])
   const [notes, setNotes] = useState<FittingNotesState>(() => ({
     ...EMPTY_NOTES,
     goal: initialDraft.goal,
@@ -869,14 +863,17 @@ export function StrideLab({
 
       <section aria-label="Movement analysis" className="housing flex flex-col gap-3 rounded-2xl p-3 md:gap-4 md:p-5">
         {example ? (
-          <ExampleObserver
-            sport={sport}
-            themeKey={persona.phosphor}
-            localSession={providerId === 'mediapipe' && sessionState.status === 'ready' ? sessionState.session : null}
-            loadLocalSession={providerId !== 'mediapipe'}
-            localSessionFailed={providerId === 'mediapipe' && sessionState.status === 'error'}
-            onObservation={setExampleObservation}
-          />
+          <div className="relative">
+            <ExampleObserver
+              sport={sport}
+              themeKey={persona.phosphor}
+              localSession={providerId === 'mediapipe' && sessionState.status === 'ready' ? sessionState.session : null}
+              loadLocalSession={providerId !== 'mediapipe'}
+              localSessionFailed={providerId === 'mediapipe' && sessionState.status === 'error'}
+              onObservation={setExampleObservation}
+            />
+            <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} docked />
+          </div>
         ) : (
           <>
             {clip && (
@@ -1222,9 +1219,7 @@ export function StrideLab({
           </div>
         )}
 
-        {example ? (
-          <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} />
-        ) : (
+        {!example && (
           <>
             {visible.readout && readout.events > 0 && (
               <div className="housing rounded-2xl p-4 md:p-5">
@@ -1298,7 +1293,7 @@ export function StrideLab({
         )}
 
         {/* Film-again prompt — shown after baseline is pinned, before re-film */}
-        {baseline && hero && previousHeroRef.current === hero.id && (
+        {baseline && hero && hero.id === baseline.heroFrame.id && (
           <div id="hero-film-again" className="scroll-mt-6">
             <div className="housing rounded-2xl p-4 md:p-6">
               <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved flex items-center gap-2">
@@ -1306,7 +1301,7 @@ export function StrideLab({
               </p>
               <h2 className="mt-2 text-balance text-xl font-semibold text-foreground">See what changed</h2>
               <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
-                {`You filmed on ${new Date(baseline.readout.events > 0 ? Date.now() : Date.now()).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Film yourself again and Forma will compare your movement — side by side, before and after.`}
+                {`You filmed on ${filmedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Film yourself again and Forma will compare your movement — side by side, before and after.`}
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <Button variant="outline" size="lg" className="gap-2" onClick={() => {
@@ -1339,7 +1334,7 @@ export function StrideLab({
         )}
 
         {/* Baseline comparison — shown when there's a baseline AND a new hero frame */}
-        {baseline && hero && previousHeroRef.current !== hero.id && (
+        {baseline && hero && hero.id !== baseline.heroFrame.id && (
           <div id="hero-compare" className="scroll-mt-6">
             <CompareCard
               beforeFrame={baseline.heroFrame}

@@ -25,6 +25,8 @@ interface ExampleWalkthroughProps {
   state: ExampleState
   onState: (state: ExampleState) => void
   onExit: () => void
+  /** Render as an overlay docked to the bottom of the stage instead of a page section. */
+  docked?: boolean
 }
 
 function ShoeSketch({ className }: { className?: string }) {
@@ -44,7 +46,7 @@ function ShoeSketch({ className }: { className?: string }) {
   )
 }
 
-export function ExampleWalkthrough({ sport, state, onState, onExit }: ExampleWalkthroughProps) {
+export function ExampleWalkthrough({ sport, state, onState, onExit, docked = false }: ExampleWalkthroughProps) {
   const script = EXAMPLE_SCRIPTS[sport]
   const { step, playing, concept } = state
   const still = useReducedMotion() ?? false
@@ -71,7 +73,14 @@ export function ExampleWalkthrough({ sport, state, onState, onExit }: ExampleWal
   ][step] ?? script.steps[step].title
 
   return (
-    <section id="example-walkthrough" aria-labelledby="example-heading" className="housing scroll-mt-6 flex flex-col gap-5 rounded-2xl p-4 md:p-6">
+    <section
+      id="example-walkthrough"
+      aria-labelledby="example-heading"
+      className={cn(
+        'housing flex flex-col gap-5 rounded-2xl p-4 md:p-6',
+        docked ? 'absolute inset-x-2 bottom-2 z-10 max-h-[82%] overflow-y-auto shadow-2xl md:inset-x-4 md:bottom-4' : 'scroll-mt-6',
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-4 px-1">
         <div className="flex flex-col gap-1.5">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
