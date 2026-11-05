@@ -22,6 +22,7 @@ import {
   type PrefDraft,
   type PrefField,
 } from '@/lib/fitting/prefs'
+import { clearPersistedBaseline, loadBaseline, saveBaseline } from '@/lib/fitting/baseline'
 import { REQUIRED_QUESTIONS, answeredCount, previousQuestion, questionPrompt } from '@/lib/fitting/brief-flow'
 import { draftFromRemembered, rememberBrief, type RememberedBrief } from '@/lib/fitting/remembered-brief'
 import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
@@ -98,10 +99,12 @@ export function StrideLab({
   initialPersona,
   initialBrief,
   initialSport,
+  shareRef,
 }: {
   initialPersona: Persona
   initialBrief: RememberedBrief | null
   initialSport: Sport
+  shareRef: string | null
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -157,6 +160,30 @@ export function StrideLab({
   const readout = useMemo(() => readoutOf(snapshot, sport), [snapshot, sport])
   const agentOutputs = useMemo(() => outputsOf(agent.messages), [agent.messages])
   const picks = useMemo(() => agentOutputs?.picks ?? [], [agentOutputs])
+
+  // A shared card brought someone in — attribute the landing.
+  useEffect(() => {
+    if (shareRef) trackStep('share_landing', { ref: shareRef })
+  }, [shareRef])
+
+  // Restore a metrics-only baseline from a previous session so the film-again
+  // loop survives a reload; hero photos stay session-only by design.
+  // Deferred to a frame callback — reading localStorage is a client-side sync.
+  useEffect(() => {
+    if (baseline) return
+    const id = requestAnimationFrame(() => {
+      const persisted = loadBaseline(sport)
+      if (!persisted) return
+      setBaseline({
+        readout: { ...readoutOf(null, sport), metrics: persisted.metrics },
+        clipName: persisted.clipName,
+        heroPhotoUrl: '',
+        heroFrame: null,
+        capturedAt: persisted.capturedAt,
+      })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [sport, baseline])
 
   const restartAnalysis = useCallback((nextSport: Sport, height: number) => {
     setTracker(createTracker(nextSport, height))
@@ -307,7 +334,10 @@ export function StrideLab({
       setChoice(null)
       setConfirmedPrefs(null)
       setAttempted(false)
-      if (clearsBaseline(reason)) setBaseline(null)
+      if (clearsBaseline(reason)) {
+        setBaseline(null)
+        clearPersistedBaseline()
+      }
       const saved = reason === 'sport' || reason === 'start-fresh' ? remembered?.bySport[targetSport] : undefined
       if (reason === 'sport' || reason === 'start-fresh') {
         setPrefDraft((d) => ({ ...d, goal: saved?.goal ?? '', surface: saved?.surface ?? '' }))
@@ -1019,7 +1049,9 @@ export function StrideLab({
               onChoose={choose}
               onPinBaseline={measuredReady ? () => {
                 if (!hero) return
-                setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today', heroPhotoUrl: hero.dataUrl, heroFrame: hero, capturedAt: new Date().toISOString() })
+                const capturedAt = new Date().toISOString()
+                setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today', heroPhotoUrl: hero.dataUrl, heroFrame: hero, capturedAt })
+                saveBaseline({ sport, clipName: clip?.name ?? 'today', capturedAt, metrics: panelReadout.metrics })
               } : undefined}
               baselinePinned={Boolean(baseline)}
               deeper={deeper}
@@ -1092,7 +1124,7 @@ export function StrideLab({
 
             {baseline && (
               <div className="housing flex flex-col gap-2 rounded-2xl p-4 md:p-5">
-                <p className={LABEL}>Baseline · this session only</p>
+                <p className={LABEL}>Baseline · saved on this browser</p>
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   {'Compare your movement across sessions. '}
                   {proof
@@ -1100,7 +1132,7 @@ export function StrideLab({
                     : 'Load a clip to compare against '}
                   <span className="font-semibold text-foreground">{baseline.clipName}</span>.
                 </p>
-                <Button variant="outline" size="lg" className="h-10 w-fit px-4" onClick={() => setBaseline(null)}>
+                <Button variant="outline" size="lg" className="h-10 w-fit px-4" onClick={() => { setBaseline(null); clearPersistedBaseline() }}>
                   <PinOff aria-hidden />
                   Clear baseline
                 </Button>

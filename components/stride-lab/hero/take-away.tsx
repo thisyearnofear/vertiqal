@@ -14,10 +14,10 @@ import { HeroCard } from './hero-card'
 export interface Baseline {
   readout: Readout
   clipName: string
-  /** Hero frame photo URL for before/after comparison. */
+  /** Hero frame photo URL for before/after comparison — '' for a metrics-only restored baseline. */
   heroPhotoUrl: string
-  /** Hero frame data for the before side of the comparison. */
-  heroFrame: HeroFrame
+  /** Hero frame data for the before side — null for a baseline restored from a previous session. */
+  heroFrame: HeroFrame | null
   /** When the baseline was pinned (ISO). */
   capturedAt: string
 }
@@ -46,7 +46,7 @@ export function TakeAway({ showHero, hero, baseline, panelReadout, sport, heroPi
             metrics: baseline.readout.metrics,
             standoutMetric: { value: '0', unit: '', label: '', description: '' },
             headline: '',
-            frameId: baseline.heroFrame.id,
+            frameId: baseline.heroFrame?.id ?? -1,
             photoUrl: baseline.heroPhotoUrl,
           }
         : null,
@@ -62,7 +62,7 @@ export function TakeAway({ showHero, hero, baseline, panelReadout, sport, heroPi
       )}
 
       {/* Film-again prompt — shown after baseline is pinned, before re-film */}
-      {baseline && hero && hero.id === baseline.heroFrame.id && (
+      {baseline && hero && (!baseline.heroFrame || hero.id === baseline.heroFrame.id) && (
         <div id="hero-film-again" className="scroll-mt-6">
           <div className="housing rounded-2xl p-4 md:p-6">
             <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved flex items-center gap-2">

@@ -157,7 +157,12 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
     const file = await toFile()
     if (!file) return
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'My Forma hero frame' }).catch(() => {})
+      await navigator.share({
+        files: [file],
+        title: 'My Forma hero frame',
+        text: 'Forma measured how I actually move',
+        url: 'https://vertiqal.vercel.app/?ref=hero',
+      }).catch(() => {})
     } else {
       await save()
     }
