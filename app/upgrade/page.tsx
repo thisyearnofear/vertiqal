@@ -2,8 +2,10 @@ import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { BRIEF_COOKIE, parseRememberedBrief } from '@/lib/fitting/remembered-brief'
 import { setTier } from '@/app/actions'
+import { paypalToolingReady } from '@/lib/paypal/toolkit'
 import { ActivatePro } from './activate'
 import { PayPalUpgrade } from './paypal-button'
+import { SubscribeButton } from './subscribe-button'
 
 const PRO_FEATURES = [
   'Unlimited vision checks — sole wear, keyframe review',
@@ -39,6 +41,8 @@ export default async function UpgradePage() {
         <p className="rounded border border-primary/50 px-4 py-2 text-sm text-primary">
           Pro is active on this browser — thank you.
         </p>
+      ) : paypalToolingReady() ? (
+        <SubscribeButton />
       ) : paypalClientId ? (
         <PayPalUpgrade clientId={paypalClientId} />
       ) : paymentUrl ? (
