@@ -11,6 +11,7 @@ export type FunnelStep =
   | 'pick_chosen'
   | 'buy_clicked'
   | 'reminder_added'
+  | 'share_landing'
   | 'shortlist_feedback'
   | 'limit_hit'
 

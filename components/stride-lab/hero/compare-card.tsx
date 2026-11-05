@@ -107,7 +107,12 @@ export function CompareCard({ beforeFrame, afterFrame, beforeReadout, afterReado
     const file = await toFile()
     if (!file) return
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'My Forma comparison' }).catch(() => {})
+      await navigator.share({
+        files: [file],
+        title: 'My Forma comparison',
+        text: 'Forma compared my movement across sessions',
+        url: 'https://vertiqal.vercel.app/?ref=compare',
+      }).catch(() => {})
     } else {
       await save()
     }
