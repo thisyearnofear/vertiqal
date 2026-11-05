@@ -897,7 +897,7 @@ export function StrideLab({
 
       <section aria-label="Movement analysis" className="housing flex flex-col gap-3 rounded-2xl p-3 md:gap-4 md:p-5">
         {example ? (
-          <div className="relative lg:pr-[42%]">
+          <div className="relative">
             <ExampleObserver
               sport={sport}
               themeKey={persona.phosphor}
