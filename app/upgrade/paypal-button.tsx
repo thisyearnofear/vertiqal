@@ -27,8 +27,8 @@ export function PayPalUpgrade({ clientId }: { clientId: string }) {
 
   useEffect(() => {
     if (window.paypal) {
-      setStatus('ready')
-      return
+      const id = requestAnimationFrame(() => setStatus('ready'))
+      return () => cancelAnimationFrame(id)
     }
     const script = document.createElement('script')
     script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=GBP&intent=capture`
