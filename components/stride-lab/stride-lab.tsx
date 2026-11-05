@@ -1,8 +1,9 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
-import { Box, Calendar, Camera, Film, Pause, PinOff, Play, RotateCcw, Square, Upload } from 'lucide-react'
+import { PinOff, Play } from 'lucide-react'
 import { forgetBrief, saveBrief, savePersona } from '@/app/actions'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -21,31 +22,27 @@ import {
   type PrefDraft,
   type PrefField,
 } from '@/lib/fitting/prefs'
-import { REQUIRED_QUESTIONS, answeredCount, nextQuestion, previousQuestion, questionPrompt, type BriefQuestion } from '@/lib/fitting/brief-flow'
+import { REQUIRED_QUESTIONS, answeredCount, previousQuestion, questionPrompt } from '@/lib/fitting/brief-flow'
 import { draftFromRemembered, rememberBrief, type RememberedBrief } from '@/lib/fitting/remembered-brief'
-import { applyParsedBrief } from '@/lib/fitting/brief-parse'
 import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
 import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, visibilityFor, type ResetReason } from '@/lib/fitting/session'
 import { narrate, type NarrationAction, type StockPhase } from '@/lib/fitting/narration'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
 import { PHOSPHOR_COLOR, lockedLine, speechFor, type Mood, type Persona } from '@/lib/persona'
-import { POSE_PROVIDERS, getPoseProvider } from '@/lib/pose/providers'
+import { POSE_PROVIDERS } from '@/lib/pose/providers'
 import type { ExampleObservation } from '@/lib/pose/example-observation'
-import type { FrameQuality, Pose, PoseSession } from '@/lib/pose/types'
-import { createValidationRecorder, type ValidationCapture, type ValidationSource } from '@/lib/pose/validation'
+import type { FrameQuality } from '@/lib/pose/types'
 import { FormaDock } from '@/components/forma/forma-dock'
 import type { HeroFrame } from '@/lib/hero/frame'
 import { AgentPanel } from './agent/agent-panel'
 import { activityOf } from './agent/agent-steps'
 import { outputsOf, type ShoePick } from './agent/outputs'
-import { HeroCard } from './hero/hero-card'
-import { CompareCard } from './hero/compare-card'
-import type { BaselineReading } from '@/lib/hero/comparison'
+import { TakeAway, type Baseline } from './hero/take-away'
 import { useGearAgent } from './agent/use-gear-agent'
 import { ExampleObserver } from './example-observer'
 import { ExampleWalkthrough, type ExampleState } from './example-walkthrough'
-import { BriefQuestionPanel, BriefSentence, QUESTION_ID } from './brief-strip'
-import { FittingBrief, type BriefField } from './fitting-brief'
+import { BriefQuestionPanel, BriefSentence } from './brief-strip'
+import { FittingBrief } from './fitting-brief'
 import { HeightDial } from './height-dial'
 import { FittingHeader, SportToggle } from './fitting-header'
 import { FittingNotes } from './fitting-notes'
@@ -53,23 +50,28 @@ import { GaitReadout } from './gait-readout'
 import { LiveOverlay } from './live-overlay'
 import { PoseStage, type Keyframe } from './pose-stage'
 import { ProviderPicker } from './provider-picker'
-import { MovementTwin } from './twin/movement-twin'
+import { StageControls } from './stage-controls'
 import { ValidationControls } from './validation-controls'
+import { useBriefFlow } from './use-brief-flow'
+import { useInlineConfirm } from './use-inline-confirm'
 import { useLiveCamera } from './use-live-camera'
+import { usePoseProvider } from './use-pose-provider'
+import { useValidationCapture } from './use-validation-capture'
 import { useVoice } from './use-voice'
+
+// three.js is heavy and only needed below the fold after measurements.
+const MovementTwin = dynamic(() => import('./twin/movement-twin').then((m) => m.MovementTwin), {
+  ssr: false,
+  loading: () => (
+    <div className="housing rounded-2xl p-4 md:p-5">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">Loading 3D twin…</p>
+    </div>
+  ),
+})
 
 interface Clip {
   url: string
   name: string
-}
-
-interface Baseline {
-  readout: Readout
-  clipName: string
-  /** Hero frame photo URL for before/after comparison. */
-  heroPhotoUrl: string
-  /** Hero frame data for the before side of the comparison. */
-  heroFrame: HeroFrame
 }
 
 const CAPTURE_SECONDS: Record<Sport, number> = { running: 20, climbing: 45 }
@@ -82,15 +84,10 @@ const LABEL = 'text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreg
 const PRIVACY_LINE =
   'Default video analysis stays on-device. Optional hosted analysis, photo review and AI try-on send images only when you choose them. Your confirmed brief answers — never niggles, never video — are remembered in a cookie on this browser for next time. When you click through to a retailer, a random reference is attached so Forma can learn whether the size was right; it identifies no one. Typed sentences and the clip surface guess go to Grok only when you press those buttons.'
 
-const scrollToSection = (id: string) => {
+const scrollTo = (el: HTMLElement | null | undefined, block: ScrollLogicalPosition = 'start') => {
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  document.getElementById(id)?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' })
+  el?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block })
 }
-
-type SessionState =
-  | { status: 'loading' }
-  | { status: 'ready'; session: PoseSession }
-  | { status: 'error'; message: string }
 
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName))
@@ -107,22 +104,28 @@ export function StrideLab({
   initialSport: Sport
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const procurementRef = useRef<HTMLDivElement>(null)
+  const questionPanelRef = useRef<HTMLDivElement>(null)
+  const stageHeightInputRef = useRef<HTMLInputElement>(null)
+  const exampleHeadingRef = useRef<HTMLParagraphElement>(null)
+  /** Both copies of the dock's primary action render side by side (mobile + desktop). */
+  const formaActionButtonsRef = useRef<Partial<Record<'desktop' | 'mobile', HTMLButtonElement | null>>>({})
+  const buyLinkRef = useRef<HTMLAnchorElement | null>(null)
   const [clip, setClip] = useState<Clip | null>(null)
   const [remembered, setRemembered] = useState<RememberedBrief | null>(initialBrief)
   const [sport, setSport] = useState<Sport>(initialSport)
-  const [providerId, setProviderId] = useState(POSE_PROVIDERS[0].id)
-  const [sessionState, setSessionState] = useState<SessionState>({ status: 'loading' })
-  const [providerStatus, setProviderStatus] = useState<string | null>(null)
+  const poseEngine = usePoseProvider()
+  const providerId = poseEngine.providerId
+  const sessionState = poseEngine.state
+  const providerStatus = poseEngine.status
   const [initialDraft] = useState(() => draftFromRemembered(initialBrief, initialSport, null))
   const [prefDraft, setPrefDraft] = useState<PrefDraft>(initialDraft)
   const [calibrationCm, setCalibrationCm] = useState(() => parseHeightCm(initialDraft.heightCm) ?? FALLBACK_HEIGHT_CM)
   const [tracker, setTracker] = useState(() => createTracker(initialSport, parseHeightCm(initialDraft.heightCm) ?? FALLBACK_HEIGHT_CM))
   const [snapshot, setSnapshot] = useState<MovementSnapshot | null>(null)
-  const recorderRef = useRef<ReturnType<typeof createValidationRecorder> | null>(null)
-  const [captureStatus, setCaptureStatus] = useState<'idle' | 'recording' | 'ready'>('idle')
-  const [capturedTrace, setCapturedTrace] = useState<ValidationCapture | null>(null)
-  const [captureSource, setCaptureSource] = useState<ValidationSource>('unclassified')
   const [lockedReadout, setLockedReadout] = useState<Readout | null>(null)
+  const [providerMismatch, setProviderMismatch] = useState(false)
   const [playing, setPlaying] = useState(true)
   const [baseline, setBaseline] = useState<Baseline | null>(null)
   const [persona, setPersona] = useState(initialPersona)
@@ -138,15 +141,8 @@ export function StrideLab({
   const [caption, setCaption] = useState<string | null>(null)
   const [keyframes, setKeyframes] = useState<Keyframe[]>([])
   const [hero, setHero] = useState<HeroFrame | null>(null)
-
-  const filmedDate = useMemo(() => new Date(), [baseline])
   const still = useReducedMotion() ?? false
-  const [notes, setNotes] = useState<FittingNotesState>(() => ({
-    ...EMPTY_NOTES,
-    goal: initialDraft.goal,
-    surface: initialDraft.surface,
-    width: initialBrief?.width ?? '',
-  }))
+  const [notes, setNotes] = useState<FittingNotesState>(() => ({ ...EMPTY_NOTES, width: initialBrief?.width ?? '' }))
   const [lockLine, setLockLine] = useState<string | null>(null)
   const [choice, setChoice] = useState<ShoePick | null>(null)
   const [example, setExample] = useState<ExampleState | null>(null)
@@ -154,62 +150,25 @@ export function StrideLab({
   const [depth, setDepth] = useState<Depth>('considered')
   const [confirmedPrefs, setConfirmedPrefs] = useState<ShopperPrefs | null>(null)
   const [attempted, setAttempted] = useState(false)
-  const [activeQuestion, setActiveQuestion] = useState<BriefQuestion | null>(null)
-  const [skipped, setSkipped] = useState<ReadonlySet<BriefQuestion>>(new Set())
-  const [describeState, setDescribeState] = useState<{ pending: boolean; error: string | null }>({ pending: false, error: null })
-  const [filledNote, setFilledNote] = useState<string | null>(null)
-  const [surfaceGuess, setSurfaceGuess] = useState<{ pending: boolean; suggestion: string | null; message: string | null }>({
-    pending: false,
-    suggestion: null,
-    message: null,
-  })
   const agent = useGearAgent()
   const speak = useVoice(voiceOn)
-
-  useEffect(() => {
-    let cancelled = false
-    let session: PoseSession | null = null
-    setSessionState({ status: 'loading' })
-    setProviderStatus(null)
-    getPoseProvider(providerId)
-      .load()
-      .then((loaded) => {
-        if (cancelled) return loaded.dispose()
-        session = loaded
-        loaded.onStatus?.(setProviderStatus)
-        setSessionState({ status: 'ready', session: loaded })
-      })
-      .catch((error: Error) => {
-        if (!cancelled) setSessionState({ status: 'error', message: error.message })
-      })
-    return () => {
-      cancelled = true
-      session?.dispose()
-    }
-  }, [providerId])
+  const sampleConfirm = useInlineConfirm()
 
   const readout = useMemo(() => readoutOf(snapshot, sport), [snapshot, sport])
   const agentOutputs = useMemo(() => outputsOf(agent.messages), [agent.messages])
   const picks = useMemo(() => agentOutputs?.picks ?? [], [agentOutputs])
-  const [providerMismatch, setProviderMismatch] = useState(false)
-
-  const clearValidationCapture = useCallback(() => {
-    recorderRef.current = null
-    setCapturedTrace(null)
-    setCaptureStatus('idle')
-  }, [])
 
   const restartAnalysis = useCallback((nextSport: Sport, height: number) => {
     setTracker(createTracker(nextSport, height))
     setCalibrationCm(height)
     setSnapshot(null)
     setLockedReadout(null)
+    setLockLine(null)
     setKeyframes([])
     setHero(null)
     setCaption(null)
     setProviderMismatch(false)
-    clearValidationCapture()
-  }, [clearValidationCapture])
+  }, [])
 
   const addKeyframe = useCallback((frame: Keyframe) => {
     setKeyframes((current) => (current.length >= MAX_KEYFRAMES ? current : [...current, frame]))
@@ -220,6 +179,59 @@ export function StrideLab({
     void speak(sport === 'running' ? 'Go. Run naturally.' : 'Go. Climb naturally.')
   })
   const liveActive = live.phase === 'starting' || live.phase === 'countdown' || live.phase === 'recording'
+  const enteredHeight = parseHeightCm(prefDraft.heightCm)
+
+  const resumePlayback = useCallback(() => {
+    const video = videoRef.current
+    if (video && video.paused) {
+      void video.play()
+      setPlaying(true)
+    }
+  }, [])
+
+  const validationCanStart =
+    !example &&
+    sport === 'running' &&
+    sessionState.status === 'ready' &&
+    Boolean(clip || live.phase === 'recording') &&
+    !providerMismatch &&
+    (enteredHeight === null || enteredHeight === calibrationCm)
+
+  const validation = useValidationCapture({
+    videoRef,
+    canStart: validationCanStart,
+    providerId,
+    enteredHeight,
+    sport,
+    hasClip: Boolean(clip),
+    livePhase: live.phase,
+    resumePlayback,
+  })
+  const clearValidation = validation.clear
+
+  // The snapshot callback is the lock boundary: when a clip or live capture yields a
+  // ready readout, measurements lock here — not in a post-render effect.
+  const handleSnapshot = useCallback(
+    (next: MovementSnapshot) => {
+      setSnapshot(next)
+      if (liveActive || lockedReadout) return
+      const nextReadout = readoutOf(next, sport)
+      if (!nextReadout.ready) return
+      const line = lockedLine(persona.voice, nextReadout.metrics)
+      setLockLine(line)
+      trackStep('measurements_locked', { sport, source: clip ? 'clip' : 'camera' })
+      if (line) void speak(line)
+      setLockedReadout(nextReadout)
+      // Pausing the clip would starve an active validation capture of frames.
+      if (!clip || validation.status === 'recording') return
+      const video = videoRef.current
+      if (video && !video.paused) {
+        video.pause()
+        setPlaying(false)
+      }
+    },
+    [liveActive, lockedReadout, sport, persona.voice, clip, speak, validation.status],
+  )
 
   const releaseClip = () => {
     setClip((previous) => {
@@ -232,9 +244,7 @@ export function StrideLab({
     (next: PrefDraft) => {
       const heightChanged = parseHeightCm(next.heightCm) !== parseHeightCm(prefDraft.heightCm)
       setPrefDraft(next)
-      setNotes((current) => ({ ...current, goal: next.goal, surface: next.surface }))
       if (!heightChanged) return
-      clearValidationCapture()
       const plan = remeasurePlan({
         enteredCm: parseHeightCm(next.heightCm),
         calibratedCm: calibrationCm,
@@ -249,20 +259,46 @@ export function StrideLab({
       setLockedReadout(null)
       setLockLine(null)
       restartAnalysis(sport, parseHeightCm(next.heightCm)!)
+      resumePlayback()
       const video = videoRef.current
-      if (video && clip) {
-        video.currentTime = 0
-        void video.play()
-        setPlaying(true)
-      }
+      if (video && clip) video.currentTime = 0
     },
-    [prefDraft.heightCm, calibrationCm, live.phase, liveActive, clip, sport, agent, restartAnalysis, clearValidationCapture],
+    [prefDraft.heightCm, calibrationCm, live.phase, liveActive, clip, sport, agent, restartAnalysis, resumePlayback],
   )
 
   const updateNotes = useCallback((next: FittingNotesState) => {
     setNotes(next)
-    setPrefDraft((d) => ({ ...d, goal: next.goal, surface: next.surface }))
   }, [])
+
+  const sentBrief = agent.sentBrief
+  const shopping = Boolean(sentBrief)
+  const measuredReady = Boolean(lockedReadout?.ready) || (readout.ready && !liveActive)
+  const stage = stageOf({
+    example: Boolean(example),
+    capturing: Boolean(clip) || liveActive || readout.events > 0,
+    measuredReady,
+    sent: shopping,
+    hasOutputs: picks.length > 0,
+    hasChoice: Boolean(choice),
+  })
+  const stageIdle = !example && !clip && !live.stream
+  const askingBrief = !example && !liveActive && (stage === 'capture' || stage === 'confirm')
+
+  const briefFlow = useBriefFlow({
+    sport,
+    draft: prefDraft,
+    notes,
+    onDraft: updateDraft,
+    onNotes: updateNotes,
+    askingBrief,
+    heightOnScreen: stageIdle,
+    surfaceFrame: keyframes[0] ?? null,
+    example: Boolean(example),
+    panelRef: questionPanelRef,
+  })
+  const question = briefFlow.question
+  const focusBriefField = briefFlow.focusField
+  const resetBriefFlow = briefFlow.reset
 
   const resetSession = useCallback(
     (reason: ResetReason, targetSport: Sport = sport) => {
@@ -275,22 +311,14 @@ export function StrideLab({
       const saved = reason === 'sport' || reason === 'start-fresh' ? remembered?.bySport[targetSport] : undefined
       if (reason === 'sport' || reason === 'start-fresh') {
         setPrefDraft((d) => ({ ...d, goal: saved?.goal ?? '', surface: saved?.surface ?? '' }))
-        setSkipped(new Set())
       }
-      setActiveQuestion(null)
-      setNotes((current) => {
-        const next = notesAfterReset(reason, current)
-        return saved ? { ...next, goal: saved.goal, surface: saved.surface } : next
-      })
+      setNotes((current) => notesAfterReset(reason, current))
       setLockedReadout(null)
       setCaption(null)
-      clearValidationCapture()
-      setCaptureSource('unclassified')
-      setDescribeState({ pending: false, error: null })
-      setFilledNote(null)
-      setSurfaceGuess({ pending: false, suggestion: null, message: null })
+      clearValidation()
+      resetBriefFlow(reason === 'sport' || reason === 'start-fresh')
     },
-    [agent, live, clearValidationCapture, remembered, sport],
+    [agent, live, remembered, sport, clearValidation, resetBriefFlow],
   )
 
   const currentAnalysisHeight = analysisHeight(prefDraft).heightCm
@@ -344,14 +372,14 @@ export function StrideLab({
     restartAnalysis(sport, currentAnalysisHeight)
     setExampleObservation(null)
     setExample({ step: 0, playing: !prefersStill(), concept: 0 })
-    requestAnimationFrame(() => document.getElementById('example-media-heading')?.focus())
+    requestAnimationFrame(() => exampleHeadingRef.current?.focus())
   }
 
   const exitExample = () => {
     setExample(null)
     setExampleObservation(null)
     requestAnimationFrame(() => {
-      const button = [...document.querySelectorAll<HTMLButtonElement>('[data-forma-action]')].find((b) => b.getClientRects().length > 0)
+      const button = Object.values(formaActionButtonsRef.current).find((b) => b && b.getClientRects().length > 0)
       button?.scrollIntoView({ block: 'center' })
       button?.focus()
     })
@@ -364,16 +392,18 @@ export function StrideLab({
     restartAnalysis(sport, currentAnalysisHeight)
   }
 
-  const shopping = Boolean(agent.sentBrief)
   const trackShopping = useEffectEvent(() => trackStep('shopping_started', { sport }))
   useEffect(() => {
     if (!shopping) return
     trackShopping()
-    requestAnimationFrame(() => scrollToSection('forma-procurement'))
+    requestAnimationFrame(() => scrollTo(procurementRef.current))
   }, [shopping])
 
   const choose = (pick: ShoePick | null) => {
-    if (pick) trackStep('pick_chosen', { sport, retailer: pick.retailer })
+    if (pick) {
+      trackStep('pick_chosen', { sport, retailer: pick.retailer })
+      requestAnimationFrame(() => scrollTo(procurementRef.current))
+    }
     setStock({ phase: 'idle', price: null })
     setFallbackFrom(null)
     setBought(false)
@@ -432,7 +462,7 @@ export function StrideLab({
 
   const changeProvider = (next: string) => {
     if (next === providerId) return
-    clearValidationCapture()
+    poseEngine.beginLoad()
     agent.reset()
     setChoice(null)
     setConfirmedPrefs(null)
@@ -450,7 +480,7 @@ export function StrideLab({
         setPlaying(true)
       }
     }
-    setProviderId(next)
+    poseEngine.setProviderId(next)
   }
 
   const onShortcut = useEffectEvent((e: KeyboardEvent) => {
@@ -459,7 +489,8 @@ export function StrideLab({
       e.preventDefault()
       togglePlay()
     } else if (e.key === 'r' || e.key === 'R') {
-      restart()
+      // Restarting wipes measurements and search results, so R only works while there's nothing to lose.
+      if (!lockedReadout && readout.events === 0 && !shopping) restart()
     }
   })
   useEffect(() => {
@@ -493,97 +524,6 @@ export function StrideLab({
     if (ANNOUNCED_MOODS.has(mood)) void speak(speechFor(persona.voice, mood, sport))
   }, [mood, persona.voice, sport, speak, example])
 
-  const lockMeasurement = useEffectEvent((final: Readout) => {
-    const line = lockedLine(persona.voice, final.metrics)
-    setLockLine(line)
-    trackStep('measurements_locked', { sport, source: clip ? 'clip' : 'camera' })
-    if (line) void speak(line)
-    setLockedReadout(final)
-    if (!clip || recorderRef.current) return
-    const video = videoRef.current
-    if (video && !video.paused) {
-      video.pause()
-      setPlaying(false)
-    }
-  })
-  useEffect(() => {
-    if (liveActive) return
-    if (readout.ready && !lockedReadout) {
-      lockMeasurement(readout)
-    } else if (!readout.ready && !lockedReadout) {
-      setLockLine(null)
-    }
-  }, [readout, liveActive, lockedReadout])
-
-  const enteredHeight = parseHeightCm(prefDraft.heightCm)
-
-  const validationCanStart =
-    !example &&
-    sport === 'running' &&
-    engine === 'ready' &&
-    Boolean(clip || live.phase === 'recording') &&
-    !providerMismatch &&
-    (enteredHeight === null || enteredHeight === calibrationCm)
-
-  const onValidationFrame = useCallback(
-    (frame: { timeSec: number; pose: Pose | null; width: number; height: number; snapshot: MovementSnapshot }) => {
-      const recorder = recorderRef.current
-      if (!recorder || frame.snapshot.sport !== 'running') return
-      recorder.record(frame.timeSec, frame.pose, frame.width, frame.height, frame.snapshot)
-      if (recorder.stopReason) {
-        const trace = recorder.finish()
-        recorderRef.current = null
-        setCapturedTrace(trace)
-        setCaptureStatus(trace ? 'ready' : 'idle')
-      }
-    },
-    [],
-  )
-
-  const stopCapture = useCallback(() => {
-    const recorder = recorderRef.current
-    if (!recorder) return
-    const trace = recorder.finish()
-    recorderRef.current = null
-    setCapturedTrace(trace)
-    setCaptureStatus(trace ? 'ready' : 'idle')
-  }, [])
-
-  const startCapture = () => {
-    if (!validationCanStart || captureStatus === 'recording') return
-    const video = videoRef.current
-    if (!video || video.readyState < 2) return
-    recorderRef.current = createValidationRecorder({
-      captureId: crypto.randomUUID(),
-      sourceKind: captureSource,
-      providerId,
-      heightCm: enteredHeight,
-    })
-    setCapturedTrace(null)
-    setCaptureStatus('recording')
-    if (clip && video.paused) {
-      void video.play()
-      setPlaying(true)
-    }
-  }
-
-  const exportCapture = () => {
-    if (!capturedTrace) return
-    const blob = new Blob([JSON.stringify(capturedTrace, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `forma-running-validation-${capturedTrace.captureId.slice(0, 8)}.json`
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
-
-  useEffect(() => {
-    if (!clip && captureStatus === 'recording' && ['done', 'error', 'off'].includes(live.phase)) stopCapture()
-  }, [live.phase, captureStatus, clip, stopCapture])
-
   const proof = baseline && readout.ready
     ? readout.metrics.reduce(
         (tally, metric) => {
@@ -595,8 +535,6 @@ export function StrideLab({
       )
     : null
 
-  const sentBrief = agent.sentBrief
-  const measuredReady = Boolean(lockedReadout?.ready) || (readout.ready && !liveActive)
   const recorded = live.phase === 'done'
   const provisional = enteredHeight === null && (readout.events > 0 || Boolean(lockedReadout))
   const staleMeasurement = measurementInvalidated({ enteredCm: enteredHeight, calibratedCm: calibrationCm, providerMismatch })
@@ -657,14 +595,6 @@ export function StrideLab({
     agent.send(sentBrief, prefs)
   }
 
-  const stage = stageOf({
-    example: Boolean(example),
-    capturing: Boolean(clip) || liveActive || readout.events > 0,
-    measuredReady,
-    sent: shopping,
-    hasOutputs: picks.length > 0,
-    hasChoice: Boolean(choice),
-  })
   const missingFields = Object.keys(validatePrefs(prefDraft)) as PrefField[]
   const nextStep = nextStepFor({
     stage,
@@ -696,104 +626,19 @@ export function StrideLab({
   const settingsScope = visible.denseStage ? stage : 'setup'
   const tuning = tuningAt === settingsScope
 
-  const stageIdle = !example && !clip && !live.stream
-  const askingBrief = !example && !liveActive && (stage === 'capture' || stage === 'confirm')
-  const question =
-    activeQuestion ?? (askingBrief ? nextQuestion({ draft: prefDraft, notes, skipped, heightOnScreen: stageIdle }) : null)
-
   const afterPaint = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn))
-
-  const askQuestion = (next: BriefQuestion) => {
-    setActiveQuestion(next)
-    afterPaint(() => {
-      const target = document.getElementById(QUESTION_ID)
-      target?.scrollIntoView({ block: 'nearest', behavior: prefersStill() ? 'auto' : 'smooth' })
-      target?.focus({ preventScroll: true })
-    })
-  }
-
-  const focusBriefField = (field: BriefField) => askQuestion(field)
-
-  const answerDraft = (patch: Partial<PrefDraft>) => {
-    updateDraft({ ...prefDraft, ...patch })
-    setActiveQuestion(null)
-  }
-
-  const answerNotes = (patch: Partial<FittingNotesState>) => {
-    updateNotes({ ...notes, ...patch })
-    setActiveQuestion(null)
-  }
-
-  const skipQuestion = (current: BriefQuestion) => {
-    setSkipped((s) => new Set(s).add(current))
-    setActiveQuestion(null)
-  }
-
-  const submitDescribe = async (text: string) => {
-    setDescribeState({ pending: true, error: null })
-    try {
-      const res = await fetch('/api/brief', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'text', sport, text }),
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok || !data) throw new Error(data?.error ?? 'Forma could not read that')
-      const applied = applyParsedBrief(prefDraft, notes, data)
-      if (applied.filled.length > 0 || applied.notes.current !== notes.current) {
-        updateDraft(applied.draft)
-        updateNotes(applied.notes)
-        setActiveQuestion(null)
-        const note =
-          applied.filled.length > 0
-            ? `Filled ${applied.filled.join(', ')} from what you wrote — tap any to change.`
-            : 'Noted your current shoe — tap any field to change.'
-        setFilledNote(note)
-        window.setTimeout(() => setFilledNote((n) => (n === note ? null : n)), 9000)
-      } else {
-        setActiveQuestion(null)
-        setFilledNote("Couldn't find anything to fill — try naming your size or budget.")
-        window.setTimeout(() => setFilledNote(null), 9000)
-      }
-      setDescribeState({ pending: false, error: null })
-    } catch (error) {
-      setDescribeState({ pending: false, error: error instanceof Error ? error.message : 'Forma could not read that' })
-    }
-  }
-
-  const guessSurface = async () => {
-    const frame = keyframes[0]
-    if (!frame || surfaceGuess.pending || example) return
-    setSurfaceGuess({ pending: true, suggestion: null, message: null })
-    try {
-      const res = await fetch('/api/brief', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'surface', sport, image: frame.dataUrl }),
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok || !data) throw new Error(data?.error ?? 'Could not read the still')
-      setSurfaceGuess({
-        pending: false,
-        suggestion: data.surface ?? null,
-        message: data.surface ? null : "Couldn't tell from the clip.",
-      })
-    } catch (error) {
-      setSurfaceGuess({ pending: false, suggestion: null, message: error instanceof Error ? error.message : 'Could not read the still' })
-    }
-  }
 
   const personalFilm = () => {
     if (example) setExample(null)
     if (enteredHeight === null) {
       if (!clip && !live.stream) {
         afterPaint(() => {
-          const input = document.getElementById('stage-height')
+          const input = stageHeightInputRef.current
           input?.scrollIntoView({ block: 'center', behavior: prefersStill() ? 'auto' : 'smooth' })
           input?.focus({ preventScroll: true })
         })
       } else {
-        askQuestion('height')
+        briefFlow.ask('height')
       }
       return
     }
@@ -803,10 +648,9 @@ export function StrideLab({
   const runNextAction = () => {
     const action = nextStep.action?.kind
     if (action === 'example') showExample()
-    else if (action === 'upload-example') document.getElementById('clip-upload')?.click()
-    else if (action === 'upload') document.getElementById('clip-upload')?.click()
+    else if (action === 'upload-example' || action === 'upload') fileInputRef.current?.click()
     else if (action === 'brief') focusBriefField(missingFields[0] ?? 'size')
-    else if (action === 'results') scrollToSection('forma-procurement')
+    else if (action === 'results') scrollTo(procurementRef.current)
     else if (action === 'recapture') goLive()
   }
 
@@ -815,8 +659,7 @@ export function StrideLab({
       ? { label: sentBrief ? 'Update search' : 'Find my shoes', onClick: submitSearch }
       : null
   const narrationAct = (kind: NarrationAction) => {
-    const buyLink = () => [...document.querySelectorAll<HTMLAnchorElement>('[data-buy-link]')].find((a) => a.getClientRects().length > 0)
-    if (kind === 'buy' || kind === 'open') buyLink()?.click()
+    if (kind === 'buy' || kind === 'open') buyLinkRef.current?.click()
     else if (kind === 'shortlist') choose(null)
   }
 
@@ -827,23 +670,20 @@ export function StrideLab({
         controls: (
           <BriefQuestionPanel
             key={question}
+            panelRef={questionPanelRef}
             question={question}
             sport={sport}
             draft={prefDraft}
             notes={notes}
             likelySize={null}
-            onDraft={answerDraft}
-            onNotes={answerNotes}
-            onSkip={() => skipQuestion(question)}
-            onBack={previousQuestion(question) ? () => setActiveQuestion(previousQuestion(question)) : null}
-            onClose={() => setActiveQuestion(null)}
-            onAsk={askQuestion}
-            describe={{ pending: describeState.pending, error: describeState.error, onSubmit: submitDescribe }}
-            surfaceGuess={
-              keyframes.length > 0
-                ? { pending: surfaceGuess.pending, suggestion: surfaceGuess.suggestion, message: surfaceGuess.message, onGuess: guessSurface }
-                : undefined
-            }
+            onDraft={briefFlow.answerDraft}
+            onNotes={briefFlow.answerNotes}
+            onSkip={() => briefFlow.skip(question)}
+            onBack={previousQuestion(question) ? () => briefFlow.ask(previousQuestion(question)!) : null}
+            onClose={briefFlow.close}
+            onAsk={briefFlow.ask}
+            describe={briefFlow.describe}
+            surfaceGuess={briefFlow.surfaceGuess}
           />
         ),
       }
@@ -853,7 +693,7 @@ export function StrideLab({
   const askDocked = !example && stage === 'confirm' ? askPanel : null
 
   const stripAction = example
-    ? { label: 'Upload my clip', onClick: () => document.getElementById('clip-upload')?.click() }
+    ? { label: 'Upload my clip', onClick: () => fileInputRef.current?.click() }
     : narration
       ? narration.action
         ? { label: narration.action.label, onClick: () => narrationAct(narration.action!.kind) }
@@ -882,7 +722,7 @@ export function StrideLab({
       <FittingHeader />
 
       <input
-        id="clip-upload"
+        ref={fileInputRef}
         type="file"
         accept="video/*"
         tabIndex={-1}
@@ -905,6 +745,7 @@ export function StrideLab({
             localSessionFailed={providerId === 'mediapipe' && sessionState.status === 'error'}
             onObservation={setExampleObservation}
             exampleStep={example.step}
+            headingRef={exampleHeadingRef}
             overlay={<ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} docked />}
           />
         ) : (
@@ -968,9 +809,9 @@ export function StrideLab({
               sport={sport}
               engine={engine}
               statusLabel={statusLabel}
-              onSnapshot={setSnapshot}
+              onSnapshot={handleSnapshot}
               onFile={loadFile}
-              onValidationFrame={onValidationFrame}
+              onValidationFrame={validation.onFrame}
               progress={{ events: readout.events, target: MIN_EVENTS, ready: readout.ready }}
               lockedMetrics={lockedMetrics}
               provisional={provisional}
@@ -990,6 +831,7 @@ export function StrideLab({
                   key={enteredHeight ?? 'none'}
                   id="stage-height"
                   variant="screen"
+                  inputRef={stageHeightInputRef}
                   value={enteredHeight}
                   onCommit={(cm) => updateDraft({ ...prefDraft, heightCm: String(cm) })}
                 />
@@ -1001,92 +843,39 @@ export function StrideLab({
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <SportToggle sport={sport} onSport={changeSport} />
           {!example && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="lg"
-                className="h-10 whitespace-nowrap px-3"
-                onClick={() => document.getElementById('clip-upload')?.click()}
-              >
-                <Upload aria-hidden />
-                {stage === 'invite' ? 'Upload a clip' : 'Another clip'}
-              </Button>
-              {liveActive ? (
-                <Button variant="outline" size="lg" className="h-10 whitespace-nowrap px-3" onClick={live.stop}>
-                  <Square aria-hidden />
-                  Stop capture
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="h-10 whitespace-nowrap px-3"
-                  onClick={personalFilm}
-                  disabled={enteredHeight !== null && engine !== 'ready'}
-                  title={
-                    enteredHeight === null
-                      ? 'Set your height first — recordings cannot be re-analysed later'
-                      : engine === 'loading'
-                        ? 'Pose engine is warming up'
-                        : engine === 'error'
-                          ? 'Live analysis is unavailable right now — upload a clip instead'
-                          : undefined
-                  }
-                >
-                  <Camera aria-hidden />
-                  {enteredHeight === null ? 'Set up my camera' : stage === 'invite' ? 'Film me' : 'Film again'}
-                </Button>
-              )}
-              {clip && (
-                <>
-                  <Button variant="outline" size="icon-lg" onClick={togglePlay} aria-label={playing ? 'Pause (Space)' : 'Play (Space)'}>
-                    {playing ? <Pause aria-hidden /> : <Play aria-hidden />}
-                  </Button>
-                  <Button variant="outline" size="icon-lg" onClick={restart} aria-label="Restart analysis (R)">
-                    <RotateCcw aria-hidden />
-                  </Button>
-                </>
-              )}
-              {(clip || live.stream) && (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={voiceOn}
-                  onClick={() => setVoiceOn((v) => !v)}
-                  className="well flex h-10 items-center gap-2 rounded-md px-3 text-xs font-semibold uppercase tracking-[0.18em] text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                >
-                  <span className="led" data-state={voiceOn ? 'on' : 'off'} aria-hidden />
-                  Voice
-                  <span className="sr-only">{': Forma speaks coaching cues aloud'}</span>
-                </button>
-              )}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={twinOpen || measuredReady}
-                onClick={() => setTwinOpen((v) => !v)}
-                className="well flex h-10 items-center gap-2 rounded-md px-3 text-xs font-semibold uppercase tracking-[0.18em] text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <span className="led" data-state={twinOpen || measuredReady ? 'on' : 'off'} aria-hidden />
-                <Box className="size-3.5" aria-hidden />
-                3D Twin
-              </button>
-              {!stageIdle && !liveActive && !shopping && (
-                <Button
-                  variant="ghost"
-                  size="lg"
-                  className="h-10 whitespace-nowrap px-3 font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-                  title="Watch the illustrated sample fitting. This clears the current clip."
-                  onClick={() => {
-                    if (measuredReady && !window.confirm('Watching the sample clears this clip and its measurements. Continue?')) return
-                    showExample()
-                  }}
-                >
-                  <Play aria-hidden />
-                  Sample fitting
-                </Button>
-              )}
-            </div>
+            <StageControls
+              invite={stage === 'invite'}
+              onUpload={() => fileInputRef.current?.click()}
+              liveActive={liveActive}
+              onStopLive={live.stop}
+              filmLabel={enteredHeight === null ? 'Set up my camera' : stage === 'invite' ? 'Film me' : 'Film again'}
+              filmDisabled={enteredHeight !== null && engine !== 'ready'}
+              filmTitle={
+                enteredHeight === null
+                  ? 'Set your height first — recordings cannot be re-analysed later'
+                  : engine === 'loading'
+                    ? 'Pose engine is warming up'
+                    : engine === 'error'
+                      ? 'Live analysis is unavailable right now — upload a clip instead'
+                      : undefined
+              }
+              onFilm={personalFilm}
+              hasClip={Boolean(clip)}
+              playing={playing}
+              onTogglePlay={togglePlay}
+              onRestart={restart}
+              showVoice={Boolean(clip || live.stream)}
+              voiceOn={voiceOn}
+              onToggleVoice={() => setVoiceOn((v) => !v)}
+              twinOn={twinOpen || measuredReady}
+              onToggleTwin={() => setTwinOpen((v) => !v)}
+              showSample={!stageIdle && !liveActive && !shopping}
+              sampleArmed={sampleConfirm.armed}
+              onSample={() => {
+                if (measuredReady && !sampleConfirm.confirm()) return
+                showExample()
+              }}
+            />
           )}
         </div>
 
@@ -1148,6 +937,7 @@ export function StrideLab({
           action={stripAction}
           pips={example ? undefined : { done: answeredCount(prefDraft, notes), total: REQUIRED_QUESTIONS.length }}
           ask={askDocked ? null : askPanel}
+          actionButtonsRef={formaActionButtonsRef}
           footer={
             example ? (
               sport === 'running' ? (
@@ -1172,7 +962,7 @@ export function StrideLab({
                   draft={prefDraft}
                   notes={notes}
                   active={question}
-                  onPick={askQuestion}
+                  onPick={briefFlow.ask}
                   compact={!visible.briefExtras}
                   remembered={remembered && visible.briefExtras ? { onForget: forgetRemembered } : undefined}
                   trailing={
@@ -1183,9 +973,9 @@ export function StrideLab({
                     ) : undefined
                   }
                 />
-                {filledNote && (
+                {briefFlow.filledNote && (
                   <p role="status" className="text-xs leading-relaxed text-muted-foreground">
-                    {filledNote}
+                    {briefFlow.filledNote}
                   </p>
                 )}
                 {visible.briefExtras && (
@@ -1221,7 +1011,7 @@ export function StrideLab({
 
       <main className={cn('flex min-w-0 flex-col gap-4 pb-52', visible.denseStage ? 'lg:pb-40' : 'lg:pb-0')}>
         {!example && shopping && (
-          <div id="forma-procurement" className="scroll-mt-6">
+          <div ref={procurementRef} className="scroll-mt-6">
             <AgentPanel
               agent={agent}
               sport={sport}
@@ -1229,7 +1019,7 @@ export function StrideLab({
               onChoose={choose}
               onPinBaseline={measuredReady ? () => {
                 if (!hero) return
-                setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today', heroPhotoUrl: hero.dataUrl, heroFrame: hero })
+                setBaseline({ readout: panelReadout, clipName: clip?.name ?? 'today', heroPhotoUrl: hero.dataUrl, heroFrame: hero, capturedAt: new Date().toISOString() })
               } : undefined}
               baselinePinned={Boolean(baseline)}
               deeper={deeper}
@@ -1247,6 +1037,7 @@ export function StrideLab({
               canFallBack={!fallbackFrom}
               onAutoAdvance={autoAdvance}
               onBought={() => setBought(true)}
+              buyLinkRef={buyLinkRef}
             />
           </div>
         )}
@@ -1273,7 +1064,7 @@ export function StrideLab({
               </div>
             )}
 
-            {visible.validation && sport === 'running' && (clip || liveActive || captureStatus === 'ready') && (
+            {visible.validation && sport === 'running' && (clip || liveActive || validation.status === 'ready') && (
               <details name="forma-panels" className="group housing rounded-2xl p-4 md:p-5">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
                   <span className={LABEL}>Local validation</span>
@@ -1283,17 +1074,17 @@ export function StrideLab({
                 </summary>
                 <div className="mt-3">
                   <ValidationControls
-                    status={captureStatus}
-                    source={captureSource}
-                    traceSource={capturedTrace?.sourceKind ?? null}
-                    onSource={setCaptureSource}
+                    status={validation.status}
+                    source={validation.source}
+                    traceSource={validation.trace?.sourceKind ?? null}
+                    onSource={validation.setSource}
                     canStart={validationCanStart}
-                    onStart={startCapture}
-                    onStop={stopCapture}
-                    onExport={exportCapture}
-                    stopReason={capturedTrace?.stopReason ?? null}
-                    frameCount={capturedTrace?.frames.length ?? 0}
-                    contactCount={capturedTrace?.contacts.length ?? 0}
+                    onStart={validation.start}
+                    onStop={validation.stop}
+                    onExport={validation.exportTrace}
+                    stopReason={validation.trace?.stopReason ?? null}
+                    frameCount={validation.trace?.frames.length ?? 0}
+                    contactCount={validation.trace?.contacts.length ?? 0}
                   />
                 </div>
               </details>
@@ -1318,79 +1109,28 @@ export function StrideLab({
           </>
         )}
 
-        {choice && hero && visible.takeAway && (
-          <div id="hero-frame" className="scroll-mt-6">
-            <HeroCard frame={hero} readout={panelReadout} sport={sport} picks={heroPicks} themeKey={persona.phosphor} />
-          </div>
-        )}
-
-        {/* Film-again prompt — shown after baseline is pinned, before re-film */}
-        {baseline && hero && hero.id === baseline.heroFrame.id && (
-          <div id="hero-film-again" className="scroll-mt-6">
-            <div className="housing rounded-2xl p-4 md:p-6">
-              <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved flex items-center gap-2">
-                <span className="led" data-state="on" aria-hidden /> Film again
-              </p>
-              <h2 className="mt-2 text-balance text-xl font-semibold text-foreground">See what changed</h2>
-              <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
-                {`You filmed on ${filmedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Film yourself again and Forma will compare your movement — side by side, before and after.`}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Button variant="outline" size="lg" className="gap-2" onClick={() => {
-                  // Reset hero to trigger a new capture
-                  setHero(null)
-                }}>
-                  <Film aria-hidden className="size-4" />
-                  Film again
-                </Button>
-                <Button variant="outline" size="lg" className="gap-2" onClick={() => {
-                  // Download a .ics reminder for 30 days from now
-                  const future = new Date()
-                  future.setDate(future.getDate() + 30)
-                  const formatted = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
-                  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Forma//EN', 'BEGIN:VEVENT', `DTSTART:${formatted(future)}`, `DTEND:${formatted(new Date(future.getTime() + 3600000))}`, `SUMMARY:Film yourself again — Forma`, `DESCRIPTION:Film a clip of your ${sport} and upload it to Forma to see how your movement has changed.`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
-                  const blob = new Blob([ics], { type: 'text/calendar' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = `forma-film-reminder-${future.toISOString().split('T')[0]}.ics`
-                  a.click()
-                  URL.revokeObjectURL(url)
-                }}>
-                  <Calendar aria-hidden className="size-4" />
-                  30-day reminder
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Baseline comparison — shown when there's a baseline AND a new hero frame */}
-        {baseline && hero && hero.id !== baseline.heroFrame.id && (
-          <div id="hero-compare" className="scroll-mt-6">
-            <CompareCard
-              beforeFrame={baseline.heroFrame}
-              afterFrame={hero}
-              beforeReadout={baseline.readout}
-              afterReadout={panelReadout}
-              baseline={{
-                sport,
-                capturedAt: new Date().toISOString(),
-                metrics: baseline.readout.metrics,
-                standoutMetric: { value: '0', unit: '', label: '', description: '' },
-                headline: '',
-                frameId: baseline.heroFrame.id,
-                photoUrl: baseline.heroPhotoUrl,
-              } as BaselineReading}
-              sport={sport}
-              themeKey={persona.phosphor}
-            />
-          </div>
-        )}
+        <TakeAway
+          showHero={Boolean(choice && visible.takeAway)}
+          hero={hero}
+          baseline={baseline}
+          panelReadout={panelReadout}
+          sport={sport}
+          heroPicks={heroPicks}
+          themeKey={persona.phosphor}
+          onFilmAgain={() => setHero(null)}
+        />
 
         {shopping && picks.length > 0 && !choice && !example && (
           <div id="fitting-notes" className="scroll-mt-6">
-            <FittingNotes sport={sport} readout={panelReadout} keyframes={keyframes} value={notes} onChange={updateNotes} />
+            <FittingNotes
+              sport={sport}
+              readout={panelReadout}
+              keyframes={keyframes}
+              draft={prefDraft}
+              onDraft={(patch) => updateDraft({ ...prefDraft, ...patch })}
+              value={notes}
+              onChange={updateNotes}
+            />
           </div>
         )}
       </main>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Pause, Play, ScanEye } from 'lucide-react'
 import { EXAMPLE_FOOTAGE } from '@/lib/fitting/example'
 import {
@@ -30,6 +30,8 @@ interface ExampleObserverProps {
   overlay?: ReactNode
   /** Walkthrough step — the sketch climbs as steps advance. */
   exampleStep?: number
+  /** Focus target for the media heading when the example opens. */
+  headingRef?: RefObject<HTMLParagraphElement | null>
 }
 
 const EMPTY_FRAME: FrameQuality = { person: false, hips: false, feet: false }
@@ -63,7 +65,7 @@ function ClimberSketch({ className }: { className?: string }) {
   )
 }
 
-export function ExampleObserver({ sport, themeKey, localSession, loadLocalSession, localSessionFailed = false, onObservation, overlay, exampleStep = 0 }: ExampleObserverProps) {
+export function ExampleObserver({ sport, themeKey, localSession, loadLocalSession, localSessionFailed = false, onObservation, overlay, exampleStep = 0, headingRef }: ExampleObserverProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -79,9 +81,17 @@ export function ExampleObserver({ sport, themeKey, localSession, loadLocalSessio
   const running = sport === 'running'
   const session = running ? (localSession ?? (loadLocalSession ? ownSession : null)) : null
 
+  // Loader restarts when these inputs change; reset the failure flag during render
+  // so a retry doesn't flash "unavailable" before the loader reports.
+  const loaderKey = `${running}:${loadLocalSession}`
+  const [prevLoaderKey, setPrevLoaderKey] = useState(loaderKey)
+  if (loaderKey !== prevLoaderKey) {
+    setPrevLoaderKey(loaderKey)
+    setSessionFailed(false)
+  }
+
   useEffect(() => {
     if (!running || !loadLocalSession) return
-    setSessionFailed(false)
     const loader = createOwnedSessionLoader(mediapipeProvider.load, setOwnSession, () => setSessionFailed(true))
     return () => {
       loader.dispose()
@@ -273,7 +283,7 @@ export function ExampleObserver({ sport, themeKey, localSession, loadLocalSessio
   if (!running) {
     return (
       <div className="flex flex-col gap-3">
-        <p id="example-media-heading" tabIndex={-1} className={cn(LABEL, 'focus-visible:outline-none')}>
+        <p ref={headingRef} tabIndex={-1} className={cn(LABEL, 'focus-visible:outline-none')}>
           Synthetic example
         </p>
         <div className="screen relative flex aspect-[4/5] items-center justify-center overflow-hidden sm:aspect-video lg:aspect-auto lg:h-[clamp(500px,66svh,620px)]">
@@ -294,7 +304,7 @@ export function ExampleObserver({ sport, themeKey, localSession, loadLocalSessio
 
   return (
     <div className="flex flex-col gap-3">
-      <p id="example-media-heading" tabIndex={-1} className={cn(LABEL, 'focus-visible:outline-none')}>
+      <p ref={headingRef} tabIndex={-1} className={cn(LABEL, 'focus-visible:outline-none')}>
         AI-generated example
       </p>
       <div ref={containerRef} className="screen relative aspect-[4/3] w-full sm:aspect-video lg:aspect-auto lg:h-[clamp(500px,66svh,620px)]">

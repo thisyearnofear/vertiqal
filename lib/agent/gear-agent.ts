@@ -1,5 +1,5 @@
 import 'server-only'
-import { ToolLoopAgent, stepCountIs, tool, type InferAgentUIMessage, type LanguageModel, type ModelMessage } from 'ai'
+import { ToolLoopAgent, stepCountIs, tool, type InferAgentUIMessage, type ModelMessage } from 'ai'
 import { z } from 'zod'
 import { DEPTHS, depthFromPrompt, hasLayer } from './depth'
 import { findingsFor } from './evidence'

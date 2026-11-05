@@ -34,9 +34,12 @@ export type VisionKind = 'soles' | 'frames'
 export const FOOT_WIDTHS = ['narrow', 'standard', 'wide'] as const
 export type FootWidth = (typeof FOOT_WIDTHS)[number]
 
+/**
+ * Free-text and vision notes that sit beside the structured brief. Goal and
+ * surface deliberately live only on PrefDraft — they were duplicated here once
+ * and drifted; draft is the single source of truth.
+ */
 export interface FittingNotesState {
-  goal: string
-  surface: string
   width: FootWidth | ''
   current: string
   niggles: string
@@ -44,7 +47,7 @@ export interface FittingNotesState {
   frames: VisionFinding | null
 }
 
-export const EMPTY_NOTES: FittingNotesState = { goal: '', surface: '', width: '', current: '', niggles: '', sole: null, frames: null }
+export const EMPTY_NOTES: FittingNotesState = { width: '', current: '', niggles: '', sole: null, frames: null }
 
 export const INTAKE_OPTIONS: Record<Sport, { goals: string[]; surfaces: string[]; surfaceLabel: string }> = {
   running: {
@@ -62,11 +65,11 @@ export const INTAKE_OPTIONS: Record<Sport, { goals: string[]; surfaces: string[]
 const findingLine = (source: string, finding: VisionFinding) =>
   `${source} (Grok vision, ${finding.confidence} confidence): ${finding.observations.map((o) => o.title).join('; ')}. ${finding.shoeImplication}`
 
-/** Flattens the notes into short lines the shopping agent can weigh. */
-export function contextLines(notes: FittingNotesState, sport: Sport): string[] {
+/** Flattens the brief and notes into short lines the shopping agent can weigh. */
+export function contextLines(notes: FittingNotesState, sport: Sport, draft: { goal: string; surface: string }): string[] {
   const lines: string[] = []
-  if (notes.goal) lines.push(`Goal: ${notes.goal}`)
-  if (notes.surface) lines.push(`${INTAKE_OPTIONS[sport].surfaceLabel}: ${notes.surface}`)
+  if (draft.goal) lines.push(`Goal: ${draft.goal}`)
+  if (draft.surface) lines.push(`${INTAKE_OPTIONS[sport].surfaceLabel}: ${draft.surface}`)
   if (notes.width) lines.push(`Foot width: ${notes.width}`)
   if (notes.current.trim()) lines.push(`Currently in: ${notes.current.trim().slice(0, 160)}`)
   if (notes.niggles.trim()) lines.push(`Niggles or past issues: ${notes.niggles.trim().slice(0, 160)}`)

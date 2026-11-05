@@ -122,11 +122,12 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
         className={cn(
           'flex flex-col gap-6 font-mono',
           docked
-            ? 'mt-auto max-h-[72%] overflow-y-auto bg-gradient-to-t from-stage via-stage/85 to-transparent px-5 pt-14 pb-5 md:px-8'
+            ? 'forma-scroll mt-auto max-h-[72%] overflow-y-auto bg-gradient-to-t from-stage via-stage/85 to-transparent px-5 pt-14 pb-5 md:px-8'
             : 'screen screen-readable p-5 md:p-8',
         )}
-        aria-live="polite"
       >
+        {/* One concise announcement per step — the whole panel must not re-announce controls. */}
+        <p className="sr-only" aria-live="polite">{`Step ${step + 1} of ${EXAMPLE_STEP_COUNT}: ${script.steps[step].title}`}</p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-lg leading-snug opacity-70">{`> STEP ${step + 1} OF ${EXAMPLE_STEP_COUNT} · ${script.steps[step].title.toUpperCase()}`}</p>
           <div role="group" aria-label="Example steps" className="flex flex-wrap items-center gap-0.5">

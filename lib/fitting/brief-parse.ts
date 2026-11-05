@@ -93,12 +93,10 @@ export function applyParsedBrief(
   }
   if (parsed.goal) {
     nextDraft.goal = parsed.goal
-    nextNotes.goal = parsed.goal
     filled.push('goal')
   }
   if (parsed.surface) {
     nextDraft.surface = parsed.surface
-    nextNotes.surface = parsed.surface
     filled.push('surface')
   }
   if (parsed.width) {

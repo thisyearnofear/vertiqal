@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Calendar, Film, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NOT_BOUGHT_REASONS, OUTCOMES, OUTCOME_LABEL, type Outcome } from '@/lib/outcome/schema'
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function OutcomeForm({ token, sport, name, retailer, size }: Props) {
+  const router = useRouter()
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [reason, setReason] = useState<string | null>(null)
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
@@ -121,7 +123,7 @@ export function OutcomeForm({ token, sport, name, retailer, size }: Props) {
                   <Calendar aria-hidden className="size-4" />
                   30-day reminder
                 </Button>
-                <Button variant="outline" size="lg" className="gap-2" onClick={() => window.location.href = '/'}>
+                <Button variant="outline" size="lg" className="gap-2" onClick={() => router.push('/')}>
                   <Film aria-hidden className="size-4" />
                   Go back to Forma
                 </Button>

@@ -78,11 +78,14 @@ interface FittingNotesProps {
   sport: Sport
   readout: Readout
   keyframes: Keyframe[]
+  /** Goal and surface live on the brief draft; notes hold the rest. */
+  draft: { goal: string; surface: string }
+  onDraft: (patch: { goal?: string; surface?: string }) => void
   value: FittingNotesState
   onChange: (next: FittingNotesState) => void
 }
 
-export function FittingNotes({ sport, readout, keyframes, value, onChange }: FittingNotesProps) {
+export function FittingNotes({ sport, readout, keyframes, draft, onDraft, value, onChange }: FittingNotesProps) {
   const id = useId()
   const options = INTAKE_OPTIONS[sport]
   const sole = useSWRMutation('/api/vision', analyse)
@@ -140,7 +143,7 @@ export function FittingNotes({ sport, readout, keyframes, value, onChange }: Fit
             <label htmlFor={`${id}-goal`} className={LABEL}>
               Goal
             </label>
-            <select id={`${id}-goal`} value={value.goal} onChange={(e) => set({ goal: e.target.value })} className={SELECT}>
+            <select id={`${id}-goal`} value={draft.goal} onChange={(e) => onDraft({ goal: e.target.value })} className={SELECT}>
               <option value="">Not sure yet</option>
               {options.goals.map((g) => (
                 <option key={g}>{g}</option>
@@ -151,7 +154,7 @@ export function FittingNotes({ sport, readout, keyframes, value, onChange }: Fit
             <label htmlFor={`${id}-surface`} className={LABEL}>
               {options.surfaceLabel}
             </label>
-            <select id={`${id}-surface`} value={value.surface} onChange={(e) => set({ surface: e.target.value })} className={SELECT}>
+            <select id={`${id}-surface`} value={draft.surface} onChange={(e) => onDraft({ surface: e.target.value })} className={SELECT}>
               <option value="">Any</option>
               {options.surfaces.map((s) => (
                 <option key={s}>{s}</option>

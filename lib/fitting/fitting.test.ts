@@ -6,7 +6,6 @@ import {
   analysisHeight,
   buildConfirmedPrefs,
   heightCalibrated,
-  mergeDraftNotes,
   parseBudgetPounds,
   parseHeightCm,
   prefsValid,
@@ -264,24 +263,21 @@ test('frame quality checks whether the person, hips and both feet are visible', 
   assert.equal(frameQuality({ nose: point, left_hip: point, right_hip: point }).feet, false)
 })
 
-test('sport change clears sport-specific goal/surface and vision findings, keeps the rest', () => {
+test('reset clears vision findings, keeps the rest', () => {
   const notes = {
     ...EMPTY_NOTES,
-    goal: 'Easy miles',
-    surface: 'Road',
     width: 'wide' as const,
     niggles: 'sore shins',
     sole: { observations: [{ title: 'worn', detail: 'd' }], wearPattern: 'even' as const, shoeImplication: 's', confidence: 'low' as const },
   }
   const after = notesAfterReset('sport', notes)
-  assert.equal(after.goal, '')
-  assert.equal(after.surface, '')
   assert.equal(after.sole, null)
+  assert.equal(after.frames, null)
   assert.equal(after.width, 'wide')
   assert.equal(after.niggles, 'sore shins')
 
   const sameSport = notesAfterReset('new-clip', notes)
-  assert.equal(sameSport.goal, 'Easy miles', 'same-sport new clip keeps preferences')
+  assert.equal(sameSport.width, 'wide', 'new clip keeps typed preferences')
   assert.equal(sameSport.sole, null, 'vision findings describe the old clip')
   assert.equal(clearsBaseline('sport'), true)
   assert.equal(clearsBaseline('new-clip'), false)
@@ -434,7 +430,7 @@ test('stock runner: blocked results are not cached', async () => {
 
 test('confirmed prefs carry the shopper fields verbatim: size, budget, height plus notes lines', () => {
   const draft: PrefDraft = { ...valid, size: 'UK 9', budgetPounds: '160', heightCm: '178' }
-  const notes = { ...EMPTY_NOTES, width: 'wide' as const, niggles: 'sore shins', goal: 'stale-goal', surface: 'Trail' }
+  const notes = { ...EMPTY_NOTES, width: 'wide' as const, niggles: 'sore shins' }
   const prefs = buildConfirmedPrefs({
     draft,
     notes,
@@ -450,13 +446,8 @@ test('confirmed prefs carry the shopper fields verbatim: size, budget, height pl
   assert.deepEqual(
     prefs.notes,
     ['Goal: Easy miles', 'Surface: Road', 'Foot width: wide', 'Niggles or past issues: sore shins'],
-    'goal/surface come from the draft (single source), not stale notes fields',
+    'goal/surface come from the draft (single source)',
   )
-
-  const merged = mergeDraftNotes(draft, notes)
-  assert.equal(merged.goal, 'Easy miles')
-  assert.equal(merged.surface, 'Road')
-  assert.equal(merged.width, 'wide')
 
   assert.equal(buildConfirmedPrefs({ draft: blank, notes: EMPTY_NOTES, sport: 'running', voice: 'coach', depth: 'quick' }), null)
 })
@@ -823,7 +814,7 @@ test('remembered brief: saves confirmed answers per sport and never stores niggl
     bySport: { climbing: { goal: 'Hard bouldering', surface: 'Indoor walls' } },
   }
   const draft: PrefDraft = { size: 'UK 9', budgetPounds: '160', heightCm: '178', goal: 'Easy miles', surface: 'Road' }
-  const notes = { ...EMPTY_NOTES, width: 'wide' as const, niggles: 'sore shins', goal: 'Easy miles', surface: 'Road' }
+  const notes = { ...EMPTY_NOTES, width: 'wide' as const, niggles: 'sore shins' }
   const next = rememberBrief(previous, draft, notes, 'running')
   assert.equal(next.size, 'UK 9')
   assert.equal(next.budgetPounds, '160')

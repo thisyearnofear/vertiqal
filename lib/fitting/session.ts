@@ -175,10 +175,9 @@ export function visibilityFor(stage: FittingStage, state: { stockChecked: boolea
 
 export type ResetReason = 'new-clip' | 'record' | 'sport' | 'example' | 'start-fresh'
 
-export function notesAfterReset(reason: ResetReason, notes: FittingNotesState): FittingNotesState {
-  const next = { ...notes, sole: null, frames: null }
-  if (reason === 'sport' || reason === 'start-fresh') return { ...next, goal: '', surface: '' }
-  return next
+/** Vision findings describe the old clip, so every reset drops them. Goal/surface live on the draft, not here. */
+export function notesAfterReset(_reason: ResetReason, notes: FittingNotesState): FittingNotesState {
+  return { ...notes, sole: null, frames: null }
 }
 
 export function clearsBaseline(reason: ResetReason): boolean {

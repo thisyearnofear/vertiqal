@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { ArrowUpRight, Pin, RotateCcw } from 'lucide-react'
 import { buttonVariants, Button } from '@/components/ui/button'
 import { AFFILIATE_DISCLOSURE, wrapAffiliateUrl } from '@/lib/agent/affiliate'
@@ -41,6 +41,8 @@ interface DecisionPanelProps {
   onAutoAdvance: (next: ShoePick) => void
   /** The shopper opened the retailer. */
   onBought: () => void
+  /** Forma's narration can trigger this link on the shopper's behalf. */
+  buyLinkRef?: RefObject<HTMLAnchorElement | null>
 }
 
 export function DecisionPanel({
@@ -59,6 +61,7 @@ export function DecisionPanel({
   canFallBack,
   onAutoAdvance,
   onBought,
+  buyLinkRef,
 }: DecisionPanelProps) {
   const [draft, setDraft] = useState(size)
   // Running: the street size is already confirmed in the brief, so the check starts as soon as the shoe
@@ -249,10 +252,10 @@ export function DecisionPanel({
               </Button>
             )}
             <a
+              ref={buyLinkRef}
               href={buyLink.href}
               target="_blank"
               rel={buyLink.affiliated ? 'noreferrer sponsored' : 'noreferrer'}
-              data-buy-link
               onClick={recordChoice}
               className={cn(buttonVariants({ size: 'lg', variant: unavailable ? 'outline' : 'default' }), 'h-11 px-5 text-base')}
             >
