@@ -16,6 +16,7 @@
     "prepare": "husky",
     "smoke": "node scripts/smoke.mjs",
     "agent-shop": "node scripts/agent-shop.mjs",
+    "agent-shop:mcp": "node scripts/agent-shop-mcp.mjs",
     "cost:report": "node scripts/cost-report.mjs"
   },
   "lint-staged": {
@@ -49,6 +50,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24",
     "@types/react": "^19",
