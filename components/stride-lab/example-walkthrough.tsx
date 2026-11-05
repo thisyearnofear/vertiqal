@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw, X } from 'lucide-react'
 import {
   EXAMPLE_SCRIPTS,
@@ -77,11 +77,17 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
       id="example-walkthrough"
       aria-labelledby="example-heading"
       className={cn(
-        'housing flex flex-col gap-5 rounded-2xl p-4 md:p-6',
-        docked ? 'absolute inset-x-2 bottom-2 z-10 max-h-[82%] overflow-y-auto shadow-2xl md:inset-x-4 md:bottom-4' : 'scroll-mt-6',
+        docked
+          ? 'absolute inset-0 z-10 flex flex-col overflow-hidden rounded-2xl'
+          : 'housing scroll-mt-6 flex flex-col gap-5 rounded-2xl p-4 md:p-6',
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4 px-1">
+      <div
+        className={cn(
+          'flex flex-wrap items-start justify-between gap-4 px-1',
+          docked && 'items-center gap-3 bg-stage/75 px-4 py-3 backdrop-blur-md',
+        )}
+      >
         <div className="flex flex-col gap-1.5">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">
             <span className="led" data-state="off" aria-hidden />
@@ -106,7 +112,15 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
         </button>
       </div>
 
-      <div className="screen screen-readable flex flex-col gap-6 p-5 font-mono md:p-8" aria-live="polite">
+      {docked && <div className="pointer-events-none min-h-10 flex-1" aria-hidden />}
+
+      <div
+        className={cn(
+          'screen screen-readable flex flex-col gap-6 p-5 font-mono md:p-8',
+          docked && 'mt-auto max-h-[62%] overflow-y-auto border-t border-stage-foreground/25',
+        )}
+        aria-live="polite"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-lg leading-snug opacity-70">{`> STEP ${step + 1} OF ${EXAMPLE_STEP_COUNT} · ${script.steps[step].title.toUpperCase()}`}</p>
           <div role="group" aria-label="Example steps" className="flex flex-wrap items-center gap-0.5">
@@ -131,7 +145,16 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
           </div>
         </div>
 
-        {step === 0 && (
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`${sport}-${step}`}
+            initial={still ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={still ? { opacity: 0 } : { opacity: 0, y: -10 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
+            className="flex flex-col gap-4"
+          >
+            {step === 0 && (
           <div className="flex flex-col gap-3">
             <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-85">
               {script.steps[0].body} Watch the screen above while this short walkthrough shows observe, brief, directions, receipt and handoff.
@@ -224,6 +247,8 @@ export function ExampleWalkthrough({ sport, state, onState, onExit, docked = fal
             </p>
           </div>
         )}
+          </motion.div>
+        </AnimatePresence>
 
         <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-dashed border-stage-foreground/30 pt-4 text-lg leading-none">
           <button
