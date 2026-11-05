@@ -7,6 +7,7 @@ import { BUDGET_PRESETS, DEFAULT_SIZE, UK_SIZES, feetInches, isAnswered, questio
 import { parseBudgetPounds, parseHeightCm, type PrefDraft } from '@/lib/fitting/prefs'
 import type { Sport } from '@/lib/metrics/readout'
 import { cn } from '@/lib/utils'
+import { UpgradeLine } from '@/components/upgrade-line'
 import { HeightDial } from './height-dial'
 
 export const QUESTION_ID = 'forma-question'
@@ -156,11 +157,7 @@ function DescribeControls({ sport, describe }: { sport: Sport; describe: NonNull
         </button>
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">Sent as text to Grok (xAI) via the AI gateway. No video or images.</p>
-      {describe.error && (
-        <p role="alert" className="text-xs font-semibold leading-relaxed text-primary">
-          {describe.error}
-        </p>
-      )}
+      {describe.error && <UpgradeLine message={describe.error} className="text-xs font-semibold leading-relaxed text-primary" />}
     </form>
   )
 }
@@ -225,7 +222,7 @@ export function BriefQuestionPanel({
                 {surfaceGuess.pending ? 'Forma is looking…' : 'Guess from my clip'}
               </button>
               <span className="text-xs leading-relaxed text-muted-foreground">Sends one still to Grok.</span>
-              {surfaceGuess.message && <span className="text-xs font-semibold leading-relaxed text-primary">{surfaceGuess.message}</span>}
+              {surfaceGuess.message && <UpgradeLine message={surfaceGuess.message} className="text-xs font-semibold leading-relaxed text-primary" />}
             </div>
           )}
         </div>

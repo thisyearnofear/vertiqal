@@ -31,3 +31,19 @@ export async function forgetBrief() {
   const store = await cookies()
   store.set(BRIEF_COOKIE, '', { ...COOKIE_OPTIONS, maxAge: 0 })
 }
+
+/** Tier rides the remembered-brief cookie so API routes can read it server-side. */
+export async function setTier(tier: 'free' | 'pro') {
+  const store = await cookies()
+  const brief = rememberedBriefSchema.safeParse(
+    (() => {
+      try {
+        return JSON.parse(store.get(BRIEF_COOKIE)?.value ?? '')
+      } catch {
+        return null
+      }
+    })(),
+  )
+  const base = brief.success ? brief.data : { size: '', budgetPounds: '', heightCm: '', width: '', bySport: {} }
+  store.set(BRIEF_COOKIE, JSON.stringify({ ...base, tier }), COOKIE_OPTIONS)
+}

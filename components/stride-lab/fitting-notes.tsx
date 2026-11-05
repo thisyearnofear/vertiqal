@@ -3,6 +3,7 @@
 import { useId, useState, type ReactNode } from 'react'
 import useSWRMutation from 'swr/mutation'
 import { ChevronDown, Eye, ImageUp } from 'lucide-react'
+import { UpgradeLine } from '@/components/upgrade-line'
 import { briefFromReadout, briefLine } from '@/lib/agent/brief'
 import {
   FOOT_WIDTHS,
@@ -225,11 +226,7 @@ export function FittingNotes({ sport, readout, keyframes, draft, onDraft, value,
               }}
             />
           </label>
-          {sole.error && (
-            <p role="alert" className="text-sm leading-relaxed text-primary">
-              {sole.error.message}
-            </p>
-          )}
+          {sole.error && <UpgradeLine message={sole.error.message} className="text-sm leading-relaxed text-primary" />}
           {value.sole && <Finding finding={value.sole} />}
         </Column>
 
@@ -262,11 +259,7 @@ export function FittingNotes({ sport, readout, keyframes, draft, onDraft, value,
             <Eye aria-hidden />
             {frames.isMutating ? 'Grok is looking…' : value.frames ? 'Review again' : 'Review with Grok'}
           </Button>
-          {frames.error && (
-            <p role="alert" className="text-sm leading-relaxed text-primary">
-              {frames.error.message}
-            </p>
-          )}
+          {frames.error && <UpgradeLine message={frames.error.message} className="text-sm leading-relaxed text-primary" />}
           {value.frames && <Finding finding={value.frames} />}
         </Column>
       </div>

@@ -8,6 +8,7 @@ import { generateHeroCaption, captionToSpeech, type HeroCaption } from '@/lib/he
 import type { HeroFrame } from '@/lib/hero/frame'
 import type { Readout, Sport } from '@/lib/metrics/readout'
 import { Button } from '@/components/ui/button'
+import { UpgradeLine } from '@/components/upgrade-line'
 import { cn } from '@/lib/utils'
 import { readOverlayTheme } from '../draw-overlay'
 import { CARD_HEIGHT, CARD_WIDTH, GRADES, renderCard, type Grade } from './render-card'
@@ -363,11 +364,7 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
                 </div>
               )}
             </div>
-            {tryOnRun.error && (
-              <p role="alert" className="text-sm leading-relaxed text-primary">
-                {tryOnRun.error.message}
-              </p>
-            )}
+            {tryOnRun.error && <UpgradeLine message={tryOnRun.error.message} className="text-sm leading-relaxed text-primary" />}
           </div>
         </div>
       </div>
