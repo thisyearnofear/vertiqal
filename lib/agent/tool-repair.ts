@@ -32,6 +32,7 @@ export const GEAR_TOOL_NAMES = [
   'searchProducts',
   'checkCommunity',
   'checkAthletes',
+  'prepareCheckout',
   'recommendProducts',
 ] as const
 

@@ -28,6 +28,7 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 | Vercel AI Gateway | Fallback LLM chains when the OpenAI-compatible provider is down (`FORMA_AGENT_MODELS` / `FORMA_FAST_MODELS`), plus Grok TTS (Forma's spoken lines) and FLUX Kontext (try-on). See [architecture](docs/architecture.md#model-resolution). |
 | MediaPipe Pose | On-device keypoints, every frame. |
 | VLM Run (Orion) | Optional hosted keypoint refinement on sampled frames of uploaded clips. |
+| PayPal | Agentic commerce: Forma Pro checkout (`/upgrade`) via the PayPal JS SDK + Orders v2 REST, and a `prepareCheckout` agent tool that opens a PayPal order once a pick's size is verified in stock — the agent closes the loop it used to leave open. Sandbox config: `PAYPAL_CLIENT_ID` + `PAYPAL_CLIENT_SECRET` (server) and `NEXT_PUBLIC_PAYPAL_CLIENT_ID` (client), `PAYPAL_ENV=sandbox`. PayPal Agent Toolkit is vendored for MCP/agentic expansion. |
 | Tavily | Live retailer, research, community and athlete search. Product search runs at advanced depth and filters out corporate/homepage URLs so picks cite real product pages. |
 | Solari | Stealth browser with UK residential egress for size and stock checks, with screenshot and session replay receipts. |
 | Browser Use | User-approved basket availability checks (agent tool). |
