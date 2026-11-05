@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Pause, Play, ScanEye } from 'lucide-react'
 import { EXAMPLE_FOOTAGE } from '@/lib/fitting/example'
 import {
@@ -26,6 +26,10 @@ interface ExampleObserverProps {
   loadLocalSession: boolean
   localSessionFailed?: boolean
   onObservation?: (observation: ExampleObservation) => void
+  /** Rendered inside the screen frame (e.g. the walkthrough scene layer). */
+  overlay?: ReactNode
+  /** Walkthrough step — the sketch climbs as steps advance. */
+  exampleStep?: number
 }
 
 const EMPTY_FRAME: FrameQuality = { person: false, hips: false, feet: false }
@@ -59,7 +63,7 @@ function ClimberSketch({ className }: { className?: string }) {
   )
 }
 
-export function ExampleObserver({ sport, themeKey, localSession, loadLocalSession, localSessionFailed = false, onObservation }: ExampleObserverProps) {
+export function ExampleObserver({ sport, themeKey, localSession, loadLocalSession, localSessionFailed = false, onObservation, overlay, exampleStep = 0 }: ExampleObserverProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -272,8 +276,14 @@ export function ExampleObserver({ sport, themeKey, localSession, loadLocalSessio
         <p id="example-media-heading" tabIndex={-1} className={cn(LABEL, 'focus-visible:outline-none')}>
           Synthetic example
         </p>
-        <div className="screen flex aspect-[4/5] items-center justify-center sm:aspect-video lg:aspect-auto lg:h-[clamp(500px,66svh,620px)]">
-          <ClimberSketch className="max-h-48 w-full max-w-xs text-stage-foreground" />
+        <div className="screen relative flex aspect-[4/5] items-center justify-center overflow-hidden sm:aspect-video lg:aspect-auto lg:h-[clamp(500px,66svh,620px)]">
+          <div
+            className="transition-transform duration-700 ease-out motion-reduce:transition-none"
+            style={{ transform: `translateY(${20 - exampleStep * 14}%)` }}
+          >
+            <ClimberSketch className="max-h-48 w-full max-w-xs text-stage-foreground" />
+          </div>
+          {overlay}
         </div>
         <p className="font-mono text-xs uppercase leading-snug text-muted-foreground">
           Loaded locally · synthetic illustration · no footage
@@ -300,6 +310,7 @@ export function ExampleObserver({ sport, themeKey, localSession, loadLocalSessio
           className="absolute inset-0 h-full w-full object-contain opacity-80 contrast-110 grayscale sepia-[.35]"
         />
         <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
+        {overlay}
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button

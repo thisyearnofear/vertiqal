@@ -897,17 +897,16 @@ export function StrideLab({
 
       <section aria-label="Movement analysis" className="housing flex flex-col gap-3 rounded-2xl p-3 md:gap-4 md:p-5">
         {example ? (
-          <div className="relative">
-            <ExampleObserver
-              sport={sport}
-              themeKey={persona.phosphor}
-              localSession={providerId === 'mediapipe' && sessionState.status === 'ready' ? sessionState.session : null}
-              loadLocalSession={providerId !== 'mediapipe'}
-              localSessionFailed={providerId === 'mediapipe' && sessionState.status === 'error'}
-              onObservation={setExampleObservation}
-            />
-            <ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} docked />
-          </div>
+          <ExampleObserver
+            sport={sport}
+            themeKey={persona.phosphor}
+            localSession={providerId === 'mediapipe' && sessionState.status === 'ready' ? sessionState.session : null}
+            loadLocalSession={providerId !== 'mediapipe'}
+            localSessionFailed={providerId === 'mediapipe' && sessionState.status === 'error'}
+            onObservation={setExampleObservation}
+            exampleStep={example.step}
+            overlay={<ExampleWalkthrough sport={sport} state={example} onState={setExample} onExit={exitExample} docked />}
+          />
         ) : (
           <>
             {clip && (
