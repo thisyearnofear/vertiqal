@@ -58,6 +58,7 @@ Update this table every Friday. The "Users at end" for a week becomes "Users at 
 - This file is the single source of truth for Keiki × Maritime user tracking in Vertiqal. Do not restate the user-count table elsewhere.
 - Cost warning: every fitting costs money (Grok + Tavily + Solari + Grok TTS / FLUX Kontext). User growth must be paced against the $20k credit grant — see `docs/monetisation.md` for per-route caps.
 - Update weekly. If a week is missed, note the gap honestly rather than backfilling.
+- Journey tracking: every funnel event carries `vid` (random first-party cookie) and `returning: true` when a remembered brief exists; `agent_run` and `stock-check` cost logs carry the same `vid`, so journeys join across Analytics and the cost report. Metric #6 = events with `returning: true`.
 
 ## Gap note (week 2, closed Nov 3)
 
