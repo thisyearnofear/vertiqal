@@ -2,6 +2,7 @@ import { generateImage } from 'ai'
 import { z } from 'zod'
 import { friendlyModelError } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
+import { checkFeature, quotaResponse } from '@/lib/fitting/usage'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 60
@@ -35,6 +36,13 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: 'Send one JPEG, PNG or WebP frame and a shoe name' }, { status: 400 })
 
   const { image, shoe, sport } = parsed.data
+
+  const quota = await checkFeature(request, 'tryon')
+  if (!quota.ok) {
+    logCost('limit_hit', { surface: 'tryon', reason: 'tier_quota', tier: quota.tier, used: quota.used })
+    return quotaResponse(quota)
+  }
+
   const started = Date.now()
   try {
     const { image: result } = await generateImage({
