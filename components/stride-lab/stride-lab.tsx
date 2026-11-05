@@ -818,6 +818,38 @@ export function StrideLab({
     else if (kind === 'shortlist') choose(null)
   }
 
+  const askPanel = question
+    ? {
+        eyebrow: stage === 'capture' ? 'Forma · while I watch' : 'Forma · your brief',
+        prompt: questionPrompt(question, sport),
+        controls: (
+          <BriefQuestionPanel
+            key={question}
+            question={question}
+            sport={sport}
+            draft={prefDraft}
+            notes={notes}
+            likelySize={null}
+            onDraft={answerDraft}
+            onNotes={answerNotes}
+            onSkip={() => skipQuestion(question)}
+            onBack={previousQuestion(question) ? () => setActiveQuestion(previousQuestion(question)) : null}
+            onClose={() => setActiveQuestion(null)}
+            onAsk={askQuestion}
+            describe={{ pending: describeState.pending, error: describeState.error, onSubmit: submitDescribe }}
+            surfaceGuess={
+              keyframes.length > 0
+                ? { pending: surfaceGuess.pending, suggestion: surfaceGuess.suggestion, message: surfaceGuess.message, onGuess: guessSurface }
+                : undefined
+            }
+          />
+        ),
+      }
+    : null
+  // Confirm phase: dock the question inside the stage (overlay slot is free — no live capture).
+  // During capture the pose overlay owns the frame, so questions stay in the strip below.
+  const askDocked = !example && stage === 'confirm' ? askPanel : null
+
   const stripAction = example
     ? { label: 'Upload my clip', onClick: () => document.getElementById('clip-upload')?.click() }
     : narration
@@ -890,7 +922,15 @@ export function StrideLab({
               onKeyframe={addKeyframe}
               onHero={setHero}
               overlay={
-                live.phase === 'off' || live.phase === 'error' ? undefined : (
+                live.phase === 'off' || live.phase === 'error' ? (
+                  askDocked ? (
+                    <div className="housing absolute inset-x-3 bottom-3 z-10 max-h-[62%] overflow-y-auto rounded-xl p-4 shadow-xl md:inset-x-5 md:bottom-4 md:p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground engraved">{askDocked.eyebrow}</p>
+                      <p className="mt-1.5 text-pretty text-base font-semibold leading-snug md:text-lg">{askDocked.prompt}</p>
+                      <div className="mt-3">{askDocked.controls}</div>
+                    </div>
+                  ) : undefined
+                ) : (
                   <LiveOverlay
                     phase={live.phase}
                     secondsLeft={live.secondsLeft}
@@ -1086,36 +1126,7 @@ export function StrideLab({
           onPersona={changePersona}
           action={stripAction}
           pips={example ? undefined : { done: answeredCount(prefDraft, notes), total: REQUIRED_QUESTIONS.length }}
-          ask={
-            question
-              ? {
-                  eyebrow: stage === 'capture' ? 'Forma · while I watch' : 'Forma · your brief',
-                  prompt: questionPrompt(question, sport),
-                  controls: (
-                    <BriefQuestionPanel
-                      key={question}
-                      question={question}
-                      sport={sport}
-                      draft={prefDraft}
-                      notes={notes}
-                      likelySize={null}
-                      onDraft={answerDraft}
-                      onNotes={answerNotes}
-                      onSkip={() => skipQuestion(question)}
-                      onBack={previousQuestion(question) ? () => setActiveQuestion(previousQuestion(question)) : null}
-                      onClose={() => setActiveQuestion(null)}
-                      onAsk={askQuestion}
-                      describe={{ pending: describeState.pending, error: describeState.error, onSubmit: submitDescribe }}
-                      surfaceGuess={
-                        keyframes.length > 0
-                          ? { pending: surfaceGuess.pending, suggestion: surfaceGuess.suggestion, message: surfaceGuess.message, onGuess: guessSurface }
-                          : undefined
-                      }
-                    />
-                  ),
-                }
-              : null
-          }
+          ask={askDocked ? null : askPanel}
           footer={
             example ? (
               sport === 'running' ? (
