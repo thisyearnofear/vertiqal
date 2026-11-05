@@ -13,6 +13,7 @@ import {
   stockUrlAllowed,
 } from '@/lib/agent/stock-policy'
 import { logCost } from '@/lib/cost-log'
+import { vidFromRequest } from '@/lib/fitting/visitor'
 import { hasSecret } from '@/lib/secrets'
 
 export const maxDuration = 60
@@ -80,20 +81,21 @@ export async function POST(request: Request) {
     size: parsed.data.size,
   }
   const started = Date.now()
+  const vid = vidFromRequest(request)
   try {
     const result = await stockChecks(target, { fresh: parsed.data.fresh })
     if (result.status === 'busy') {
-      logCost('paid_call', { route: 'stock-check', ok: false, ms: Date.now() - started, busy: true })
+      logCost('paid_call', { route: 'stock-check', ok: false, ms: Date.now() - started, busy: true, vid })
       return Response.json(
         { error: 'Stock checks are busy right now. Try again shortly.' },
         { status: 503, headers: { ...rateHeaders(limit), 'Retry-After': '5' } },
       )
     }
     if (result.status !== 'ok') {
-      logCost('paid_call', { route: 'stock-check', ok: false, ms: Date.now() - started })
+      logCost('paid_call', { route: 'stock-check', ok: false, ms: Date.now() - started, vid })
       return Response.json({ error: 'Invalid product URL' }, { status: 400, headers: rateHeaders(limit) })
     }
-    logCost('paid_call', { route: 'stock-check', ok: true, ms: Date.now() - started, cache: result.source })
+    logCost('paid_call', { route: 'stock-check', ok: true, ms: Date.now() - started, cache: result.source, vid })
     return Response.json(
       { ...result.value, source: result.source },
       {
@@ -105,7 +107,7 @@ export async function POST(request: Request) {
       },
     )
   } catch (error) {
-    logCost('paid_call', { route: 'stock-check', ok: false, ms: Date.now() - started })
+    logCost('paid_call', { route: 'stock-check', ok: false, ms: Date.now() - started, vid })
     return Response.json(
       { error: error instanceof Error ? error.message : 'Stock check failed' },
       { status: 502, headers: rateHeaders(limit) },

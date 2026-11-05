@@ -3,6 +3,7 @@ import { agentRequestSchema, briefToPrompt } from '@/lib/agent/brief'
 import { createGearAgent } from '@/lib/agent/gear-agent'
 import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
+import { vidFromRequest } from '@/lib/fitting/visitor'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 300
@@ -42,16 +43,17 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Send a valid { brief, prefs } from a completed fitting' }, { status: 400 })
   }
   const { brief, prefs } = parsed.data
+  const vid = vidFromRequest(request)
 
   const agentGuard = await guardRequest(request, 'agent')
   if (!agentGuard.allowed) {
-    logCost('limit_hit', { surface: 'agent', reason: agentGuard.reason, sport: brief.sport, depth: prefs.depth })
+    logCost('limit_hit', { surface: 'agent', reason: agentGuard.reason, sport: brief.sport, depth: prefs.depth, vid })
     return guardResponse(agentGuard)
   }
   if (prefs.depth === 'deep') {
     const deepGuard = await guardRequest(request, 'deep')
     if (!deepGuard.allowed) {
-      logCost('limit_hit', { surface: 'deep', reason: deepGuard.reason, sport: brief.sport, depth: prefs.depth })
+      logCost('limit_hit', { surface: 'deep', reason: deepGuard.reason, sport: brief.sport, depth: prefs.depth, vid })
       return guardResponse(deepGuard)
     }
   }
@@ -70,6 +72,7 @@ export async function POST(request: Request) {
       outcome: 'failed',
       error: true,
       reason: 'no_model_available',
+      vid,
     })
     return Response.json(
       { error: 'Forma’s fitting model is unreachable right now — please try again in a moment.' },
@@ -115,6 +118,7 @@ export async function POST(request: Request) {
         finishReason: steps.at(-1)?.finishReason ?? null,
         outcome: outcome.status,
         error: outcome.status === 'failed',
+        vid,
       })
     },
     onError: (error) => friendlyModelError(error),

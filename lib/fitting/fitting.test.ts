@@ -49,6 +49,7 @@ import { MissingSecretError, hasSecret } from '../secrets.ts'
 import { parseChain, parseSpec } from '../agent/model-spec.ts'
 import type { ModelMessage } from 'ai'
 import { GEAR_TOOL_NAMES, matchToolName, phantomToolCall, phantomToolCalls, repairGearToolCall, repairToolArgs } from '../agent/tool-repair.ts'
+import { vidFromRequest } from './visitor.ts'
 import { buildErrorReport, redactPath } from '../error-report.ts'
 import { CLICK_REF_PATTERN } from '../outcome/schema.ts'
 import { OUTCOME_LINK_TTL_MS, issueOutcomeToken, newClickRef, readOutcomeToken } from '../outcome/token.ts'
@@ -1257,6 +1258,14 @@ test('tool repair budgets: single-use repeats and stuck runs are refused, not ex
   // Below every threshold a hidden call still repairs — first off-phase calls stay lenient.
   const ok = await repairGearToolCall(call('search_products', { query: 'trail shoes uk' }), tools, [])
   assert.equal(ok?.toolName, 'searchProducts')
+})
+
+test('visitor id: server parses the first-party cookie and rejects junk', () => {
+  const req = (cookie?: string) => new Request('https://x.test/', cookie ? { headers: { cookie } } : {})
+  assert.equal(vidFromRequest(req('vertiqal-vid=vq-abc123-def456; other=1')), 'vq-abc123-def456')
+  assert.equal(vidFromRequest(req('vertiqal-vid=<script>alert(1)</script>')), null)
+  assert.equal(vidFromRequest(req('other=1')), null)
+  assert.equal(vidFromRequest(req()), null)
 })
 
 test('error reports: queries and long path segments never reach the log', () => {
