@@ -134,20 +134,21 @@ const gearTools = {
   }),
   prepareCheckout: tool({
     description:
-      'Prepare a PayPal checkout for a pick the shopper has chosen and whose size was verified in stock — never call this before the stock check says in_stock.',
+      'Prepare a PayPal checkout for a pick the shopper has chosen and whose size was verified in stock — never call this before the stock check says in_stock. Delegates to the PayPal Agent Toolkit.',
     inputSchema: z.object({
       product: z.string().min(3).max(80),
       retailer: z.string().min(2).max(60),
       priceGBP: z.string().regex(/^\d{1,4}(\.\d{1,2})?$/).describe('e.g. "145.00" — digits and decimals only'),
     }),
     execute: async ({ product, retailer, priceGBP }) => {
-      const { createOrder, paypalConfigured } = await import('@/lib/paypal/orders')
-      if (!paypalConfigured()) return { configured: false }
-      const order = await createOrder({
-        description: `${product} — Forma verified at ${retailer}`,
-        amount: { currency_code: 'GBP', value: priceGBP },
+      const { paypalRun, paypalToolingReady } = await import('@/lib/paypal/toolkit')
+      if (!paypalToolingReady()) return { configured: false }
+      const order = await paypalRun<{ id?: string; links?: { rel: string; href: string }[] }>('create_order', {
+        intent: 'CAPTURE',
+        purchase_units: [{ description: `${product} — Forma verified at ${retailer}`, amount: { currency_code: 'GBP', value: priceGBP } }],
       }).catch(() => null)
-      return order ? { configured: true, orderId: order.id, approveUrl: order.approveUrl } : { configured: true, orderId: null }
+      const approveUrl = order?.links?.find((l) => l.rel === 'approve' || l.rel === 'payer-action')?.href ?? null
+      return order?.id ? { configured: true, orderId: order.id, approveUrl } : { configured: true, orderId: null }
     },
   }),
   checkAthletes: tool({
