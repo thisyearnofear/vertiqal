@@ -4,6 +4,7 @@ import { INTAKE_OPTIONS } from '@/lib/agent/fitting-notes'
 import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { briefParseSchema } from '@/lib/fitting/brief-parse'
 import { logCost } from '@/lib/cost-log'
+import { checkFeature, quotaResponse } from '@/lib/fitting/usage'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 30
@@ -39,6 +40,12 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Bad request' }, { status: 400 })
   const { kind, sport } = parsed.data
+
+  const quota = await checkFeature(request, kind === 'surface' ? 'surface-guess' : 'describe')
+  if (!quota.ok) {
+    logCost('limit_hit', { surface: 'brief', reason: 'tier_quota', tier: quota.tier, used: quota.used })
+    return quotaResponse(quota)
+  }
 
   const started = Date.now()
   const role = kind === 'surface' ? 'vision' : 'fast'
