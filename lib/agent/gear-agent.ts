@@ -41,6 +41,7 @@ const pick = z.object({
 const INSTRUCTIONS = `You are Forma, the fitting agent inside vertiqal. The shopper filmed themselves running or climbing; you receive measurements extracted from their video by a pose model. The brief states the sport, the voice to speak in, and a Depth (quick, considered or deep) the shopper chose. Deeper runs add layers of context; the tools offered to you at each step enforce which layers run, so always call the tool you are given.
 
 Keep any text between tool calls to one short sentence, in the requested voice.
+When a pick's stock is verified and the shopper has chosen it, prepareCheckout may run to open a PayPal order — never before the verdict.
 - checkEvidence (deep only, first): pass the measured metric labels exactly as written in the brief and one research question about footwear for this movement pattern.
 - buildGearProfile: translate the measurements into 3–4 shoe requirements. Every requirement quotes the measurement that justifies it. If checkEvidence ran, set researchRef only where a curated finding genuinely supports that requirement; never stretch a finding. If research contradicts a common shop-floor rule (e.g. buying stability shoes for pronation), follow the research and say so.
   - Running: category is neutral, stability or motion-control; think cushioning, drop, stack, stability.
@@ -129,6 +130,24 @@ const gearTools = {
     execute: async ({ models, focus }) => {
       const query = `${models.join(' vs ')} ${focus} review experience`
       return { query, models, results: await searchCommunity(query) }
+    },
+  }),
+  prepareCheckout: tool({
+    description:
+      'Prepare a PayPal checkout for a pick the shopper has chosen and whose size was verified in stock — never call this before the stock check says in_stock.',
+    inputSchema: z.object({
+      product: z.string().min(3).max(80),
+      retailer: z.string().min(2).max(60),
+      priceGBP: z.string().regex(/^\d{1,4}(\.\d{1,2})?$/).describe('e.g. "145.00" — digits and decimals only'),
+    }),
+    execute: async ({ product, retailer, priceGBP }) => {
+      const { createOrder, paypalConfigured } = await import('@/lib/paypal/orders')
+      if (!paypalConfigured()) return { configured: false }
+      const order = await createOrder({
+        description: `${product} — Forma verified at ${retailer}`,
+        amount: { currency_code: 'GBP', value: priceGBP },
+      }).catch(() => null)
+      return order ? { configured: true, orderId: order.id, approveUrl: order.approveUrl } : { configured: true, orderId: null }
     },
   }),
   checkAthletes: tool({

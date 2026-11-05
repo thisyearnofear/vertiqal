@@ -15,6 +15,9 @@ import { FollowUp, useOutcomeLink } from './follow-up'
 import type { ShoePick } from './outputs'
 import { PassportCard } from './passport-card'
 import { BrowserPeek, StockProof, stockLine, useStockCheck } from './stock-check'
+import { PayPalCheckout } from './paypal-checkout'
+
+const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ?? ''
 import type { StockPhase } from '@/lib/fitting/narration'
 
 const LINK = 'w-fit text-lg leading-none underline decoration-dotted underline-offset-4 opacity-70 hover:opacity-100 hover:text-primary'
@@ -262,6 +265,14 @@ export function DecisionPanel({
               {`Buy at ${pick.retailer} · ${price}`}
               <ArrowUpRight aria-hidden />
             </a>
+            {PAYPAL_CLIENT_ID && available && (
+              <PayPalCheckout
+                description={`${pick.name} (${sport} shoe) — Forma verified`}
+                price={price}
+                clientId={PAYPAL_CLIENT_ID}
+                onBought={onBought}
+              />
+            )}
           </div>
           <p className="text-lg leading-snug opacity-60">
             {available

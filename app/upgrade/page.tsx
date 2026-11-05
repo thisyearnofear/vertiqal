@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { BRIEF_COOKIE, parseRememberedBrief } from '@/lib/fitting/remembered-brief'
 import { setTier } from '@/app/actions'
 import { ActivatePro } from './activate'
+import { PayPalUpgrade } from './paypal-button'
 
 const PRO_FEATURES = [
   'Unlimited vision checks — sole wear, keyframe review',
@@ -15,6 +16,7 @@ const PRO_FEATURES = [
 export default async function UpgradePage() {
   const store = await cookies()
   const tier = parseRememberedBrief(store.get(BRIEF_COOKIE)?.value)?.tier ?? 'free'
+  const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ?? null
   const paymentUrl = process.env.NEXT_PUBLIC_PAYPAL_PRO_LINK ?? null
 
   return (
@@ -37,6 +39,8 @@ export default async function UpgradePage() {
         <p className="rounded border border-primary/50 px-4 py-2 text-sm text-primary">
           Pro is active on this browser — thank you.
         </p>
+      ) : paypalClientId ? (
+        <PayPalUpgrade clientId={paypalClientId} />
       ) : paymentUrl ? (
         <a href={paymentUrl} className="rounded-sm border-2 border-foreground bg-foreground px-5 py-3 text-sm font-semibold uppercase tracking-[0.18em] text-background transition-transform hover:scale-[1.02]">
           Pay with PayPal
