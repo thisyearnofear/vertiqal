@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import type { FittingNotesState } from '@/lib/agent/fitting-notes'
 import { applyParsedBrief } from '@/lib/fitting/brief-parse'
 import { nextQuestion, type BriefQuestion } from '@/lib/fitting/brief-flow'
@@ -46,6 +46,16 @@ export function useBriefFlow({ sport, draft, notes, onDraft, onNotes, askingBrie
   })
 
   const question = active ?? (askingBrief && !example ? nextQuestion({ draft, notes, skipped, heightOnScreen }) : null)
+
+  // Esc dismisses the focused question — the docked overlay traps attention, so it must be escapable.
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActive(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active])
 
   const ask = (next: BriefQuestion) => {
     setActive(next)
