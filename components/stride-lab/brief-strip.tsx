@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { FOOT_WIDTHS, INTAKE_OPTIONS, type FittingNotesState } from '@/lib/agent/fitting-notes'
 import { BUDGET_PRESETS, DEFAULT_SIZE, UK_SIZES, feetInches, isAnswered, questionPrompt, type BriefQuestion } from '@/lib/fitting/brief-flow'
@@ -82,7 +82,7 @@ function SizeChips({ value, likely, onPick }: { value: string; likely: string; o
   const centre = value || likely
   useEffect(() => {
     const row = rowRef.current
-    const chip = row?.querySelector<HTMLElement>(`[data-size="${centre}"]`)
+    const chip = row?.children[UK_SIZES.indexOf(centre as (typeof UK_SIZES)[number])] as HTMLElement | undefined
     if (row && chip) row.scrollLeft = chip.offsetLeft - row.clientWidth / 2 + chip.clientWidth / 2
   }, [centre])
   return (
@@ -95,7 +95,6 @@ function SizeChips({ value, likely, onPick }: { value: string; likely: string; o
       {UK_SIZES.map((s) => (
         <button
           key={s}
-          data-size={s}
           type="button"
           aria-pressed={value === s}
           onClick={() => onPick(s)}
@@ -125,6 +124,8 @@ interface BriefQuestionPanelProps {
   describe?: { pending: boolean; error: string | null; onSubmit: (text: string) => void }
   /** Clip-based surface suggestion; presence enables the guess button. */
   surfaceGuess?: { pending: boolean; suggestion: string | null; message: string | null; onGuess: () => void }
+  /** Focus target for the panel root when a question opens. */
+  panelRef?: RefObject<HTMLDivElement | null>
 }
 
 function DescribeControls({ sport, describe }: { sport: Sport; describe: NonNullable<BriefQuestionPanelProps['describe']> }) {
@@ -179,6 +180,7 @@ export function BriefQuestionPanel({
   onAsk,
   describe,
   surfaceGuess,
+  panelRef,
 }: BriefQuestionPanelProps) {
   const options = INTAKE_OPTIONS[sport]
   const optional = question === 'width' || question === 'niggles' || question === 'describe'
@@ -187,7 +189,7 @@ export function BriefQuestionPanel({
   const height = parseHeightCm(draft.heightCm)
 
   return (
-    <div id={QUESTION_ID} tabIndex={-1} role="group" aria-label={questionPrompt(question, sport)} className="flex flex-col gap-2 focus-visible:outline-none">
+    <div ref={panelRef} id={QUESTION_ID} tabIndex={-1} role="group" aria-label={questionPrompt(question, sport)} className="flex flex-col gap-2 focus-visible:outline-none">
       {question === 'height' && <HeightDial key={height ?? 'none'} id="strip-height" variant="strip" value={height} onCommit={(cm) => onDraft({ heightCm: String(cm) })} />}
       {question === 'goal' && (
         <div className="flex flex-col gap-2">

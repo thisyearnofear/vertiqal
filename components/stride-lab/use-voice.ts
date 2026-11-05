@@ -26,17 +26,20 @@ function speakLocally(text: string) {
   window.speechSynthesis.speak(new SpeechSynthesisUtterance(text))
 }
 
+// One shared player — Forma never overlaps two utterances.
+let player: HTMLAudioElement | null = null
+const getPlayer = () => (player ??= new Audio())
+
 /**
  * Speaks short lines with Grok TTS through the AI Gateway, falling back to the browser voice.
  * Lines arriving while Forma is mid-sentence are dropped, so cues never pile up.
  */
 export function useVoice(enabled: boolean) {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
   const speakingRef = useRef(false)
 
   useEffect(() => {
     if (enabled) return
-    audioRef.current?.pause()
+    player?.pause()
     if (typeof window !== 'undefined') window.speechSynthesis?.cancel()
     speakingRef.current = false
   }, [enabled])
@@ -47,8 +50,7 @@ export function useVoice(enabled: boolean) {
       speakingRef.current = true
       try {
         const url = await synthesize(text)
-        const audio = audioRef.current ?? new Audio()
-        audioRef.current = audio
+        const audio = getPlayer()
         audio.src = url
         await new Promise<void>((resolve, reject) => {
           audio.onended = () => resolve()

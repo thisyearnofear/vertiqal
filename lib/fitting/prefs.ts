@@ -61,10 +61,6 @@ export function heightCalibrated(enteredCm: number | null, calibratedCm: number)
   return enteredCm !== null && enteredCm === calibratedCm
 }
 
-export function mergeDraftNotes(draft: PrefDraft, notes: FittingNotesState): FittingNotesState {
-  return { ...notes, goal: draft.goal, surface: draft.surface }
-}
-
 export function buildConfirmedPrefs(options: {
   draft: PrefDraft
   notes: FittingNotesState
@@ -83,6 +79,6 @@ export function buildConfirmedPrefs(options: {
     heightCm,
     voice,
     depth,
-    notes: contextLines(mergeDraftNotes(draft, notes), sport),
+    notes: contextLines(notes, sport, draft),
   }
 }

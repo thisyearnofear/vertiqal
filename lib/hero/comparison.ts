@@ -59,11 +59,7 @@ export function compareReadings(
   baseline: BaselineReading,
   newMetrics: MetricReading[],
 ): ComparisonResult {
-  const get = (sub: string) =>
-    newMetrics.find(m => m.label.toLowerCase().includes(sub.toLowerCase())) ?? null
-
   const baselineMap = new Map(baseline.metrics.map(m => [m.label.toLowerCase(), m.value ?? 0]))
-  const baselineUnit = new Map(baseline.metrics.map(m => [m.label.toLowerCase(), m.unit]))
 
   const notableChanges: ComparisonResult['notableChanges'] = []
   let mostChanged: ComparisonResult['changedMost'] | null = null

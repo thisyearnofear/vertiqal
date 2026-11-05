@@ -1,7 +1,7 @@
 import type { HeroFrame, Point } from '@/lib/hero/frame'
-import type { MetricReading, Sport } from '@/lib/metrics/readout'
+import type { MetricReading } from '@/lib/metrics/readout'
 import type { OverlayTheme } from '../draw-overlay'
-import type { BaselineReading, ComparisonResult } from '@/lib/hero/comparison'
+import type { ComparisonResult } from '@/lib/hero/comparison'
 
 export type CompareGrade = 'film' | 'mono' | 'clean'
 
@@ -28,7 +28,6 @@ export interface CompareCardInput {
   afterFrame: HeroFrame | null
   beforeMetrics: MetricReading[]
   afterMetrics: MetricReading[]
-  sport: Sport
   comparison: ComparisonResult
   grade: CompareGrade
   theme: OverlayTheme
@@ -196,7 +195,7 @@ function drawSplitPhoto(
 }
 
 export function renderCompareCard(ctx: CanvasRenderingContext2D, input: CompareCardInput) {
-  const { beforePhoto, afterPhoto, beforeFrame, afterFrame, theme, sport, comparison, dateBefore, dateAfter } = input
+  const { beforePhoto, afterPhoto, beforeFrame, afterFrame, theme, comparison, dateBefore, dateAfter } = input
 
   // Background
   ctx.save()

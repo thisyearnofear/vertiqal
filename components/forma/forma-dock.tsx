@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, type ReactNode } from 'react'
+import { useId, type ReactNode, type RefObject } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { FormaAvatar } from '@/components/forma/forma-avatar'
 import { FormaTuner } from '@/components/forma/forma-console'
@@ -42,6 +42,8 @@ interface FormaDockProps {
   action: { label: string; onClick: () => void } | null
   /** Results stages: Forma follows the shopper down the page on desktop too, as on mobile. */
   floating?: boolean
+  /** Both rendered copies (mobile/desktop) of the primary action, keyed by source. */
+  actionButtonsRef?: RefObject<Partial<Record<'desktop' | 'mobile', HTMLButtonElement | null>>>
 }
 
 function Pips({ done, total }: { done: number; total: number }) {
@@ -76,6 +78,7 @@ export function FormaDock({
   onPersona,
   action,
   floating = false,
+  actionButtonsRef,
 }: FormaDockProps) {
   const tunerId = useId()
   const hintId = useId()
@@ -92,7 +95,14 @@ export function FormaDock({
         )}
       >
         {action && (
-          <button data-forma-action={source} type="button" onClick={action.onClick} className={PRIMARY}>
+          <button
+            ref={(el) => {
+              if (actionButtonsRef) actionButtonsRef.current[source] = el
+            }}
+            type="button"
+            onClick={action.onClick}
+            className={PRIMARY}
+          >
             {action.label}
           </button>
         )}

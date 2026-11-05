@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type RefObject } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { feetInches, stepHeight } from '@/lib/fitting/brief-flow'
 import { HEIGHT_MAX_CM, HEIGHT_MIN_CM, parseHeightCm } from '@/lib/fitting/prefs'
@@ -8,14 +8,16 @@ import { cn } from '@/lib/utils'
 
 interface HeightDialProps {
   id: string
-  /** The committed height. Remount (key on this) to reset the local draft when it changes elsewhere. */
+  /** The committed height. The caller remounts via key on this value so the local draft resets when it changes elsewhere. */
   value: number | null
   onCommit: (cm: number) => void
   variant: 'screen' | 'strip'
+  /** Lets the parent focus the input without scraping the DOM by id. */
+  inputRef?: RefObject<HTMLInputElement | null>
 }
 
 /** Height is committed explicitly: every committed change re-analyses the clip, so stepping must not. */
-export function HeightDial({ id, value, onCommit, variant }: HeightDialProps) {
+export function HeightDial({ id, value, onCommit, variant, inputRef }: HeightDialProps) {
   const [draft, setDraft] = useState(value === null ? '' : String(value))
   const cm = parseHeightCm(draft)
   const dirty = cm !== null && cm !== value
@@ -32,7 +34,7 @@ export function HeightDial({ id, value, onCommit, variant }: HeightDialProps) {
       <label htmlFor={id} className={screen ? 'text-sm md:text-lg' : 'sr-only'}>
         {screen ? (
           <>
-            HEIGHT<span className="hidden sm:inline"> ......</span>
+            HEIGHT<span aria-hidden className="hidden sm:inline"> ......</span>
           </>
         ) : (
           'Height in centimetres'
@@ -42,6 +44,7 @@ export function HeightDial({ id, value, onCommit, variant }: HeightDialProps) {
         <Minus className="size-4" aria-hidden />
       </button>
       <input
+        ref={inputRef}
         id={id}
         type="number"
         inputMode="numeric"

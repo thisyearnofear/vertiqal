@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { briefLine, type MovementBrief, type ShopperPrefs } from '@/lib/agent/brief'
 import { DEPTHS, addedLayers, type Depth } from '@/lib/agent/depth'
@@ -91,6 +91,8 @@ interface AgentPanelProps {
   canFallBack: boolean
   onAutoAdvance: (next: ShoePick) => void
   onBought: () => void
+  /** Forma's narration can trigger the buy link; ref so it isn't scraped from the DOM. */
+  buyLinkRef?: RefObject<HTMLAnchorElement | null>
 }
 
 export function AgentPanel({
@@ -112,6 +114,7 @@ export function AgentPanel({
   canFallBack,
   onAutoAdvance,
   onBought,
+  buyLinkRef,
 }: AgentPanelProps) {
   const { messages, status, error, sentBrief, prefs, busy } = agent
 
@@ -226,10 +229,7 @@ export function AgentPanel({
             <Shortlist
               outputs={outputs}
               closingLine={busy ? '' : closingLineOf(messages)}
-              onChoose={(pick) => {
-                onChoose(pick)
-                requestAnimationFrame(() => document.getElementById('forma-procurement')?.scrollIntoView({ block: 'start' }))
-              }}
+              onChoose={onChoose}
             />
             {!busy && (
               <div className="flex flex-col gap-4 border-t border-dashed border-stage-foreground/30 pt-4">
@@ -279,6 +279,7 @@ export function AgentPanel({
             canFallBack={canFallBack}
             onAutoAdvance={onAutoAdvance}
             onBought={onBought}
+            buyLinkRef={buyLinkRef}
           />
         )}
 

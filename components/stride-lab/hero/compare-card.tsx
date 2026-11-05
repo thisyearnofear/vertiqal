@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { Download, Share2, Film, ChevronRight } from 'lucide-react'
+import { downloadBlob } from '@/lib/downloads'
 import type { HeroFrame } from '@/lib/hero/frame'
-import type { Readout, Sport } from '@/lib/metrics/readout'
+import type { Readout } from '@/lib/metrics/readout'
 import type { BaselineReading } from '@/lib/hero/comparison'
 import { compareReadings, type ComparisonResult } from '@/lib/hero/comparison'
 import { Button } from '@/components/ui/button'
@@ -17,12 +18,9 @@ interface CompareCardProps {
   beforeReadout: Readout
   afterReadout: Readout
   baseline: BaselineReading
-  sport: Sport
-  themeKey: string
 }
 
-
-export function CompareCard({ beforeFrame, afterFrame, beforeReadout, afterReadout, baseline, sport, themeKey }: CompareCardProps) {
+export function CompareCard({ beforeFrame, afterFrame, beforeReadout, afterReadout, baseline }: CompareCardProps) {
   const id = useId()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [compareGrade, setCompareGrade] = useState<CompareGrade>('film')
@@ -59,7 +57,7 @@ export function CompareCard({ beforeFrame, afterFrame, beforeReadout, afterReado
       const comp = compareReadings(baseline, afterReadout.metrics)
       setComparison(comp)
     })
-  }, [beforeFrame, afterFrame, baseline.photoUrl, afterReadout.metrics, loaded])
+  }, [beforeFrame, afterFrame, baseline, afterReadout.metrics, loaded])
 
   // Render the compare card
   useEffect(() => {
@@ -79,7 +77,6 @@ export function CompareCard({ beforeFrame, afterFrame, beforeReadout, afterReado
           afterFrame,
           beforeMetrics: beforeReadout.metrics,
           afterMetrics: afterReadout.metrics,
-          sport,
           comparison,
           grade: compareGrade,
           theme,
@@ -93,7 +90,7 @@ export function CompareCard({ beforeFrame, afterFrame, beforeReadout, afterReado
     return () => {
       cancelled = true
     }
-  }, [images, comparison, compareGrade, beforeFrame, afterFrame, beforeReadout.metrics, afterReadout.metrics, sport, baseline.capturedAt])
+  }, [images, comparison, compareGrade, beforeFrame, afterFrame, beforeReadout.metrics, afterReadout.metrics, baseline.capturedAt])
 
   const toFile = () =>
     new Promise<File | null>((resolve) =>
@@ -103,12 +100,7 @@ export function CompareCard({ beforeFrame, afterFrame, beforeReadout, afterReado
   const save = async () => {
     const file = await toFile()
     if (!file) return
-    const url = URL.createObjectURL(file)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = file.name
-    link.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(file.name, file)
   }
 
   const share = async () => {

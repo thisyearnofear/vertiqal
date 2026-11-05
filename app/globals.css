@@ -303,6 +303,22 @@
   }
 }
 
+/* Visible thin scrollbar inside the CRT stage, so scrollable overlays read as scrollable. */
+.forma-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--stage-foreground) 45%, transparent) transparent;
+}
+.forma-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.forma-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.forma-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: color-mix(in oklch, var(--stage-foreground) 45%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .led[data-state='busy'] {
     animation: none;

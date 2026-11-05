@@ -66,11 +66,7 @@ export function MovementTwin({
 
   // Drive a smooth 12fps synthetic motion loop when no live pose is present or when the user toggles motion replay
   useEffect(() => {
-    if (pose && !simulating) {
-      setSimPose(null)
-      return
-    }
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (pose && !simulating) return
     const updatePose = (tSec: number) => {
       if (sport === 'climbing') {
         const climb = attractClimb(tSec / 0.9, { centerX: 0.5, height: 0.62, anchorY: 0.52, aspect: 1 })
@@ -79,8 +75,10 @@ export function MovementTwin({
         setSimPose(attractPose(tSec, { centerX: 0.5, height: 0.62, groundY: 0.84, aspect: 1 }))
       }
     }
-    updatePose(0.25)
-    if (reduced) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const id = requestAnimationFrame(() => updatePose(0.25))
+      return () => cancelAnimationFrame(id)
+    }
     const start = performance.now()
     const timer = window.setInterval(() => {
       updatePose((performance.now() - start) / 1000)

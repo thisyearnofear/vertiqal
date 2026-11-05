@@ -10,7 +10,6 @@ export const metadata: Metadata = {
   title: 'vertiqal · The right shoe, in your size, checked in stock',
   description:
     'Climbing and running shoes sized for you. Film a short clip, tell Forma your size, and it checks real stock in that size before you buy.',
-  generator: 'v0.app',
   icons: {
     icon: [
       { url: '/icon-light-32x32.png', media: '(prefers-color-scheme: light)' },
