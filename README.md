@@ -190,4 +190,5 @@ Vertiqal (Forma) runs as a **team decision-support agent** in a Switch room. The
 
 - **Agent connected:** a custom Switch-protocol client (`switch/room-agent.mjs`) — raw WebSocket in for room events, HTTP ops out for posts — not Claude Code/Codex; model calls happen inside vertiqal's own endpoints (Featherless/Nebius chain).
 - **Channel:** `#relay-fitting` in the Switch-bundled Mattermost; two teammates work with the agent there (share passports, `approve £140`, `check <shoe>`).
+- **Demo video (78s):** https://youtu.be/ofyeq-lI8S8 — the agent working the full loop in the real room.
 - **How to run it:** [`switch/README.md`](./switch/README.md) — registration, mock harness (`pnpm switch:mock`, no Switch needed to try it), and the live verification log. Design + demo context in [`docs/SWITCH_HACKATHON.md`](./docs/SWITCH_HACKATHON.md).
