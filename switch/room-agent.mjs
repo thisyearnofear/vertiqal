@@ -181,6 +181,7 @@ const APPROVE = /\b(approve[ds]?|yes|go ahead|lgtm|ship it|run it)\b/i
 const RESET = /\b(cancel|reset|start over|never ?mind)\b/i
 const BUDGET = /£\s?(\d{1,4})/
 const ANALYZE = /\b(analy[sz]e|process (this|it|them)|run (the )?fitting|go ahead|take a look)\b/i
+const FITCHECK = /^(?:fit.?check|check|does)\s+["']?(.{2,80})["']?\s*(?:fit.*)?$/im
 
 /** Most recent passport token in room history — for "analyze this" replies after a room-share post (Switch doesn't echo an agent's own posts to its connection). */
 async function lastPassportFromContext(roomId) {
@@ -212,11 +213,32 @@ function extractTokens(body) {
 async function handleMessage(roomId, payload, fromSelf = false) {
   const body = String(payload.body ?? '')
   const state = roomState(roomId)
+  const thread = payload.thread_id ?? payload.message_id ?? null
+  const reply = (content) => say(roomId, content, thread)
 
   if (!fromSelf && RESET.test(body)) {
     state.passports.clear()
     state.busy = false
-    await say(roomId, 'Cleared. Post a fit passport to start again.')
+    await reply('Cleared. Post a fit passport to start again.')
+    return
+  }
+
+  // `check <shoe>` → signed fit verdict against the latest passport — a second evidence beat.
+  const fitMatch = !fromSelf && state.passports.size > 0 ? body.match(FITCHECK) : null
+  if (fitMatch) {
+    const [token, passport] = [...state.passports].pop()
+    const product = fitMatch[1].replace(/\s*fit.*$/i, '').trim()
+    const res = await fetch(`${VERTIQAL}/api/passport/${encodeURIComponent(token)}/fit`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ product }),
+    }).catch(() => null)
+    const verdict = res?.ok ? await res.json() : null
+    await reply(
+      verdict
+        ? `**${verdict.verdict}** — ${verdict.score}/100 for "${verdict.product ?? product}" vs the ${passport.sport} passport:\n${(verdict.reasons ?? []).map((r) => `- ${r}`).join('\n')}`
+        : `Fit check unavailable right now (${res?.status ?? 'no response'}).`,
+    )
     return
   }
 
@@ -234,11 +256,11 @@ async function handleMessage(roomId, payload, fromSelf = false) {
     if (state.passports.has(token)) continue
     const data = await fetchPassport(token).catch(() => null)
     if (!data?.passport) {
-      await say(roomId, `That passport didn't verify — tampered or unknown token.`)
+      await reply( `That passport didn't verify — tampered or unknown token.`)
       continue
     }
     state.passports.set(token, data.passport)
-    await say(roomId, passportSummary(token, data))
+    await reply( passportSummary(token, data))
   }
 
   if (fromSelf || !APPROVE.test(body) || state.busy || state.passports.size === 0) return
@@ -261,7 +283,7 @@ async function handleMessage(roomId, payload, fromSelf = false) {
         voice: passport.voice,
         depth: DEPTH,
       }
-      await say(roomId, `Approved. Running the fitting for the ${passport.sport} profile (budget ${budget})…`)
+      await reply( `Approved. Running the fitting for the ${passport.sport} profile (budget ${budget})…`)
 
       // Live path: the gear agent. Degraded path: the passport's own shortlist —
       // honest "template, not verified" framing matches the brand.
@@ -274,7 +296,7 @@ async function handleMessage(roomId, payload, fromSelf = false) {
       } catch (e) {
         degraded = true
         picks = passport.picks?.length ? passport.picks.map((p) => ({ ...p, why: `From the signed passport shortlist: ${passport.profile.summary}` })) : null
-        await say(roomId, `Fitting model unreachable (${String(e?.message ?? e).slice(0, 140)}) — posting the passport's shortlist instead. *Template, not freshly verified.*`)
+        await reply( `Fitting model unreachable (${String(e?.message ?? e).slice(0, 140)}) — posting the passport's shortlist instead. *Template, not freshly verified.*`)
       }
       results.push({ token, passport, profile, picks, text, degraded })
 
@@ -284,7 +306,7 @@ async function handleMessage(roomId, payload, fromSelf = false) {
       if (picks?.length) lines.push('', ...picks.map(pickBlock))
       else lines.push('_No shortlist came back — posting what the agent said._')
       if (text) lines.push('', `> ${text.split('\n').pop()}`)
-      await say(roomId, lines.join('\n'))
+      await reply( lines.join('\n'))
 
       // Stock verification — the honest-receipts beat.
       if (picks?.length) {
@@ -298,7 +320,7 @@ async function handleMessage(roomId, payload, fromSelf = false) {
           if (c.price) bits.push(c.price)
           return `- ${p.name}: ${bits.join(', ')} — ${c.evidence ?? ''}`
         })
-        await say(roomId, `**Stock check** (${passport.size}):\n${stock.join('\n')}`)
+        await reply( `**Stock check** (${passport.size}):\n${stock.join('\n')}`)
       }
     }
 
@@ -321,9 +343,9 @@ async function handleMessage(roomId, payload, fromSelf = false) {
           .join(' → ')}`,
       )
     }
-    await say(roomId, plan.join('\n'))
+    await reply( plan.join('\n'))
   } catch (e) {
-    await say(roomId, `The fitting run failed: ${e?.message ?? e}. Check the vertiqal dev server and model keys, then say **approve** to retry.`)
+    await reply( `The fitting run failed: ${e?.message ?? e}. Check the vertiqal dev server and model keys, then say **approve** to retry.`)
   } finally {
     state.busy = false
   }
@@ -336,11 +358,11 @@ let cursor = 0
 let generation = null
 const connectionId = randomUUID()
 
-async function say(roomId, content) {
+async function say(roomId, content, threadId = null) {
   const res = await fetch(`${BASE}/agents/${AGENT_ID}/message`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${API_KEY}` },
-    body: JSON.stringify({ room_id: roomId, content }),
+    body: JSON.stringify({ room_id: roomId, content, ...(threadId ? { thread_id: threadId } : {}) }),
   })
   if (!res.ok) console.error(`post_message ${res.status}: ${await res.text()}`)
 }
@@ -391,7 +413,7 @@ function onFrame(frame) {
   // any message carrying a passport (incl. our own room-share posts). Dedupe stops the
   // receipt URLs in our replies from retriggering; approvals still require a human.
   const state = rooms.get(roomId)
-  const pendingReply = !fromSelf && state && state.passports.size > 0 && (APPROVE.test(body) || RESET.test(body))
+  const pendingReply = !fromSelf && state && state.passports.size > 0 && (APPROVE.test(body) || RESET.test(body) || FITCHECK.test(body))
   const hasPassport = extractTokens(body).length > 0
   if (!payload.addressed && !pendingReply && !hasPassport) return
 
