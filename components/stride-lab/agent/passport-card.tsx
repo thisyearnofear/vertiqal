@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react'
 import useSWR from 'swr'
 import useSWRMutation from 'swr/mutation'
-import { Bot, Check, Copy, Plug } from 'lucide-react'
+import { Bot, Check, Copy, Plug, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { FitVerdict, IssuedPassport, Passport } from '@/lib/passport/schema'
 import { cn } from '@/lib/utils'
@@ -35,6 +35,8 @@ export function PassportCard({ passport }: { passport: Passport }) {
   const { data: issued, error } = usePassport(passport)
   const [copied, setCopied] = useState<'link' | 'mcp' | null>(null)
   const [product, setProduct] = useState('')
+  const [roomSent, setRoomSent] = useState(false)
+  const [roomError, setRoomError] = useState<string | null>(null)
   const check = useSWRMutation(issued ? `${issued.url}/fit` : null, (url: string, { arg }: { arg: string }) =>
     postJson<FitVerdict & { product: string }>(url, { product: arg }),
   )
@@ -50,6 +52,18 @@ export function PassportCard({ passport }: { passport: Passport }) {
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (product.trim().length >= 2) void check.trigger(product.trim())
+  }
+
+  const shareToRoom = async () => {
+    if (!issued) return
+    try {
+      await postJson('/api/room-share', { url: issued.url })
+      setRoomError(null)
+      setRoomSent(true)
+      setTimeout(() => setRoomSent(false), 1600)
+    } catch (e) {
+      setRoomError(e instanceof Error ? e.message : 'Share failed')
+    }
   }
 
   return (
@@ -77,6 +91,10 @@ export function PassportCard({ passport }: { passport: Passport }) {
               {copied === 'mcp' ? <Check aria-hidden /> : <Plug aria-hidden />}
               {copied === 'mcp' ? 'Copied' : 'Copy MCP config'}
             </Button>
+            <Button size="lg" variant="outline" className="h-10 px-4" onClick={shareToRoom} disabled={roomSent}>
+              {roomSent ? <Check aria-hidden /> : <Users aria-hidden />}
+              {roomSent ? 'Sent' : 'Send to team room'}
+            </Button>
             <a
               href={issued.url}
               target="_blank"
@@ -86,6 +104,7 @@ export function PassportCard({ passport }: { passport: Passport }) {
               {'VIEW JSON'}
             </a>
           </div>
+          {roomError && <p role="alert" className="text-lg text-primary phosphor">{`! ${roomError.toUpperCase()} — PASTE THE LINK IN THE ROOM YOURSELF`}</p>}
 
           <form onSubmit={submit} className="flex flex-col gap-2 border-t border-dashed border-stage-foreground/30 pt-4">
             <label htmlFor="fit-check" className="flex items-center gap-2 text-lg leading-none opacity-80">
