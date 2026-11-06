@@ -4,7 +4,11 @@ Build frame of reference for adapting Vertiqal to the Flip the Switch Hackathon 
 
 ## Goal
 
-Show a team room where an AI movement-fitting agent helps a team make a footwear decision, with human approvals and verifiable receipts, using Switch.
+Show a team room where an AI movement-fitting agent helps a group make a footwear decision with evidence, using Switch.
+
+**The scene:** a running club's relay crew is picking shoes for race weekend. The chat fills with confident opinions — Pegasus vs Hokas, size guesses — but nobody has data on how each runner actually moves. Each athlete measures privately in their own browser (video never leaves the device), shares a signed fit passport into the room, and the agent turns those receipts into a shared, auditable decision: summaries, a human-approved budget, live picks, honest stock verdicts ("unclear" when blocked — it never guesses), and a final plan.
+
+**Pitch discipline (post-review feedback):** lead with the concrete scenario, not the thesis — "every team decision happens in group chat" overclaims. Name who, why they're deciding together, and what the demo demonstrably does; let the honest-verification beat carry the credibility rather than stacking six big claims up front.
 
 ## Track and concept
 
