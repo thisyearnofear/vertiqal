@@ -183,3 +183,7 @@ Server-side only (Vercel **Vars** or an uncommitted `.env.local`). Never expose 
 | `FORMA_VISITOR_LIMIT_<SURFACE>` | Per-visitor daily call limit per surface, e.g. `FORMA_VISITOR_LIMIT_AGENT=6` (optional) | Uses built-in visitor defaults in `lib/rate-limit.ts` |
 
 Without any model provider configured, every LLM-backed route returns 503 and measurement still works on-device.
+
+## Flip the Switch Hackathon
+
+Vertiqal (Forma) is being adapted for the Flip the Switch Hackathon (Nov 4–7, 2026) as a **team decision-support agent** using Switch. See [`SWITCH_HACKATHON.md`](./SWITCH_HACKATHON.md) and [`docs/SWITCH_HACKATHON.md`](./docs/SWITCH_HACKATHON.md) for the Switch room workflow, imaginative team-task concepts, demo script, and submission checklist.
