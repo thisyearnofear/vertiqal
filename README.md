@@ -186,4 +186,8 @@ Without any model provider configured, every LLM-backed route returns 503 and me
 
 ## Flip the Switch Hackathon
 
-Vertiqal (Forma) is being adapted for the Flip the Switch Hackathon (Nov 4–7, 2026) as a **team decision-support agent** using Switch. See [`SWITCH_HACKATHON.md`](./SWITCH_HACKATHON.md) and [`docs/SWITCH_HACKATHON.md`](./docs/SWITCH_HACKATHON.md) for the Switch room workflow, imaginative team-task concepts, demo script, and submission checklist.
+Vertiqal (Forma) runs as a **team decision-support agent** in a Switch room: teammates share a signed fit passport, the agent reads it, a human approves a budget, and the agent returns picks, honest stock verdicts and a final plan with receipts.
+
+- **Agent connected:** a custom Switch-protocol client (`switch/room-agent.mjs`) — raw WebSocket in for room events, HTTP ops out for posts — not Claude Code/Codex; model calls happen inside vertiqal's own endpoints (Featherless/Nebius chain).
+- **Channel:** `#relay-fitting` in the Switch-bundled Mattermost; two teammates work with the agent there (share passports, `approve £140`, `check <shoe>`).
+- **How to run it:** [`switch/README.md`](./switch/README.md) — registration, mock harness (`pnpm switch:mock`, no Switch needed to try it), and the live verification log. Design + demo context in [`docs/SWITCH_HACKATHON.md`](./docs/SWITCH_HACKATHON.md).
