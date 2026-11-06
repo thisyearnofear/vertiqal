@@ -186,7 +186,7 @@ Without any model provider configured, every LLM-backed route returns 503 and me
 
 ## Flip the Switch Hackathon
 
-Vertiqal (Forma) runs as a **team decision-support agent** in a Switch room: teammates share a signed fit passport, the agent reads it, a human approves a budget, and the agent returns picks, honest stock verdicts and a final plan with receipts.
+Vertiqal (Forma) runs as a **team decision-support agent** in a Switch room. The scenario: a running club's crew is picking shoes for a shared event — each athlete measures privately in their own browser, shares a signed fit passport into the channel, a human approves a budget, and the agent returns picks, honest stock verdicts and a final plan with receipts.
 
 - **Agent connected:** a custom Switch-protocol client (`switch/room-agent.mjs`) — raw WebSocket in for room events, HTTP ops out for posts — not Claude Code/Codex; model calls happen inside vertiqal's own endpoints (Featherless/Nebius chain).
 - **Channel:** `#relay-fitting` in the Switch-bundled Mattermost; two teammates work with the agent there (share passports, `approve £140`, `check <shoe>`).
