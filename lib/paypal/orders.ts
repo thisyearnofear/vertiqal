@@ -6,7 +6,7 @@
 
 export const PRO_PRICE = { currency_code: 'GBP', value: '9.00' } as const
 
-const baseUrl = () =>
+export const baseUrl = () =>
   process.env.PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com'
 
 const credentials = () => {
@@ -19,7 +19,7 @@ export function paypalConfigured() {
   return credentials() !== null
 }
 
-async function accessToken(): Promise<string> {
+export async function accessToken(): Promise<string> {
   const creds = credentials()
   if (!creds) throw new Error('PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET are not configured')
   const res = await fetch(`${baseUrl()}/v1/oauth2/token`, {
