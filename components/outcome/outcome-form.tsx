@@ -21,6 +21,7 @@ interface StoredPurchase {
   orderId: string
   captureId: string
   product: string
+  trackingNumber?: string
 }
 
 export function OutcomeForm({ token, sport, name, retailer, size }: Props) {
@@ -30,13 +31,25 @@ export function OutcomeForm({ token, sport, name, retailer, size }: Props) {
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [purchase, setPurchase] = useState<StoredPurchase | null>(null)
   const [refund, setRefund] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
+  const [shipment, setShipment] = useState<string | null>(null)
 
   // The PayPal capture from this session, if any — a paid purchase can be refunded.
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       try {
         const raw = sessionStorage.getItem('forma-paypal-order')
-        if (raw) setPurchase(JSON.parse(raw) as StoredPurchase)
+        if (!raw) return
+        const stored = JSON.parse(raw) as StoredPurchase
+        setPurchase(stored)
+        // Delivery status feeds the film-again nudge — "shoes arrived? re-measure".
+        if (stored.captureId) {
+          fetch(`/api/paypal/shipment?captureId=${encodeURIComponent(stored.captureId)}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data?.status && data.status !== 'UNKNOWN') setShipment(data.status)
+            })
+            .catch(() => {})
+        }
       } catch {
         // No stored capture — the refund offer just stays hidden.
       }
@@ -170,6 +183,13 @@ export function OutcomeForm({ token, sport, name, retailer, size }: Props) {
           <div className="border-t border-border pt-5">
             <div className="flex flex-col gap-3">
               <h2 className="text-lg font-semibold text-foreground">See what changed</h2>
+              {shipment && (
+                <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+                  {shipment === 'DELIVERED'
+                    ? `Your order ${purchase?.trackingNumber ? `${purchase.trackingNumber} ` : ''}was delivered — film yourself in them.`
+                    : `Your order is ${shipment.toLowerCase().replace(/_/g, ' ')} — film yourself when it lands.`}
+                </p>
+              )}
               <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
                 {`Come back in 30 days and film yourself again. Forma will compare your movement to your original reading and show you what shifted.`}
               </p>

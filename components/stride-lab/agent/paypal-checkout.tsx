@@ -25,6 +25,7 @@ const TILL_LINE: Record<Exclude<Till, 'idle' | 'error'>, string> = {
 export function PayPalCheckout({ description, price, onBought }: { description: string; price: string; onBought?: () => void }) {
   const [till, setTill] = useState<Till>('idle')
   const [order, setOrder] = useState<{ id: string; approveUrl: string | null } | null>(null)
+  const [tracking, setTracking] = useState<string | null>(null)
   const amount = gbpAmount(price)
 
   const create = async () => {
@@ -60,8 +61,20 @@ export function PayPalCheckout({ description, price, onBought }: { description: 
         return
       }
       if (captured?.captureId) {
+        // Demo shipment: Forma registers tracking on the capture it made, so
+        // delivery status can feed the film-again reminder later.
+        const trackingNumber = `FORMA${String(captured.captureId).replace(/[^A-Za-z0-9]/g, '').slice(-12).toUpperCase()}`
+        setTracking(trackingNumber)
+        fetch('/api/paypal/shipment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ captureId: captured.captureId, carrier: 'FEDEX', trackingNumber }),
+        }).catch(() => {})
         try {
-          sessionStorage.setItem('forma-paypal-order', JSON.stringify({ orderId: order.id, captureId: captured.captureId, product: description }))
+          sessionStorage.setItem(
+            'forma-paypal-order',
+            JSON.stringify({ orderId: order.id, captureId: captured.captureId, product: description, trackingNumber }),
+          )
         } catch {
           // No storage — the refund offer just won't show.
         }
@@ -99,6 +112,7 @@ export function PayPalCheckout({ description, price, onBought }: { description: 
         <div className="font-mono text-[11px] leading-relaxed text-stage-foreground/80" aria-live="polite">
           {till !== 'ordering' && order && <p className="opacity-60">{`ORDER ${order.id}`}</p>}
           <p className={till === 'paid' ? 'phosphor' : undefined}>{TILL_LINE[till as Exclude<Till, 'idle' | 'error'>]}</p>
+          {till === 'paid' && tracking && <p className="opacity-60">{`> tracking ${tracking} — delivery feeds your film-again nudge`}</p>}
           {till === 'awaiting' && order?.approveUrl && (
             <a href={order.approveUrl} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
               {'>'} approve link again

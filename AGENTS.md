@@ -20,7 +20,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Stage JSX splits into `boot-screen`, `progress-hud`, `stage-controls`, `hero/take-away`. The `narration`/`stripAction` cluster stays in `stride-lab.tsx` — it is view derivation, not logic worth extracting.
 - `PrefDraft` is the single source of truth for goal/surface/size/budget/height; `FittingNotesState` holds width/current/niggles/vision findings only.
 - Reach DOM nodes via refs passed down (`buyLinkRef`, `actionButtonsRef`, `panelRef`…), never `getElementById`/`querySelectorAll`.
-- `MovementTwin` (three.js) is `next/dynamic` `ssr: false` — keep it out of the initial bundle.
+- `MovementTwin` (three.js) is `next/dynamic` `ssr: false` — keep it out of the initial bundle. Same for the `/lab` Fit Lab grid (`components/lab/fit-lab.tsx`, AG Grid).
+- `/lab` is the merchant view: `/api/lab` joins PayPal transactions (`lib/paypal/activity.ts`) with fit outcomes (`lib/outcome/read.ts`, Redis `vq:outcomes`).
+- Channel3 catalog lives in `lib/agent/channel3.ts` — feeds gear-agent `searchProducts` and the MCP `find_products` tool; gated by `CHANNEL3_API_KEY`.
+- Hackathon work is tracked in `docs/hackathon-plan.md`; the agent/commerce API surface is spec'd in `docs/openapi.yaml`.
 - Blob downloads go through `lib/downloads.ts` (`downloadBlob` revokes after 1s — synchronous revoke can cancel the download).
 
 ## Product strategy (2026-01)

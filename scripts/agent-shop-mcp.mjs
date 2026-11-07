@@ -12,13 +12,27 @@
  * an approve link, and capture is a separate verified step.
  *
  *   PAYPAL_ACCESS_TOKEN=... node scripts/agent-shop-mcp.mjs \
- *     --product "La Sportiva Solution Comp" --price 175 \
+ *     --product "La Sportiva Solution Comp" [--price 175] \
  *     --passport demo-running --base http://localhost:3000
+ *
+ * With CHANNEL3_API_KEY configured on the server, the run also shops the
+ * catalog (find_products) and can take the order price from a real offer.
  */
 
+import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+
+// Load .env.local so PAYPAL_CLIENT_ID/SECRET work without exporting anything.
+try {
+  for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+  }
+} catch {
+  // No .env.local — rely on the real environment.
+}
 
 const args = Object.fromEntries(
   process.argv.slice(2).flatMap((a, i, arr) => (a.startsWith('--') ? [[a.slice(2), arr[i + 1]]] : [])),
@@ -38,13 +52,35 @@ const textOf = (result) => {
   }
 }
 
-if (!product || !price) {
-  console.log('Usage: node scripts/agent-shop-mcp.mjs --product "Shoe" --price 145 [--passport token] [--base url]')
+if (!product) {
+  console.log('Usage: node scripts/agent-shop-mcp.mjs --product "Shoe" [--price 140] [--passport token] [--base url]')
   process.exit(1)
 }
+
+// PAYPAL_ACCESS_TOKEN wins; otherwise mint one from the client credentials —
+// the same client-credentials grant the app's REST client uses.
 if (!process.env.PAYPAL_ACCESS_TOKEN) {
-  console.error('PAYPAL_ACCESS_TOKEN is required — sandbox token from your PayPal developer dashboard.')
-  process.exit(1)
+  const id = process.env.PAYPAL_CLIENT_ID?.trim()
+  const secret = process.env.PAYPAL_CLIENT_SECRET?.trim()
+  if (!id || !secret) {
+    console.error('Set PAYPAL_ACCESS_TOKEN, or PAYPAL_CLIENT_ID + PAYPAL_CLIENT_SECRET (sandbox creds work).')
+    process.exit(1)
+  }
+  const host = process.env.PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com'
+  const res = await fetch(`${host}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString('base64')}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  })
+  if (!res.ok) {
+    console.error(`PayPal auth failed (${res.status}) — check the client id/secret.`)
+    process.exit(1)
+  }
+  process.env.PAYPAL_ACCESS_TOKEN = (await res.json()).access_token
+  say('auth', `minted ${process.env.PAYPAL_ENV === 'live' ? 'live' : 'sandbox'} access token`)
 }
 
 const vertiqal = new Client({ name: 'agent-shop', version: '1.0.0' })
@@ -75,7 +111,7 @@ try {
   const fitResult = await vertiqal.callTool({ name: 'check_fit', arguments: { passport: passportRef, product } })
   const verdict = textOf(fitResult)
   if (!verdict || fitResult.isError) {
-    console.error('✗ fit check failed')
+    console.error(`✗ fit check failed: ${verdict ?? 'no result'}`)
     process.exit(1)
   }
   say('fit-check', `verdict: ${verdict.verdict} (score ${verdict.score}/100)`)
@@ -86,17 +122,46 @@ try {
     process.exit(0)
   }
 
-  say('paypal', `create_order £${price} via @paypal/mcp`)
+  // Shop the catalog: find_products returns real merchant offers (price,
+  // stockist, availability) so the agent buys a product it can actually point to.
+  let offer = null
+  const catalogResult = await vertiqal.callTool({ name: 'find_products', arguments: { query: product, limit: 5 } })
+  const catalog = textOf(catalogResult)
+  if (!catalogResult.isError && catalog?.products?.length) {
+    offer =
+      catalog.products
+        .flatMap((p) => (p.offers ?? []).map((o) => ({ ...o, product: p.title })))
+        .filter((o) => o.availability === 'InStock')
+        .sort((a, b) => a.price - b.price)[0] ?? null
+    if (offer) {
+      say('catalog', `best in-stock offer: ${offer.product} — ${offer.currency} ${offer.price} at ${offer.domain}`)
+      console.log(`        buy link: ${offer.url}`)
+    } else {
+      say('catalog', `${catalog.count} products found, none in stock`)
+    }
+  } else {
+    say('catalog', 'catalog unavailable — continuing without offers')
+  }
+
+  const orderPrice = price ?? offer?.price
+  if (!orderPrice) {
+    console.error('No --price given and the catalog had no in-stock offer to price from.')
+    process.exit(1)
+  }
+
+  say('paypal', `create_order $${orderPrice} via @paypal/mcp`)
+  // @paypal/mcp exposes a simplified order schema (not raw Orders v2):
+  // currencyCode is USD-only, items carry name/itemCost/itemTotal.
   const orderResult = await paypal.callTool({
     name: 'create_order',
     arguments: {
-      intent: 'CAPTURE',
-      purchase_units: [{ description: `${product} — agent-verified fit`, amount: { currency_code: 'GBP', value: String(price) } }],
+      currencyCode: 'USD',
+      items: [{ name: `${product} — agent-verified fit`, quantity: 1, itemCost: Number(orderPrice), itemTotal: Number(orderPrice) }],
     },
   })
   const order = textOf(orderResult)
   if (!order || orderResult.isError) {
-    console.error('✗ order failed')
+    console.error(`✗ order failed: ${order ?? 'no result'}`)
     process.exit(1)
   }
   const approveUrl = (order.links ?? []).find((l) => l.rel === 'approve' || l.rel === 'payer-action')?.href

@@ -1,5 +1,6 @@
 import { createMcpHandler } from 'mcp-handler'
 import { z } from 'zod'
+import { channel3Configured, searchCatalog } from '@/lib/agent/channel3'
 import { logCost } from '@/lib/cost-log'
 import { checkFit, tokenFrom } from '@/lib/passport/fit'
 import { passportId, readPassport } from '@/lib/passport/token'
@@ -73,6 +74,39 @@ const handler = createMcpHandler((server) => {
       } catch (error) {
         logCost('mcp_call', { tool: 'check_fit', ok: false, sport: opened.passport.sport, reason: 'fit_check_failed' })
         return failure(error instanceof Error ? error.message : 'Fit check failed')
+      }
+    },
+  )
+
+  server.registerTool(
+    'find_products',
+    {
+      title: 'Search the product catalog',
+      description:
+        'Searches the Channel3 product catalog for shoes and gear: ranked products with per-merchant offers (price, currency, availability, stockist domain, affiliate-tracked URL). Use to find where a judged product can actually be bought.',
+      inputSchema: z.object({
+        query: z.string().min(3).max(200).describe('e.g. "running shoes for overstriders" or "La Sportiva Solution Comp"'),
+        limit: z.number().int().min(1).max(12).optional(),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ query, limit }) => {
+      const guard = await guardSurfaceKey('catalog-search', 'global')
+      if (!guard.allowed) {
+        logCost('limit_hit', { surface: 'catalog-search', reason: guard.reason })
+        return failure(guard.error)
+      }
+      if (!channel3Configured()) {
+        logCost('mcp_call', { tool: 'find_products', ok: false, reason: 'not_configured' })
+        return failure('Product catalog is not configured on this vertiqal instance')
+      }
+      try {
+        const products = await searchCatalog(query, limit ?? 8)
+        logCost('mcp_call', { tool: 'find_products', ok: true, count: products.length })
+        return text({ query, count: products.length, products })
+      } catch (error) {
+        logCost('mcp_call', { tool: 'find_products', ok: false, reason: 'catalog_failed' })
+        return failure(error instanceof Error ? error.message : 'Catalog search failed')
       }
     },
   )

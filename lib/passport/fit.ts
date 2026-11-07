@@ -18,9 +18,10 @@ export async function checkFit(passport: Passport, product: string) {
     const { output } = await generateText({
       model: resolved.model,
       system:
-        'You are Forma, the vertiqal fitting agent. Judge whether a named shoe suits the passport owner using only their measured passport and your knowledge of that product. Be specific and honest; if you do not know the product, say so in a reason and score conservatively. No medical claims.',
+        'You are Forma, the vertiqal fitting agent. Judge whether a named shoe suits the passport owner using only their measured passport and your knowledge of that product. Be specific and honest; if you do not know the product, say so in a reason and score conservatively. No medical claims. Respond with JSON only — no prose, no markdown — matching exactly: {"verdict": one of "great-fit" | "workable" | "poor-fit", "score": integer 0-100, "reasons": array of 1-3 short strings, each citing a measurement or requirement}.',
       prompt: `Fit passport:\n${JSON.stringify(passport)}\n\nProduct to judge: ${product}`,
       output: Output.object({ schema: fitVerdictSchema }),
+      providerOptions: { openaiCompatible: { structuredOutputs: false } },
     })
     logCost('paid_call', { route: 'passport-fit', ok: true, ms: Date.now() - started, sport: passport.sport, model: resolved.label })
     return { product, ...output }

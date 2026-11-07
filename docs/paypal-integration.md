@@ -1,6 +1,6 @@
 # PayPal integration plan — core, not bolted-on
 
-**Status**: steps 1–5 landed — `lib/paypal/toolkit.ts` wraps the toolkit singleton for orders/refunds; `lib/paypal/subscription.ts` runs Pro subscriptions on **direct REST** (`orders.ts`'s client) because the toolkit's `paypalRun` silently refused the billing-plans/subscription actions; the tier claim in the brief cookie is HMAC-signed (`lib/fitting/tier-proof.ts`) so only the verified payment paths can mint Pro. Remaining: shipment hook.
+**Status**: steps 1–6 landed — `lib/paypal/toolkit.ts` wraps the toolkit singleton for orders/refunds; `lib/paypal/subscription.ts` runs Pro subscriptions on **direct REST** (`orders.ts`'s client) because the toolkit's `paypalRun` silently refused the billing-plans/subscription actions; the tier claim in the brief cookie is HMAC-signed (`lib/fitting/tier-proof.ts`) so only the verified payment paths can mint Pro. The refund loop ships through `/api/paypal/refund` on fit-fail outcomes; `/api/paypal/shipment` registers tracking at capture and feeds the film-again nudge on the outcome page; `/api/paypal/activity` exposes recent transactions for the merchant view; `scripts/agent-shop-mcp.mjs` runs the two-server demo (vertiqal `/api/mcp` + `npx @paypal/mcp`) end-to-end against sandbox.
 
 ## The story
 
