@@ -8,7 +8,7 @@ import { forgetBrief, saveBrief, savePersona } from '@/app/actions'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { EMPTY_NOTES, type FittingNotesState } from '@/lib/agent/fitting-notes'
-import { briefFromReadout, type ShopperPrefs } from '@/lib/agent/brief'
+import { briefFromReadout, SAMPLE_BRIEFS, type ShopperPrefs } from '@/lib/agent/brief'
 import { nextDepth, type Depth } from '@/lib/agent/depth'
 import { cueFor } from '@/lib/coach'
 import { trackStep } from '@/lib/funnel'
@@ -26,7 +26,7 @@ import { clearPersistedBaseline, loadBaseline, saveBaseline } from '@/lib/fittin
 import { appendSession, profileSummary } from '@/lib/fitting/profile'
 import { REQUIRED_QUESTIONS, answeredCount, previousQuestion, questionPrompt } from '@/lib/fitting/brief-flow'
 import { draftFromRemembered, rememberBrief, type RememberedBrief } from '@/lib/fitting/remembered-brief'
-import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
+import { EXAMPLE_FOOTAGE, EXAMPLE_MOODS, EXAMPLE_SCRIPTS, EXAMPLE_STEP_COUNT, exampleCompanion, stepTitle } from '@/lib/fitting/example'
 import { canFindShoes, clearsBaseline, measurementInvalidated, nextStepFor, notesAfterReset, remeasurePlan, stageOf, visibilityFor, type ResetReason } from '@/lib/fitting/session'
 import { narrate, type NarrationAction, type StockPhase } from '@/lib/fitting/narration'
 import { MIN_EVENTS, SPORTS, compareMetric, createTracker, readoutOf, type MovementSnapshot, type Readout, type Sport } from '@/lib/metrics/readout'
@@ -618,6 +618,30 @@ export function StrideLab({
     agent.send(briefFromReadout(lockedReadout), prefs)
   }
 
+  // Judge path: send the example's illustrative metrics through the real agent
+  // — same endpoint, real picks — so the payoff is one click, no camera.
+  const runDemoFitting = () => {
+    if (agent.busy) return
+    const script = EXAMPLE_SCRIPTS[sport].brief
+    const prefs = buildConfirmedPrefs({
+      draft: {
+        size: script.size,
+        budgetPounds: script.budget.replace(/[^\d]/g, ''),
+        heightCm: sport === 'running' ? '178' : '174',
+        goal: script.goal,
+        surface: script.surface,
+      },
+      notes: EMPTY_NOTES,
+      sport,
+      voice: persona.voice,
+      depth: 'considered',
+    })
+    if (!prefs) return
+    setConfirmedPrefs(prefs)
+    setChoice(null)
+    agent.send(SAMPLE_BRIEFS[sport], prefs)
+  }
+
   const deeper = nextDepth(agent.prefs?.depth ?? depth)
   const lookHarder = () => {
     const previous = confirmedPrefs ?? agent.prefs
@@ -961,7 +985,13 @@ export function StrideLab({
                           ? 'Live analysis is unavailable right now — upload a clip instead.'
                           : undefined,
                 }
-              : undefined
+              : stage === 'invite' && !clip && !live.stream
+                ? {
+                    label: 'Run a demo fitting',
+                    onClick: runDemoFitting,
+                    hint: 'Sends the example measurements to the real agent — real picks, no camera needed.',
+                  }
+                : undefined
           }
           privacyLine={PRIVACY_LINE}
           analysisSettings={
