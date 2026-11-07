@@ -1,6 +1,6 @@
 # PayPal integration plan — core, not bolted-on
 
-**Status**: steps 1–4 partially landed — `lib/paypal/toolkit.ts` wraps the toolkit singleton with whitelisted actions; `prepareCheckout` delegates to `paypalRun('create_order')`; the capture id flows through capture → sessionStorage → outcome-form refund beat via `paypalRun('create_refund')`. Remaining: subscription Pro, `agent-shop --mcp`, shipment hook.
+**Status**: steps 1–5 landed — `lib/paypal/toolkit.ts` wraps the toolkit singleton for orders/refunds; `lib/paypal/subscription.ts` runs Pro subscriptions on **direct REST** (`orders.ts`'s client) because the toolkit's `paypalRun` silently refused the billing-plans/subscription actions; the tier claim in the brief cookie is HMAC-signed (`lib/fitting/tier-proof.ts`) so only the verified payment paths can mint Pro. Remaining: shipment hook.
 
 ## The story
 
@@ -22,7 +22,7 @@ Vertiqal's pitch for the PayPal AI Hackathon is **agentic commerce in both direc
 
 1. **`lib/paypal/toolkit.ts`** — singleton `PayPalAgentToolkit` from `PAYPAL_CLIENT_ID`/`SECRET`, `context.sandbox = PAYPAL_ENV !== 'live'`, `configuration.actions` whitelisting only what we use: `orders.{create,get}`, `createRefund`, `subscriptionPlans`, `shipment`, `products`. `getPayPalTools(scope)` returns the filtered `Tool` map.
 2. **Gear agent calls PayPal's own tools** — replace the hand-written `prepareCheckout` with `toolkit.getTools()` filtered to `orders.create`, spread into `gearTools`. Gated by the same instructions + `GEAR_TOOL_NAMES`; tool result (`orderId`, approve link) surfaces in the decision panel. The claim "built with the PayPal Agent Toolkit" becomes true in code.
-3. **Pro as a real subscription** — `create_subscription_plan` (or env-provided plan id) → `create_subscription` → approval URL → activation → `tier: 'pro'` in the brief cookie. Recurring Pro is the actual product model; judges see `subscriptions.create` used meaningfully.
+3. **Pro as a real subscription** — ✅ landed via direct REST (`/v1/catalogs/products` + `/v1/billing/plans` once, pinned by `PAYPAL_PRO_PLAN_ID`) → `/v1/billing/subscriptions` → approve link → `/api/paypal/subscription/status` verifies `ACTIVE` server-side → `tier: 'pro'` + signed `tierProof` in the brief cookie. The demo `ActivatePro`/`setTier` path only signs pro when no payment provider is configured.
 4. **Return/refund loop** — on "they didn't fit" from the existing `OutcomeForm`, the agent calls `create_refund` on the captured order and re-opens the fitting. The agent that fitted you also unwinds you.
 5. **Shipment tracking → retention** — `create_shipment_tracking` on purchase → delivery status feeds the film-again reminder ("shoes arrived? re-measure").
 6. **`agent-shop --mcp`** — one MCP client connected to two servers: vertiqal `/api/mcp` (`get_fit_passport`, `check_fit`) and `npx @paypal/mcp`. One run = read passport → judge fit → create PayPal order. Two vendors' agentic surfaces interoperating — the headline demo.
@@ -36,4 +36,4 @@ Vertiqal's pitch for the PayPal AI Hackathon is **agentic commerce in both direc
 
 ## Env
 
-`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `NEXT_PUBLIC_PAYPAL_CLIENT_ID`, `PAYPAL_ENV=sandbox` (hackathon runs sandbox). Without them the `/upgrade` page falls back to a clearly-labelled demo activate and the in-panel PayPal button stays hidden.
+`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `NEXT_PUBLIC_PAYPAL_CLIENT_ID`, `PAYPAL_ENV=sandbox` (hackathon runs sandbox), `PAYPAL_PRO_PLAN_ID` (optional — auto-created and reused when unset). Without them the `/upgrade` page falls back to a clearly-labelled demo activate and the in-panel PayPal button stays hidden.
