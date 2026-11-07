@@ -37,4 +37,4 @@ Engagement mechanics: persona/voice unlocks as fitting rewards; streak/cadence o
 
 Do NOT: paywall the measurement itself (it's acquisition), sponsored picks (honest framing is the moat), per-user fit data sales (violates the privacy line).
 
-PayPal: `docs/paypal-integration.md` — Orders v2 + agent-toolkit plan; tier quotas in `lib/fitting/entitlements.ts`, usage metering in `lib/fitting/usage.ts`, 402 upsells via `components/upgrade-line.tsx`.
+PayPal: `docs/paypal-integration.md` — orders/refunds via agent-toolkit, Pro subscriptions via direct REST (`lib/paypal/subscription.ts`); tier claim is HMAC-signed in `lib/fitting/tier-proof.ts`, quotas in `lib/fitting/entitlements.ts`, metering in `lib/fitting/usage.ts`, 402 upsells via `components/upgrade-line.tsx`.

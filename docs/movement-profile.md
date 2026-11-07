@@ -12,6 +12,8 @@ Five moves that make the profile pay immediately:
 4. **Forma's memory** — narrating deltas across sessions ("cadence up 6%") — coach-continuity, not just answers.
 5. **The living passport** — the Fit Passport evolves from point-in-time receipt to a history-carrying profile handed to a PT/coach/agent.
 
+**Status**: steps 1, 4 (lock → `appendSession`), 6 (`profileSummary` in in-stock + film-again lines) and 7 (`profile-history` retention gate — free keeps the latest pin, pro accumulates to 24; the tier claim is HMAC-signed, see `lib/fitting/tier-proof.ts`) are landed. Benchmarks, the profile card and the "film this again" plan are still ahead.
+
 ## Implementation plan (ordered)
 
 1. **`lib/fitting/profile.ts`** — the profile type: `{ sessions: [{ at, metrics[], summary }], benchmarks: Record<metric, percentile> }`. Persists metrics-only in localStorage (same privacy stance as `baseline.ts`).
