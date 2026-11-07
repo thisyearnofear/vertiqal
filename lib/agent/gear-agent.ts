@@ -116,9 +116,26 @@ const gearTools = {
     execute: async (profile) => profile,
   }),
   searchProducts: tool({
-    description: 'Search the live web for running or climbing shoes, prices and stock.',
+    description:
+      'Search for running or climbing shoes, prices and stock — live web results plus the Channel3 product catalog (structured offers with per-merchant price, availability and stockist).',
     inputSchema: z.object({ query: z.string().min(3).max(200) }),
-    execute: async ({ query }) => ({ query, results: await searchWeb(query) }),
+    execute: async ({ query }) => {
+      const { channel3Configured, searchCatalog } = await import('./channel3')
+      const [web, catalog] = await Promise.all([
+        searchWeb(query).catch(() => []),
+        channel3Configured() ? searchCatalog(query, 6).catch(() => []) : Promise.resolve([]),
+      ])
+      // Catalog offers become product-page hits too, so picks can cite a real
+      // in-stock merchant URL straight from the catalog rather than a web snippet.
+      const catalogHits = catalog.flatMap((p) =>
+        p.offers.map((o) => ({
+          title: `${p.brand ? `${p.brand} ` : ''}${p.title}`,
+          url: o.url,
+          snippet: `${o.currency} ${o.price} at ${o.domain} — ${o.availability}${o.commissionRate ? `, ${Math.round(o.commissionRate * 100)}% affiliate` : ''}`,
+        })),
+      )
+      return { query, results: [...catalogHits, ...web], catalog }
+    },
   }),
   checkCommunity: tool({
     description:

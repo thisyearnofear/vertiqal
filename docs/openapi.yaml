@@ -1,0 +1,124 @@
+openapi: 3.0.3
+info:
+  title: vertiqal agent & commerce API
+  version: '1.0.0-hackathon'
+  description: >
+    The machine-facing surface of vertiqal ("Forma"): signed fit passports that
+    shopping agents can consume, PayPal checkout/refund/shipment flows, the
+    merchant Fit Lab feed, and the /api/mcp Model Context Protocol endpoint
+    (get_fit_passport, check_fit, find_products). MCP itself is not expressible
+    in OpenAPI — see app/api/mcp/route.ts for its tool schemas.
+servers:
+  - url: https://vertiqal.example.com
+    description: Replace with the deployment URL
+paths:
+  /api/passport/{token}:
+    get:
+      summary: Read a signed fit passport
+      description: Returns the HMAC-signed body-measured shoe profile for the passport owner. CORS-open for retailer bots and shopping agents.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Fit passport JSON }
+        '404': { description: Invalid or tampered passport }
+        '503': { description: Passports not configured }
+  /api/paypal/order:
+    post:
+      summary: Create a PayPal order (agent toolkit path)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description: { type: string }
+                amount: { type: string, pattern: '^\d{1,4}(\.\d{1,2})?$' }
+      responses:
+        '200': { description: '{ id, approveUrl } — shopper approves in PayPal' }
+        '402': { description: Payment did not complete }
+        '503': { description: PayPal not configured }
+  /api/paypal/capture:
+    post:
+      summary: Capture an approved order and verify COMPLETED
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId: { type: string }
+                purpose: { type: string, enum: [pro, purchase], default: pro }
+      responses:
+        '200': { description: Verified capture; pro flips the signed tier claim }
+        '402': { description: Payment did not complete }
+  /api/paypal/refund:
+    post:
+      summary: Refund a capture when the fit failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [captureId]
+              properties:
+                captureId: { type: string }
+                note: { type: string, maxLength: 200 }
+      responses:
+        '200': { description: '{ refundId, status }' }
+        '502': { description: Refund could not start }
+  /api/paypal/shipment:
+    post:
+      summary: Register shipment tracking on a capture
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [captureId, trackingNumber]
+              properties:
+                captureId: { type: string }
+                carrier: { type: string, default: FEDEX }
+                trackingNumber: { type: string, minLength: 6, maxLength: 40 }
+      responses:
+        '200': { description: '{ status }' }
+    get:
+      summary: Latest tracking status for a capture
+      parameters:
+        - { name: captureId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '{ status, trackingNumber, carrier }' }
+  /api/paypal/activity:
+    get:
+      summary: Recent successful PayPal transactions (merchant view)
+      parameters:
+        - { name: days, in: query, schema: { type: integer, default: 30 } }
+      responses:
+        '200': { description: '{ transactions: [...] }' }
+  /api/lab:
+    get:
+      summary: Fit Lab feed — PayPal transactions beside recorded fit outcomes
+      parameters:
+        - { name: days, in: query, schema: { type: integer, default: 30 } }
+      responses:
+        '200':
+          description: '{ transactions, outcomes, availability flags }'
+  /api/outcome:
+    post:
+      summary: Record a fit outcome against a signed follow-up token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, outcome]
+              properties:
+                token: { type: string }
+                outcome: { type: string }
+                reason: { type: string }
+      responses:
+        '200': { description: '{ ok, stored }' }
+        '404': { description: Invalid or expired follow-up link }

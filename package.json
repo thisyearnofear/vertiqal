@@ -34,6 +34,8 @@
     "@paypal/agent-toolkit": "1.11.0",
     "@solarisdk/browser": "^0.1.5",
     "@vercel/analytics": "1.6.1",
+    "ag-grid-community": "36.2.0",
+    "ag-grid-react": "36.2.0",
     "ai": "^7.0.114",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
