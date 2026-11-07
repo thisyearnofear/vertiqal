@@ -71,6 +71,8 @@ pnpm typecheck    # the real type gate: next.config ignores TS errors during bui
 pnpm build
 ```
 
+**Fastest way to see the product:** on the invite stage press **"Run a demo fitting"** — it sends the example's illustrative metrics through the real `/api/agent` (live picks, no camera). To complete the Pro loop, PayPal approval needs a *sandbox* account — use a `sb-…@business.example.com` / personal sandbox login from developer.paypal.com → Testing Tools → Sandbox Accounts.
+
 ## Motion validation (running first)
 
 Forma's movement estimates are experimental. This workflow compares detected foot-contact events against independently supplied annotations; it does not certify biomechanics, shoe fit or clinical validity.
