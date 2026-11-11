@@ -25,6 +25,12 @@ const pick = z.object({
   url: z.string().url().describe('Product page URL copied exactly from a search result'),
   price: z.string().describe('Price with currency if found in results, otherwise "Check price"'),
   why: z.string().describe('One sentence tying this shoe to a specific measurement number'),
+  craft: z
+    .string()
+    .default('')
+    .describe(
+      'One short line of the shoe\'s story — what the maker was solving for, or heritage worth knowing (a hand-lasted last, the super-shoe arms race, a resoleable build, a legendary rubber compound). Factual, no marketing adjectives. "" if nothing worth saying',
+    ),
   community: z
     .string()
     .describe('From checkCommunity only: one sentence on what riders report (fit, durability, known issues). "" if not run or nothing relevant'),
@@ -49,7 +55,7 @@ When a pick's stock is verified and the shopper has chosen it, prepareCheckout m
 - searchProducts: specific queries for current models that fit the profile, favouring UK retailers with product pages (not review roundups). To build a diverse shortlist, search one distinct candidate model at a time (e.g. "Brooks Ghost 16 buy") rather than broad category queries — broad queries return several retailers selling the same shoe.
 - checkCommunity (considered and deep): name the 3–5 strongest candidates. Drop or demote a candidate if riders consistently report a problem relevant to this shopper.
 - checkAthletes (deep): the same top 3 candidates. Call it in the same step as checkCommunity when both are offered.
-- recommendProducts: exactly 3 picks, each a different model (a GORE-TEX, wide or gender version is the same model), best fit first. Only use product-page URLs from searchProducts results, never review or forum links from other tools; never invent or edit URLs. If a call is rejected, the response lists availableProductPages — copy your next picks' URLs exactly from that list (searching once more first only if nothing there fits). Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
+- recommendProducts: exactly 3 picks — give each a craft line, one clause of the shoe's real story (what the maker was solving for, heritage, construction). Celebrate the craft factually, never with adjectives. Each pick a different model (a GORE-TEX, wide or gender version is the same model), best fit first. Only use product-page URLs from searchProducts results, never review or forum links from other tools; never invent or edit URLs. If a call is rejected, the response lists availableProductPages — copy your next picks' URLs exactly from that list (searching once more first only if nothing there fits). Respect the budget. Fill community, research and wornBy only from their own tool results, and use "" for any layer that did not run. Athletes are context, never a reason to rank a worse-fitting shoe higher; be explicit that sponsored athletes are paid to wear a brand, and only name athletes that appear in the checkAthletes results.
 - Finish with one short sentence, in the requested voice, inviting the shopper to choose one. Forma checks their size is in stock once they choose, so never send them off to a retailer yourself.
 
 If the brief mentions a previous fitting, treat this as a returning customer: build on what they chose last time (e.g. if they reported a problem with that shoe, steer away from it and say why).
@@ -240,7 +246,24 @@ const gearTools = {
         }
         return { ...p, stockToken }
       })
-      return { picks: withTokens }
+      // Product photography for the showroom: one catalog lookup per pick,
+      // best-effort — a missing image never fails a shortlist.
+      const { channel3Configured, searchCatalog } = await import('./channel3')
+      const withImages = await Promise.all(
+        withTokens.map(async (p) => {
+          let imageUrl = ''
+          try {
+            if (channel3Configured()) {
+              const products = await searchCatalog(p.name, 1)
+              imageUrl = products[0]?.imageUrl ?? ''
+            }
+          } catch (error) {
+            logCost('shortlist_image_lookup', { pick: p.name, error: String(error) })
+          }
+          return { ...p, imageUrl }
+        }),
+      )
+      return { picks: withImages }
     },
   }),
 

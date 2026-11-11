@@ -51,7 +51,7 @@ export const EMPTY_NOTES: FittingNotesState = { width: '', current: '', niggles:
 
 export const INTAKE_OPTIONS: Record<Sport, { goals: string[]; surfaces: string[]; surfaceLabel: string }> = {
   running: {
-    goals: ['Easy miles', 'Race faster', 'First 10k', 'Marathon build', 'Back from a break'],
+    goals: ['Easy miles', 'Chasing a PB', 'First 10k', 'Marathon build', 'Back from a break'],
     surfaces: ['Road', 'Treadmill', 'Trail', 'Mixed'],
     surfaceLabel: 'Surface',
   },

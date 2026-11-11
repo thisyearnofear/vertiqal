@@ -45,9 +45,21 @@ export function Shortlist({ outputs, closingLine, onChoose }: { outputs: AgentOu
                   {PICK_LABEL(i).toUpperCase()}
                 </span>
               </div>
+              {p.imageUrl && (
+                <div className="flex h-40 items-center justify-center rounded-sm bg-foreground/85 p-3 md:h-44">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- retailer-hosted product shots; dimensions unknown until fetch */}
+                  <img src={p.imageUrl} alt={p.name} loading="lazy" className="max-h-full max-w-full object-contain" />
+                </div>
+              )}
               <p className={cn('text-pretty font-sans font-semibold leading-tight', i === 0 ? 'text-2xl md:text-3xl' : 'text-xl')}>{p.name}</p>
               <p className="font-sans text-lg leading-none tabular-nums opacity-90">{p.price}</p>
               <p className="text-pretty font-sans text-sm leading-relaxed opacity-80">{p.why}</p>
+              {p.craft && (
+                <p className="border-l-2 border-primary/60 pl-3 font-sans text-sm leading-relaxed opacity-85">
+                  <span className="font-mono text-sm uppercase opacity-80">{`The shoe's story · `}</span>
+                  {p.craft}
+                </p>
+              )}
               {extras.length > 0 && (
                 <details className="text-lg leading-snug">
                   <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">
