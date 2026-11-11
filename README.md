@@ -1,12 +1,12 @@
 # Forma (vertiqal)
 
-**Film a short clip. An agent measures how you move, confirms the fitting brief with you, checks research and real stock, and hands you a running or climbing shoe recommendation, with receipts.**
+**Agentic commerce for footwear, end to end.** An agent measures how you move from a short clip, confirms the fitting brief, checks research and live stock, then moves real money with PayPal — verified checkout, shipment tracking, and a refund when the fit fails. A signed **Fit Passport** lets any other shopping agent spend against your body-measured profile, over REST or MCP.
 
-Live: [vertiqal.vercel.app](https://vertiqal.vercel.app)
+Live: [vertiqal.vercel.app](https://vertiqal.vercel.app) — scroll to **The till** to watch a sandbox order, capture and ledger entry without doing a fitting.
 
 ## The problem
 
-Footwear is bought on keywords and shop-floor rules of thumb, and it is one of the most-returned categories in commerce. The information that actually matters, how *you* move, never reaches the checkout.
+Footwear is bought on keywords and shop-floor rules of thumb, and it is one of the most-returned categories in commerce. The information that actually matters, how *you* move, never reaches the checkout — and the checkout never learns why the shoes came back.
 
 ## What Forma does
 
@@ -18,7 +18,8 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 6. **Asks before acting, then does the obvious thing.** No live search starts until a real measurement and required brief are present. Once results land, Forma narrates one step at a time from a bar that follows you down the page, with at most one main action. Picking a running shoe starts the size check for your confirmed size straight away (climbers enter the shop's size, since climbing shoes run small); if that size is sold out, Forma says so and checks the next pick once by itself. A small "Forma's browser" window shows the address being checked, a clock, then the screenshot and verdict. The size check submits one explicit size to Solari's stealth browser with UK egress by default; a vision model reads the size controls, structured offers and a screenshot to decide whether that size is in stock. Checks are limited to approved retailers, authorized product targets and per-client quotas, with a short-lived per-instance cache and honest live/cached/shared labels. Receipts include the observed URL and HTTP status, plus a screenshot and session replay when available; these show execution evidence, not proof of stock. The older Browser Use basket check still exists as an agent tool. Both stop before checkout.
 7. **Carries your fit elsewhere — and closes the loop.** A signed **Fit Passport** lets any other shopping agent check a shoe against your profile, over REST (`GET /api/passport/<token>`, `POST /api/passport/<token>/fit`) or MCP (`get_fit_passport`, `check_fit`). Forma Pro and verified in-stock picks check out inside the app via **PayPal Orders v2 + the JS SDK**: `prepareCheckout` is a gear-agent tool, and the server captures and verifies COMPLETED before anything counts as paid. `pnpm agent-shop -- --product "La Sportiva Solution Comp" --price 175` runs an external agent through the whole loop: read passport → judge fit → prepare PayPal order. `pnpm agent-shop:mcp` runs the same loop over two MCP servers — vertiqal's `/api/mcp` and PayPal's own `@paypal/mcp` — in one agent client.
 8. **Remembers your brief, not you.** Confirmed brief answers (never niggles, never video) are kept in a cookie on this browser so a returning shopper's sentence is pre-filled. There are no accounts and no database.
-9. **Lets you see yourself — and prove change.** Once the readout locks, Forma offers the **hero frame**: a 1080×1350 social card grading your best stride or reach — one bold metric, a short caption generated on-device (no LLM), and auto-narration via the browser's speech synthesis. Pin the card as your baseline, film again any time, and Forma renders a before/after **comparison card** (1080×1080) with the changes worth talking about plus a 30-day calendar reminder to re-film. The opt-in **See yourself in them** shows you wearing the top pick (FLUX Kontext), clearly labelled as an AI impression, not a fit check.
+9. **Shows the money moving.** The landing page ends with **The till**: a one-click demo checkout that opens a real sandbox PayPal order (no fitting needed — approve it in the PayPal window and the server verifies the capture), next to a live ledger of the last 30 days of sandbox transactions. Judges can watch PayPal work in three clicks; shoppers see where a fitting ends.
+10. **Lets you see yourself — and prove change.** Once the readout locks, Forma offers the **hero frame**: a 1080×1350 social card grading your best stride or reach — one bold metric, a short caption generated on-device (no LLM), and auto-narration via the browser's speech synthesis. Pin the card as your baseline, film again any time, and Forma renders a before/after **comparison card** (1080×1080) with the changes worth talking about plus a 30-day calendar reminder to re-film. The opt-in **See yourself in them** shows you wearing the top pick (FLUX Kontext), clearly labelled as an AI impression, not a fit check.
 
 ## Built with
 
@@ -32,6 +33,9 @@ Footwear is bought on keywords and shop-floor rules of thumb, and it is one of t
 | Tavily | Live retailer, research, community and athlete search. Product search runs at advanced depth and filters out corporate/homepage URLs so picks cite real product pages. |
 | Solari | Stealth browser with UK residential egress for size and stock checks, with screenshot and session replay receipts. |
 | Browser Use | User-approved basket availability checks (agent tool). |
+| Channel3 | Structured product catalog for agents: the gear agent's `searchProducts` merges live web results with Channel3 offers (per-merchant price, availability, stockist, commission rate), and the MCP `find_products` tool exposes the same catalog to external shopping agents. `CHANNEL3_API_KEY`; verify with `node scripts/channel3-check.mjs "Nike Vomero"`. |
+| APIMatic | PayPal Context Plugin (`npx context-plugins install paypal`) grounded the PayPal work — SDK-accurate Orders/Billing context for the coding agent instead of remembered API shapes. |
+| AG Grid | `/lab` merchant view (`components/lab/fit-lab.tsx`): PayPal transactions joined with recorded fit outcomes, sortable and filterable. |
 | Vercel Analytics | Funnel events only — `sample_started`, `film_started`, `clip_uploaded`, `measurements_locked`, `shopping_started`, `pick_chosen`, `buy_clicked`, `shortlist_feedback`, `limit_hit` — carrying sport/retailer flags, no PII. |
 | Next.js 16 + AI SDK | App, route handlers, tool-calling agent. |
 

@@ -18,6 +18,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - `components/stride-lab/stride-lab.tsx` orchestrates only — state + derivations + JSX. Machinery lives in hooks: `use-brief-flow` (guided brief), `use-validation-capture` (local trace recorder), `use-pose-provider` (engine session), `use-pose-loop` / `use-attract-mode` (stage canvas loops), `use-live-camera`, `use-voice`, `use-gear-agent`.
 - Stage JSX splits into `boot-screen`, `progress-hud`, `stage-controls`, `hero/take-away`. The `narration`/`stripAction` cluster stays in `stride-lab.tsx` — it is view derivation, not logic worth extracting.
+- `components/commerce/till-section.tsx` is the landing-page PayPal surface ("The till": demo checkout + live sandbox ledger) — mounted at the bottom of `<main>` in stride-lab, always visible outside example mode.
 - `PrefDraft` is the single source of truth for goal/surface/size/budget/height; `FittingNotesState` holds width/current/niggles/vision findings only.
 - Reach DOM nodes via refs passed down (`buyLinkRef`, `actionButtonsRef`, `panelRef`…), never `getElementById`/`querySelectorAll`.
 - `MovementTwin` (three.js) is `next/dynamic` `ssr: false` — keep it out of the initial bundle. Same for the `/lab` Fit Lab grid (`components/lab/fit-lab.tsx`, AG Grid).

@@ -70,8 +70,8 @@ export async function searchCatalog(query: string, limit = 8): Promise<CatalogPr
     signal: AbortSignal.timeout(15_000),
   })
   if (!res.ok) throw new Error(`Channel3 search failed (${res.status})`)
-  const data = (await res.json()) as { data?: RawProduct[] }
-  return (data.data ?? []).flatMap((p) => {
+  const data = (await res.json()) as { products?: RawProduct[]; data?: RawProduct[] }
+  return (data.products ?? data.data ?? []).flatMap((p) => {
     if (!p.id || !p.title) return []
     const offers = (p.offers ?? []).flatMap((o): CatalogOffer[] => {
       if (!o.url || typeof o.price?.price !== 'number') return []

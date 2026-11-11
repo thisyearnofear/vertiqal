@@ -35,6 +35,7 @@ import { POSE_PROVIDERS } from '@/lib/pose/providers'
 import type { ExampleObservation } from '@/lib/pose/example-observation'
 import type { FrameQuality } from '@/lib/pose/types'
 import { FormaDock } from '@/components/forma/forma-dock'
+import { TillSection } from '@/components/commerce/till-section'
 import type { HeroFrame } from '@/lib/hero/frame'
 import { AgentPanel } from './agent/agent-panel'
 import { activityOf } from './agent/agent-steps'
@@ -1209,6 +1210,8 @@ export function StrideLab({
             />
           </div>
         )}
+
+        {!example && <TillSection />}
       </main>
     </div>
   )

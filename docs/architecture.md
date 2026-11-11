@@ -99,7 +99,14 @@ FreeMoCap remains a separate, optional offline reference system. No FreeMoCap co
 | `/api/outcome/link` | POST | Issues an opaque Awin `clickref` and a signed follow-up URL for one shoe and size. Stores nothing. |
 | `/api/outcome` | POST | Records a fit outcome (or why it was not bought) for a signed follow-up link. Logged, and stored in Redis when configured. |
 | `/fit/[token]` | page | The follow-up page the shopper returns to; the token carries the shoe context, so it needs no account. |
-| `/api/mcp` | GET, POST, DELETE | MCP server exposing passport fit checks to other agents. |
+| `/api/paypal/order` | POST | Creates a PayPal order via the Agent Toolkit (`create_order`); returns `{ id, approveUrl }`. |
+| `/api/paypal/capture` | POST | Captures an approved order and verifies COMPLETED server-side; `purpose: 'pro'` mints the signed `tier: 'pro'` claim, `purpose: 'purchase'` returns the `captureId` the refund/shipment routes key on. |
+| `/api/paypal/refund` | POST | Refunds a capture when a fit outcome reports failure (`create_refund`). |
+| `/api/paypal/shipment` | GET, POST | POST registers shipment tracking on a capture; GET reads delivery status for the film-again nudge. |
+| `/api/paypal/subscription` | POST, GET | POST creates a Billing Plans subscription (direct REST — the toolkit refused subscription actions); GET `/status` verifies ACTIVE before the tier claim signs. |
+| `/api/paypal/activity` | GET | Recent successful transactions via `list_transactions`; feeds the landing-page ledger and `/lab`. |
+| `/api/lab` | GET | Joins PayPal transactions with recorded fit outcomes for the AG Grid Fit Lab. |
+| `/api/mcp` | GET, POST, DELETE | MCP server exposing `get_fit_passport`, `check_fit` and `find_products` (Channel3 catalog) to other agents. |
 
 Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) passes through `lib/rate-limit.ts` (`guardRequest` / `guardSurfaceKey`, both async), backed by a shared Redis counter store (`lib/rate-limit/store.ts`; per-instance memory when none is configured, and a store outage fails open), enforcing per-visitor daily limits, global daily route capacity caps (`503` with `Forma is at capacity today — your measurement still works.`), and instant feature kill-switches (`FORMA_DISABLED_FEATURES`), while emitting structured cost and `limit_hit` events via `lib/cost-log.ts`.
 
