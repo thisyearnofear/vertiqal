@@ -65,3 +65,19 @@ PayPal is already partially integrated: orders + refunds via direct REST (`lib/p
 - **Innovation**: two-sided agentic commerce — agents buy *and* agents consume the Fit Passport
 - **Presentation**: the MCP two-server run on video
 - **Design**: existing product surface carries it; AG Grid view must feel native, not bolted on
+
+## Devpost draft (2026-11-11)
+
+**Tagline:** An agent that measures how you move, recommends your shoe, transacts through PayPal — and unwinds itself if the fit fails.
+
+**What it does.** Forma is a gait lab in the browser. Film a short clip; on-device pose analysis builds a movement profile; a brief confirms size, budget and goal; a gear agent researches candidates against your metrics, live rider reports and a real product catalog (Channel3), then lands a three-pick showroom — each pick with the shoe's story, evidence and a stock-verified size check. Choose one and the agent opens a PayPal order; consent stays in PayPal's window, the server captures and verifies COMPLETED before anything counts as paid. If the shoes fail the fit, the same agent refunds the capture and reopens the fitting. A signed Fit Passport carries your movement profile so *other* agents can check a shoe against it over REST or MCP — agentic commerce in both directions: agents that buy for you, and agents that can sell to you.
+
+**Judge path (3 clicks).** Landing page → *The till* → open a real sandbox PayPal order, approve, watch the verified capture land in the live ledger. No camera, no fitting required. `/lab` is the merchant side: an AG Grid view joining PayPal transactions to fit outcomes.
+
+**PayPal technologies.** Orders v2 create/approve/capture (server-verified), refunds on fit-failure, shipment tracking, Billing Plans for Forma Pro, transaction search powering `/lab`, and `@paypal/mcp` as the second server in the two-MCP agent demo (`pnpm agent-shop:mcp`).
+
+**AI.** MediaPipe pose → movement metrics (on-device, video never leaves the browser); Qwen-72B gear agent (Featherless, AI Gateway fallback) with tool-gated depth layers — research, community, athletes — each pick citing a measurement; Grok vision for keyframes/sole-wear; on-device caption generation for share cards.
+
+**Sponsors.** Channel3 (catalog + offers + product imagery powering the showroom and `find_products` MCP tool), AG Grid (`/lab`), APIMatic PayPal Context Plugin (SDK-accurate PayPal context while building).
+
+**Honesty as design.** Stock checks show screenshot + observed-URL receipts labelled "template, not verified" where applicable; athlete picks disclose paid sponsorship; video never leaves the device; PayPal state flips only after server verification.
