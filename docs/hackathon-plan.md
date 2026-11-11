@@ -74,6 +74,8 @@ PayPal is already partially integrated: orders + refunds via direct REST (`lib/p
 
 **Judge path (3 clicks).** Landing page → *The till* → open a real sandbox PayPal order, approve, watch the verified capture land in the live ledger. No camera, no fitting required. `/lab` is the merchant side: an AG Grid view joining PayPal transactions to fit outcomes.
 
+**Known sandbox quirk.** PayPal's sandbox checkout page occasionally stalls on "Continue to Review Order" — the approval still registers server-side. If the UI hangs, note the order id and `POST /api/paypal/capture` with `{ "orderId": "<id>", "purpose": "purchase" }`; the ledger (and `/lab`) reflects the capture once PayPal's transaction-search index catches up (minutes to ~an hour in sandbox).
+
 **PayPal technologies.** Orders v2 create/approve/capture (server-verified), refunds on fit-failure, shipment tracking, Billing Plans for Forma Pro, transaction search powering `/lab`, and `@paypal/mcp` as the second server in the two-MCP agent demo (`pnpm agent-shop:mcp`).
 
 **AI.** MediaPipe pose → movement metrics (on-device, video never leaves the browser); Qwen-72B gear agent (Featherless, AI Gateway fallback) with tool-gated depth layers — research, community, athletes — each pick citing a measurement; Grok vision for keyframes/sole-wear; on-device caption generation for share cards.
