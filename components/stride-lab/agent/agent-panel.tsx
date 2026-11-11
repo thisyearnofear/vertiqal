@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { flushSync } from 'react-dom'
 import { RotateCcw } from 'lucide-react'
 import { briefLine, type MovementBrief, type ShopperPrefs } from '@/lib/agent/brief'
 import { DEPTHS, addedLayers, type Depth } from '@/lib/agent/depth'
@@ -118,6 +119,16 @@ export function AgentPanel({
 }: AgentPanelProps) {
   const { messages, status, error, sentBrief, prefs, busy } = agent
 
+  // The chosen pick "travels" from its card into the decision panel: a shared-element
+  // view transition between the same viewTransitionName on both sides.
+  const [traveling, setTraveling] = useState<string | null>(null)
+  const choose = (pick: ShoePick | null) => {
+    const startVT = (document as Document & { startViewTransition?: (cb: () => void) => void }).startViewTransition
+    if (!startVT || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return onChoose(pick)
+    flushSync(() => setTraveling((pick ?? choice)?.url ?? null))
+    startVT.call(document, () => flushSync(() => onChoose(pick)))
+  }
+
   const outputs = useMemo(() => outputsOf(messages), [messages])
   const activity = useMemo(() => activityOf(messages), [messages])
   const progress = useMemo(() => progressOf(messages), [messages])
@@ -212,10 +223,16 @@ export function AgentPanel({
                   {reading.map((page) => (
                     <li
                       key={page.url}
-                      className="flex min-w-0 animate-in flex-col gap-0.5 rounded-md border border-stage-foreground/25 bg-stage-foreground/5 px-3 py-2 fade-in slide-in-from-bottom-1 duration-500"
+                      className="flex min-w-0 animate-in items-center gap-2 rounded-md border border-stage-foreground/25 bg-stage-foreground/5 px-3 py-2 fade-in slide-in-from-bottom-1 duration-500"
                     >
-                      <span className="truncate text-sm uppercase opacity-60">{page.host}</span>
-                      <span className="line-clamp-2 font-sans text-sm leading-snug opacity-90">{page.title}</span>
+                      {page.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element -- retailer-hosted thumbnail; dimensions unknown until fetch
+                        <img src={page.imageUrl} alt="" loading="lazy" className="size-10 shrink-0 rounded-sm bg-foreground/80 object-contain p-0.5" />
+                      )}
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate text-sm uppercase opacity-60">{page.host}</span>
+                        <span className="line-clamp-2 font-sans text-sm leading-snug opacity-90">{page.title}</span>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -229,7 +246,8 @@ export function AgentPanel({
             <Shortlist
               outputs={outputs}
               closingLine={busy ? '' : closingLineOf(messages)}
-              onChoose={onChoose}
+              travelingUrl={traveling}
+              onChoose={choose}
             />
             {!busy && (
               <div className="flex flex-col gap-4 border-t border-dashed border-stage-foreground/30 pt-4">
@@ -270,7 +288,7 @@ export function AgentPanel({
             sport={sport}
             size={confirmedSize}
             onSizeCommit={onSizeCommit}
-            onChoose={onChoose}
+            onChoose={choose}
             passport={passport}
             onPinBaseline={onPinBaseline}
             baselinePinned={baselinePinned}

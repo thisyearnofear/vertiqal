@@ -12,7 +12,18 @@ const EXTRAS = [
 
 const PICK_LABEL = (index: number) => (index === 0 ? 'Primary recommendation' : `Alternative ${index}`)
 
-export function Shortlist({ outputs, closingLine, onChoose }: { outputs: AgentOutputs; closingLine: string; onChoose: (pick: ShoePick) => void }) {
+export function Shortlist({
+  outputs,
+  closingLine,
+  travelingUrl,
+  onChoose,
+}: {
+  outputs: AgentOutputs
+  closingLine: string
+  /** URL of the pick mid-flight into the decision panel — gets the shared viewTransitionName. */
+  travelingUrl?: string | null
+  onChoose: (pick: ShoePick) => void
+}) {
   const { profile, picks } = outputs
 
   return (
@@ -46,21 +57,26 @@ export function Shortlist({ outputs, closingLine, onChoose }: { outputs: AgentOu
                   {PICK_LABEL(i).toUpperCase()}
                 </span>
               </div>
-              {p.imageUrl && (
-                <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-sm bg-foreground/85 p-3 md:h-44">
-                  <div className="absolute inset-0 animate-pulse bg-foreground/60" aria-hidden="true" />
-                  {/* eslint-disable-next-line @next/next/no-img-element -- retailer-hosted product shots; dimensions unknown until fetch */}
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    loading="lazy"
-                    onLoad={(e) => e.currentTarget.classList.remove('opacity-0')}
-                    className="relative max-h-full max-w-full object-contain opacity-0 transition-opacity duration-500"
-                  />
-                </div>
-              )}
-              <p className={cn('text-pretty font-sans font-semibold leading-tight', i === 0 ? 'text-2xl md:text-3xl' : 'text-xl')}>{p.name}</p>
-              <p className="font-sans text-lg leading-none tabular-nums opacity-90">{p.price}</p>
+              <div
+                className="flex flex-col gap-3"
+                style={p.url === travelingUrl ? { viewTransitionName: 'pick-hero' } : undefined}
+              >
+                {p.imageUrl && (
+                  <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-sm bg-foreground/85 p-3 md:h-44">
+                    <div className="absolute inset-0 animate-pulse bg-foreground/60" aria-hidden="true" />
+                    {/* eslint-disable-next-line @next/next/no-img-element -- retailer-hosted product shots; dimensions unknown until fetch */}
+                    <img
+                      src={p.imageUrl}
+                      alt={p.name}
+                      loading="lazy"
+                      onLoad={(e) => e.currentTarget.classList.remove('opacity-0')}
+                      className="relative max-h-full max-w-full object-contain opacity-0 transition-opacity duration-500"
+                    />
+                  </div>
+                )}
+                <p className={cn('text-pretty font-sans font-semibold leading-tight', i === 0 ? 'text-2xl md:text-3xl' : 'text-xl')}>{p.name}</p>
+                <p className="font-sans text-lg leading-none tabular-nums opacity-90">{p.price}</p>
+              </div>
               <p className="text-pretty font-sans text-sm leading-relaxed opacity-80">{p.why}</p>
               {p.craft && (
                 <p className="border-l-2 border-primary/60 pl-3 font-sans text-sm leading-relaxed opacity-85">

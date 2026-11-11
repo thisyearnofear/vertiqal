@@ -151,8 +151,15 @@ export function FormaDock({
               <p className="text-pretty text-sm font-semibold leading-snug text-foreground lg:text-base">{ask.prompt}</p>
             ) : (
               <>
-                {!isExample && <p className="hidden text-base font-semibold leading-tight text-foreground lg:block">{step.title}</p>}
-                <p className="line-clamp-2 text-pretty font-mono text-sm leading-snug text-foreground lg:line-clamp-none lg:text-muted-foreground">
+                {!isExample && (
+                  <p key={step.title} className="hidden animate-in text-base font-semibold leading-tight text-foreground fade-in duration-300 motion-reduce:animate-none lg:block">
+                    {step.title}
+                  </p>
+                )}
+                <p
+                  key={line}
+                  className="line-clamp-2 animate-in text-pretty font-mono text-sm leading-snug text-foreground fade-in duration-300 motion-reduce:animate-none lg:line-clamp-none lg:text-muted-foreground"
+                >
                   {line}
                 </p>
                 {isExample && observation && (

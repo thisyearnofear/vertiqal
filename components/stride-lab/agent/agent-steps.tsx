@@ -328,11 +328,24 @@ export function progressOf(messages: GearAgentUIMessage[]) {
 
 /** The pages the search has actually returned so far, newest last, for the "Forma is reading" tray. */
 export function readingOf(messages: GearAgentUIMessage[], max = 6) {
-  const pages: { url: string; host: string; title: string }[] = []
+  const pages: { url: string; host: string; title: string; imageUrl?: string | null }[] = []
   for (const part of messages.filter((m) => m.role === 'assistant').flatMap((m) => m.parts)) {
     if ((part.type !== 'tool-searchProducts' && part.type !== 'tool-checkCommunity') || part.state !== 'output-available') continue
     for (const hit of part.output.results) {
       if (!pages.some((p) => p.url === hit.url)) pages.push({ url: hit.url, host: hostOf(hit.url), title: hit.title })
+    }
+    // Catalog products arrive with photos — show candidates assembling, not just URLs.
+    if (part.type === 'tool-searchProducts' && Array.isArray(part.output.catalog)) {
+      for (const prod of part.output.catalog as { title: string; brand?: string; imageUrl?: string | null; offers?: { url: string; domain: string }[] }[]) {
+        const offer = prod.offers?.[0]
+        if (!prod.imageUrl || !offer || pages.some((p) => p.url === offer.url)) continue
+        pages.push({
+          url: offer.url,
+          host: offer.domain || hostOf(offer.url),
+          title: `${prod.brand ? `${prod.brand} ` : ''}${prod.title}`,
+          imageUrl: prod.imageUrl,
+        })
+      }
     }
   }
   return pages.slice(-max)

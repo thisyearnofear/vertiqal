@@ -161,13 +161,15 @@ export function DecisionPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
         <div className="flex min-w-0 animate-focus-in flex-col gap-2 motion-reduce:animate-none">
           <p className="text-lg uppercase leading-none opacity-60">{`Your pick · ${pick.retailer}`}</p>
-          {pick.imageUrl && (
-            <div className="flex h-32 w-fit items-center justify-center rounded-sm bg-foreground/85 p-3">
-              {/* eslint-disable-next-line @next/next/no-img-element -- retailer-hosted product shot; dimensions unknown until fetch */}
-              <img src={pick.imageUrl} alt={pick.name} loading="lazy" className="max-h-full max-w-full object-contain" />
-            </div>
-          )}
-          <p className="text-pretty font-sans text-2xl font-semibold leading-tight md:text-3xl">{pick.name}</p>
+          <div className="flex w-fit flex-col gap-2" style={{ viewTransitionName: 'pick-hero' }}>
+            {pick.imageUrl && (
+              <div className="flex h-32 items-center justify-center rounded-sm bg-foreground/85 p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element -- retailer-hosted product shot; dimensions unknown until fetch */}
+                <img src={pick.imageUrl} alt={pick.name} loading="lazy" className="max-h-full max-w-full object-contain" />
+              </div>
+            )}
+            <p className="text-pretty font-sans text-2xl font-semibold leading-tight md:text-3xl">{pick.name}</p>
+          </div>
           <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed opacity-80">{pick.why}</p>
           {pick.craft && (
             <p className="max-w-2xl border-l-2 border-primary/60 pl-3 text-pretty font-sans text-sm leading-relaxed opacity-80">
