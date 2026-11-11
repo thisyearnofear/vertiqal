@@ -5,8 +5,8 @@ import { FittingRationale } from '../fitting-rationale'
 import type { AgentOutputs, ShoePick } from './outputs'
 
 const EXTRAS = [
-  ['Riders say', 'community'],
-  ['Research', 'research'],
+  ['Riders', 'community'],
+  ['Evidence', 'research'],
   ['Worn by', 'wornBy'],
 ] as const
 
@@ -29,8 +29,9 @@ export function Shortlist({ outputs, closingLine, onChoose }: { outputs: AgentOu
           return (
             <li
               key={p.url}
+              style={{ animationDelay: `${i * 120}ms` }}
               className={cn(
-                'flex flex-col gap-3 rounded-md border p-4',
+                'flex animate-in flex-col gap-3 rounded-md border p-4 fade-in slide-in-from-bottom-2 fill-mode-both duration-500',
                 i === 0 ? 'border-primary shadow-[0_0_24px_-6px_var(--primary)] md:col-span-2 md:p-5' : 'border-stage-foreground/30',
               )}
             >
@@ -46,9 +47,16 @@ export function Shortlist({ outputs, closingLine, onChoose }: { outputs: AgentOu
                 </span>
               </div>
               {p.imageUrl && (
-                <div className="flex h-40 items-center justify-center rounded-sm bg-foreground/85 p-3 md:h-44">
+                <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-sm bg-foreground/85 p-3 md:h-44">
+                  <div className="absolute inset-0 animate-pulse bg-foreground/60" aria-hidden="true" />
                   {/* eslint-disable-next-line @next/next/no-img-element -- retailer-hosted product shots; dimensions unknown until fetch */}
-                  <img src={p.imageUrl} alt={p.name} loading="lazy" className="max-h-full max-w-full object-contain" />
+                  <img
+                    src={p.imageUrl}
+                    alt={p.name}
+                    loading="lazy"
+                    onLoad={(e) => e.currentTarget.classList.remove('opacity-0')}
+                    className="relative max-h-full max-w-full object-contain opacity-0 transition-opacity duration-500"
+                  />
                 </div>
               )}
               <p className={cn('text-pretty font-sans font-semibold leading-tight', i === 0 ? 'text-2xl md:text-3xl' : 'text-xl')}>{p.name}</p>
@@ -61,19 +69,14 @@ export function Shortlist({ outputs, closingLine, onChoose }: { outputs: AgentOu
                 </p>
               )}
               {extras.length > 0 && (
-                <details className="text-lg leading-snug">
-                  <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">
-                    {`+ ${extras.map(([label]) => label.toLowerCase()).join(', ')}`}
-                  </summary>
-                  <div className="mt-2 flex flex-col gap-2">
-                    {extras.map(([label, field]) => (
-                      <p key={label} className="text-pretty font-sans text-sm leading-relaxed opacity-75">
-                        <span className="font-mono text-base uppercase opacity-80">{`${label}: `}</span>
-                        {p[field]}
-                      </p>
-                    ))}
-                  </div>
-                </details>
+                <dl className="flex flex-col gap-1.5 border-t border-stage-foreground/20 pt-3">
+                  {extras.map(([label, field]) => (
+                    <div key={label} className="flex gap-2 font-sans text-sm leading-snug">
+                      <dt className="shrink-0 font-mono uppercase opacity-60">{`${label} ·`}</dt>
+                      <dd className="min-w-0 text-pretty opacity-75">{p[field]}</dd>
+                    </div>
+                  ))}
+                </dl>
               )}
               <button
                 type="button"

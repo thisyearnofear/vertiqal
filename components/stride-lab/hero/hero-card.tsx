@@ -273,6 +273,10 @@ export function HeroCard({ frame, readout, sport, picks, themeKey }: HeroCardPro
           {/* ── METRICS (on the web page, not the card) ─────────── */}
           {caption && (
             <div className="flex flex-col gap-4 border-t border-border pt-5">
+              {/* Archetype — the trading-card title */}
+              {caption.archetype && (
+                <p className="font-mono text-base uppercase tracking-[0.2em] text-primary">{`◈ ${caption.archetype}`}</p>
+              )}
               {/* Standout metric — large, on the page */}
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-5xl font-light text-foreground">{caption.standoutMetric.value}</span>

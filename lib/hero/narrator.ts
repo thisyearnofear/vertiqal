@@ -4,6 +4,8 @@ export interface HeroCaption {
   sport: Sport
   /** The emotional headline — short, provocative identity statement. */
   headline: string
+  /** The named archetype for the standout band — the trading-card title, e.g. "The Metronome". */
+  archetype?: string
   /** Contextual body — one sentence explaining the narrative. */
   body: string
   /** The single metric that defines this user's movement. Big on the card. */
@@ -30,6 +32,7 @@ export function generateHeroCaption(
 ): HeroCaption {
   const insights: string[] = []
   let headline = ''
+  let archetype = ''
   let body = ''
   let standoutMetric: HeroCaption['standoutMetric'] = { value: '', unit: '', label: '', description: '' }
 
@@ -49,6 +52,7 @@ export function generateHeroCaption(
     if (cadence && cadence.value !== null) {
       if (cadence.value < 160) {
         headline = 'Long strides. Heavy steps.'
+        archetype = 'The Power Strider'
         standoutMetric = {
           value: cadence.value.toFixed(0),
           unit: 'spm',
@@ -58,6 +62,7 @@ export function generateHeroCaption(
         insights.push(`Cadence ${cadence.value.toFixed(0)} spm — heavier landing, longer braking phase`)
       } else if (cadence.value <= 175) {
         headline = 'Even rhythm. Efficient motion.'
+        archetype = 'The Metronome'
         standoutMetric = {
           value: cadence.value.toFixed(0),
           unit: 'spm',
@@ -67,6 +72,7 @@ export function generateHeroCaption(
         insights.push(`Cadence ${cadence.value.toFixed(0)} spm — balanced stride pattern`)
       } else {
         headline = 'Quick. Light feet.'
+        archetype = 'The Lightfoot'
         standoutMetric = {
           value: cadence.value.toFixed(0),
           unit: 'spm',
@@ -117,6 +123,7 @@ export function generateHeroCaption(
     if (toeDown && toeDown.value !== null) {
       if (toeDown.value > 25) {
         headline = 'Steep foot. High tension.'
+        archetype = 'The Edge Rider'
         standoutMetric = {
           value: toeDown.value.toFixed(0),
           unit: '°',
@@ -126,6 +133,7 @@ export function generateHeroCaption(
         insights.push(`Toe-down ${toeDown.value.toFixed(0)}° — aggressive edging stance`)
       } else if (toeDown.value > 10) {
         headline = 'Balanced placement. Controlled reach.'
+        archetype = 'The Technician'
         standoutMetric = {
           value: toeDown.value.toFixed(0),
           unit: '°',
@@ -135,6 +143,7 @@ export function generateHeroCaption(
         insights.push(`Toe-down ${toeDown.value.toFixed(0)}° — precise foot readjustment`)
       } else {
         headline = 'Flat-footed. Efficient power.'
+        archetype = 'The Smear Artist'
         standoutMetric = {
           value: toeDown.value.toFixed(0),
           unit: '°',
@@ -168,10 +177,10 @@ export function generateHeroCaption(
     body = profile?.summary ?? 'Your climbing mechanics, captured in one clip.'
   }
 
-  return { sport, headline, body, standoutMetric, insights }
+  return { sport, headline, archetype, body, standoutMetric, insights }
 }
 
 /** Convert a caption to a single spoken sentence (strips metric details for audio flow). */
 export function captionToSpeech(caption: HeroCaption): string {
-  return `${caption.headline} ${caption.body}`
+  return `${caption.archetype ? `${caption.archetype}. ` : ''}${caption.headline} ${caption.body}`
 }

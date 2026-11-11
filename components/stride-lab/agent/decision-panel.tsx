@@ -175,6 +175,24 @@ export function DecisionPanel({
               {pick.craft}
             </p>
           )}
+          {(pick.community || pick.research || pick.wornBy) && (
+            <dl className="flex max-w-2xl flex-col gap-1.5 border-t border-stage-foreground/20 pt-3">
+              {(
+                [
+                  ['Riders', pick.community],
+                  ['Evidence', pick.research],
+                  ['Worn by', pick.wornBy],
+                ] as const
+              )
+                .filter(([, v]) => v?.trim())
+                .map(([label, v]) => (
+                  <div key={label} className="flex gap-2 font-sans text-sm leading-snug">
+                    <dt className="shrink-0 font-mono uppercase opacity-60">{`${label} ·`}</dt>
+                    <dd className="min-w-0 text-pretty opacity-75">{v}</dd>
+                  </div>
+                ))}
+            </dl>
+          )}
         </div>
         <button type="button" onClick={() => onChoose(null)} className={cn(LINK, 'shrink-0')}>
           {'[ BACK TO SHORTLIST ]'}

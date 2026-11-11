@@ -113,11 +113,16 @@ function renderHeadline(ctx: CanvasRenderingContext2D, theme: OverlayTheme, capt
   const maxWidth = CARD_WIDTH - MARGIN * 2
 
   ctx.save()
-  ctx.fillStyle = theme.bone
   ctx.shadowColor = 'rgba(0,0,0,0.6)'
   ctx.shadowBlur = 18
   ctx.shadowOffsetY = 2
   ctx.textBaseline = 'alphabetic'
+  if (caption.archetype) {
+    ctx.fillStyle = theme.labelText
+    ctx.font = `500 34px ${theme.font}`
+    ctx.fillText(`◈ ${caption.archetype.toUpperCase()}`, x, y - 44)
+  }
+  ctx.fillStyle = theme.bone
   ctx.font = `600 72px ${theme.font}`
   const wrapped = wrapText(ctx, caption.headline, maxWidth)
   // Headline may be multi-line; render with line height
