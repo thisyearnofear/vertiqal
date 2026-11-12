@@ -51,7 +51,7 @@ dual FORMA/vertiqal branding in one frame.
 ## Verification before you call it wrapped
 
 - [x] Demo yields 3 distinct allowed-domain picks (no HALT in the take — take 4, 2026-11-12).
-- [ ] Hero stock-check `in_stock` live, receipt + price visible.
+- [x] Hero stock-check `in_stock` live, receipt + price visible (Solution Comp / Alpinetrek / UK 8 / £135.96 — API-verified; UI CHECK still to film).
 - [ ] Capture COMPLETED + captureId; lab row <5s.
 - [ ] Refund REFUNDED on that capture.
 - [x] Shopper-agent order id legible at 720p (`6E631964L2805320A`, 92/100 great-fit).
@@ -63,6 +63,7 @@ dual FORMA/vertiqal branding in one frame.
   mismatch — the last one exposed the stock-gate recall bug, fixed same day
   (`nearToken` + space-joined headings) and proven live: re-check returned HTTP 200
   with the page correctly identified, verdict genuinely `out_of_stock`.
+- 2026-11-12: HERO FOUND — La Sportiva Solution Comp, Alpinetrek, UK 8, £135.96, verdict `in_stock` (live Solari verify, receipt screenshot saved). Lesson: send UK sizes on UK sites — EU '42' returned `size_not_listed` on the same page. Bananafingers + Sportsshoes both 403 the stealth browser (bot walls, not OOS) — two more allowlisted domains that fail live checks.
 - 2026-11-12: beat 8 filmed — full shopper-agent run, terminal scroll-rendered at
   1080p, real sandbox order id. Rough-cut `vq-rough-v2.mp4` (44s, 6 scenes, music
   bed) assembled on disk. Still open: hero `in_stock`, beats 7/9 (need human PayPal
