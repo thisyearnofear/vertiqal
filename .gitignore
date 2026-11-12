@@ -22,3 +22,10 @@ next-env.d.ts
 
 # Switch agent credentials
 switch/.agent.json
+
+# Rendered video artifacts live outside git; the keeper is uploaded to YouTube.
+*.mp4
+*.mov
+*.webm
+*.m4v
+!public/examples/generated-runner.mp4
