@@ -27,7 +27,6 @@ export async function GET(request: Request) {
     currency: c.currency,
     status: c.status,
     date: c.capturedAt,
-    payer: null,
     items: [`${c.purpose === 'pro' ? 'Forma Pro' : 'Forma purchase'} · order ${c.orderId.slice(-6)}`],
   }))
   const seen = new Set(instant.map((t) => t.id))

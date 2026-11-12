@@ -1,3 +1,4 @@
+import type { CounterStore } from '../rate-limit/store.ts'
 import { RETAILER_DOMAINS } from './domains.ts'
 
 export const STOCK_CHECK_LIMIT = 6
@@ -53,6 +54,33 @@ export function requestClientKey(request: Request): string {
     request.headers.get('fly-client-ip')?.trim() ||
     'unknown'
   )
+}
+
+export type StockSlot =
+  | { allowed: true; remaining: number; retryAfterSec: 0 }
+  | { allowed: false; remaining: 0; retryAfterSec: number; reason: 'limit' | 'meter' }
+
+/**
+ * One stock-check slot in the shared counter. Allows `STOCK_CHECK_LIMIT` hits per
+ * client per window across instances. A store outage refuses the check: a browser
+ * session is too expensive to fail open.
+ */
+export async function takeStockSlot(store: CounterStore, clientKey: string, now = Date.now()): Promise<StockSlot> {
+  try {
+    const { count, resetAt } = await store.hit(`stock:${clientKey}`, STOCK_CHECK_WINDOW_MS)
+    if (count <= STOCK_CHECK_LIMIT) {
+      return { allowed: true, remaining: Math.max(0, STOCK_CHECK_LIMIT - count), retryAfterSec: 0 }
+    }
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSec: Math.max(1, Math.ceil((resetAt - now) / 1000)),
+      reason: 'limit',
+    }
+  } catch (error) {
+    console.warn('[stock-check] counter store unavailable, refusing this check', error)
+    return { allowed: false, remaining: 0, retryAfterSec: 30, reason: 'meter' }
+  }
 }
 
 export function createRateLimiter({ limit, windowMs }: { limit: number; windowMs: number }) {

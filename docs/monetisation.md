@@ -2,17 +2,22 @@
 
 See [STRATEGY.md](STRATEGY.md) for the wedge, the economic loop and the kill criteria. This file covers cost controls and the revenue options it ranks.
 
-Status: **plan, not implemented.** As of 2026-10-01 vertiqal has no revenue path: the Buy button is a plain retailer link, there is no paywall or pricing, and the Fit Passport REST/MCP endpoints are free. Every fitting costs money; nothing earns it.
+Status: **partially shipped.** As of 2026-11-12 two revenue paths exist in code, and neither has a paying customer yet.
+
+- **Forma Pro.** A verified PayPal subscription (`/api/paypal/subscription/status`) or a capture with `purpose: 'pro'` signs `tier: 'pro'` into the brief cookie (`lib/fitting/tier-proof.ts`). Hosted vision, brief parse, surface guess and try-on consult that proof in `lib/fitting/usage.ts` and return 402 when the free monthly quota is spent. The counter moves only after the provider call succeeds, so a free allowance of 1 runs once and a 502 does not spend it. A meter outage refuses the call (503) instead of granting it. `/api/agent` is still only on the daily abuse cap, not this quota. There is no demo button that mints Pro.
+- **Affiliate.** `wrapAffiliateUrl` wraps the Buy link when the Awin env is set. The in-app PayPal order is a separate path, used once a size is verified.
+
+The Buy button is still a retailer link. Fit Passport reads stay free. B2B pricing stays blocked on a consented motion validation, which has not been run. Every fitting still costs money until someone pays.
 
 ## Where cost comes from today
 
 | Surface | Paid calls | Current guard |
 | --- | --- | --- |
 | `/api/agent` (gear agent) | Resolved model (currently Featherless `Qwen/Qwen2.5-72B-Instruct`, ~$0.37/$0.40 per M tokens) multi-step tool loop + Tavily searches (more at Deep: research, athletes) | Server-side `agentRequestSchema` validation (`{ brief, prefs }`, ≤32 KB body, ignores client `messages`), `stopWhen: stepCountIs(14)`, cost-logged (`agent_run`), plus `lib/rate-limit.ts` per-visitor (6/day; 2/day Deep) and global daily capacity caps (`250`/day; `80`/day Deep). |
-| `/api/stock-check` | Solari browser session + `vision` model judge (screenshot) | Signed product target + retailer allowlist + 6 checks / 10 min per client key, **in-memory per serverless instance** |
-| `/api/tryon` | FLUX Kontext Pro image generation | `lib/rate-limit.ts` (3/visitor/day, 60 global/day), cost-logged via `paid_call` |
-| `/api/vision`, `/api/brief` (surface) | `vision` model (Featherless `Qwen3-VL-32B-Instruct`, ~$0.10/M) | `lib/rate-limit.ts` (`vision`: 6/visitor/day, 150 global/day; `brief`: 10/visitor/day, 300 global/day), cost-logged via `paid_call` |
-| `/api/brief` (text) | `agent` model text extraction | cost-logged via `paid_call` |
+| `/api/stock-check` | Solari browser session + `vision` model judge (screenshot) | Signed product target + retailer allowlist + 6 checks / 10 min per client key in the shared counter (`takeStockSlot`). A meter outage refuses the check. |
+| `/api/tryon` | FLUX Kontext Pro image generation | Daily abuse cap (`lib/rate-limit.ts`, 3/visitor/day, 60 global/day) plus the free-tier monthly quota (0 — Pro only). Counted after a successful render. |
+| `/api/vision`, `/api/brief` (surface) | `vision` model (Featherless `Qwen3-VL-32B-Instruct`, ~$0.10/M) | Daily abuse cap plus monthly quota (sole vision 1, keyframe review 0, surface guess 1 on free). Counted after a successful model call. |
+| `/api/brief` (text) | `fast` model text extraction | Daily abuse cap plus monthly quota (3 on free). Counted after a successful parse. |
 | Hero frame caption + narration | **Zero** — rule-based caption (`lib/hero/narrator.ts`) and browser speech synthesis (`lib/voice/speak.ts`); comparison cards likewise | No guard needed |
 | `/api/voice` | Grok TTS per spoken line | 240-char cap + `lib/rate-limit.ts` (30/visitor/day, 600 global/day), cost-logged via `paid_call` |
 | `/api/pose/vlmrun` | VLM Run keypoint refinement | Key presence + `lib/rate-limit.ts` (24/visitor/day, 300 global/day), cost-logged via `paid_call` |
@@ -34,7 +39,7 @@ The free stage exists to learn two things: **how people use it** (funnel drop-of
 2. **Close the open endpoint.** `/api/agent` should validate its input server-side: at most one user brief message of bounded size, a known depth, and an explicit `stopWhen` step cap on `gearAgent`. Without this, the client-side gating is advisory and anyone can drive Grok and Tavily directly.
    - **Implemented:** the route parses `{ brief, prefs }` against `agentRequestSchema` (bounded brief, known depth, capped notes), rejects bodies over 32 KB with 413, builds the prompt itself and ignores client `messages`; `gearAgent` has `stopWhen: stepCountIs(14)`.
 3. **Per-visitor and global daily limits.**
-   - **Implemented (`lib/rate-limit.ts`; shared across instances when a Redis/KV store is configured, otherwise per instance):** Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) enforces both a per-visitor daily window (`FORMA_VISITOR_LIMIT_<SURFACE>`) and a global daily route budget (`FORMA_BUDGET_<SURFACE>`). When a route hits global capacity it returns `503 { reason: 'capacity', error: 'Forma is at capacity today — your measurement still works.' }` and logs `limit_hit`. Move counters to a shared store (e.g. Upstash Redis) if multi-instance horizontal scaling requires cross-instance enforcement.
+   - **Implemented (`lib/rate-limit.ts`; Redis/KV when `KV_REST_API_URL` or `UPSTASH_REDIS_REST_URL` is set, otherwise per instance):** Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) enforces both a per-visitor daily window (`FORMA_VISITOR_LIMIT_<SURFACE>`) and a global daily route budget (`FORMA_BUDGET_<SURFACE>`). When a route hits global capacity it returns `503 { reason: 'capacity', error: 'Forma is at capacity today — your measurement still works.' }` and logs `limit_hit`. This abuse guard fails open if the counter store throws. Monthly feature quotas and stock-check slots on the same store fail closed.
 4. **Instant switches for expensive extras.**
    - **Implemented (`lib/rate-limit.ts`):** Set `FORMA_DISABLED_FEATURES` (comma-separated, e.g. `tryon,deep,voice,pose-vlmrun`) to immediately return `503` with the capacity message on any expensive surface.
 5. **Spend less per fitting without hurting quality.**

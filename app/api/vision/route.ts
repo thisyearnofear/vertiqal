@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { visionFindingSchema, WEAR_PATTERNS } from '@/lib/agent/fitting-notes'
 import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
-import { checkFeature, quotaResponse } from '@/lib/fitting/usage'
+import { checkFeature, featureBlocked, recordFeatureUse } from '@/lib/fitting/usage'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 60
@@ -35,10 +35,12 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: 'Send 1–3 JPEG, PNG or WebP images as data URLs' }, { status: 400 })
   const { kind, sport, images, measurements } = parsed.data
 
-  const quota = await checkFeature(request, kind === 'soles' ? 'sole-vision' : 'keyframe-review')
-  if (!quota.ok) {
-    logCost('limit_hit', { surface: 'vision', reason: 'tier_quota', tier: quota.tier, used: quota.used })
-    return quotaResponse(quota)
+  const feature = kind === 'soles' ? 'sole-vision' : 'keyframe-review'
+  const quota = await checkFeature(request, feature)
+  const blocked = featureBlocked(quota)
+  if (blocked) {
+    logCost('limit_hit', { surface: 'vision', reason: quota.unavailable ? 'meter' : 'tier_quota', tier: quota.tier, used: quota.used })
+    return blocked
   }
 
   const started = Date.now()
@@ -70,6 +72,7 @@ export async function POST(request: Request) {
       providerOptions: { openaiCompatible: { structuredOutputs: false } },
       abortSignal: AbortSignal.timeout(50_000),
     })
+    await recordFeatureUse(request, feature)
     logCost('paid_call', { route: 'vision', ok: true, ms: Date.now() - started, kind, sport, images: images.length })
     return Response.json(output)
   } catch (error) {

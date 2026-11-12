@@ -22,7 +22,6 @@ interface Transaction {
   currency: string | null
   status: string | null
   date: string | null
-  payer: string | null
   items: string[]
 }
 
@@ -126,7 +125,6 @@ const transactionCols: ColDef<Transaction>[] = [
     filterValueGetter: (p) => when(p.data?.date),
     valueFormatter: (p: ValueFormatterParams<Transaction, string>) => when(p.value),
   },
-  { field: 'payer', headerName: 'Payer', flex: 1, filter: 'agTextColumnFilter' },
   { field: 'items', headerName: 'Items', flex: 2, filter: 'agTextColumnFilter', valueFormatter: (p: ValueFormatterParams<Transaction, string[]>) => items(p.value) },
   {
     colId: 'amount',

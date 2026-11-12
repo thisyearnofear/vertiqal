@@ -56,7 +56,7 @@ Thin packaging over the live Fit Passport MCP (directory at [chatgpt.com/plugins
 
 ## Monetisation and costs
 
-There is no revenue path yet; every fitting is free and costs money in model, search and browser calls. The plan — free-stage cost controls first, then affiliate commission on Buy, then B2B fit data once measurement accuracy is validated — lives in [docs/monetisation.md](docs/monetisation.md).
+On-device measurement stays free. Hosted vision, brief parsing, surface guesses and try-on are metered: free monthly quotas, then Forma Pro via a verified PayPal subscription (`lib/fitting/entitlements.ts`). Affiliate wrapping switches on with the Awin env. Nothing has been charged yet, and B2B pricing waits on a consented motion validation. The cost model is in [docs/monetisation.md](docs/monetisation.md).
 
 ## Programme: Keiki × Maritime
 
@@ -71,7 +71,7 @@ pnpm test:fitting # fitting-state, capture and preference rules
 pnpm test:pose    # example tracking lifecycle, local export and annotation-comparison unit tests
 pnpm smoke        # end-to-end checks against BASE_URL (add --llm or --full to exercise the model; --full spends real money)
 pnpm cost:report  # unit economics from `vercel logs --json` (see script header for price assumptions)
-pnpm typecheck    # the real type gate: next.config ignores TS errors during build
+pnpm typecheck
 pnpm build
 ```
 

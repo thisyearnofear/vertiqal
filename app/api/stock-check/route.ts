@@ -4,16 +4,16 @@ import { verifyStockToken } from '@/lib/agent/stock-token'
 import {
   STOCK_CACHE_TTL_MS,
   STOCK_CHECK_LIMIT,
-  STOCK_CHECK_WINDOW_MS,
   STOCK_MAX_ACTIVE,
-  createRateLimiter,
   createStockCheckRunner,
   extraStockHosts,
   requestClientKey,
   stockUrlAllowed,
+  takeStockSlot,
 } from '@/lib/agent/stock-policy'
 import { logCost } from '@/lib/cost-log'
 import { vidFromRequest } from '@/lib/fitting/visitor'
+import { counterStore } from '@/lib/rate-limit/store'
 import { hasSecret } from '@/lib/secrets'
 
 export const maxDuration = 60
@@ -32,7 +32,6 @@ const bodySchema = z.object({
   fresh: z.boolean().optional(),
 })
 
-const limiter = createRateLimiter({ limit: STOCK_CHECK_LIMIT, windowMs: STOCK_CHECK_WINDOW_MS })
 const stockChecks = createStockCheckRunner<StockCheck>({ check: verifyStock, cacheTtlMs: STOCK_CACHE_TTL_MS, maxActive: STOCK_MAX_ACTIVE })
 
 const rateHeaders = (result: { remaining: number; retryAfterSec: number }) => ({
@@ -48,9 +47,13 @@ export async function POST(request: Request) {
   if (!hasSecret('STOCK_CHECK_SECRET')) {
     return Response.json({ error: 'Live stock checks are not configured' }, { status: 503 })
   }
-  const limit = limiter(requestClientKey(request))
+  const limit = await takeStockSlot(counterStore(), requestClientKey(request))
   if (!limit.allowed) {
-    return Response.json({ error: 'Too many stock checks. Try again shortly.' }, { status: 429, headers: rateHeaders(limit) })
+    const paused = limit.reason === 'meter'
+    return Response.json(
+      { error: paused ? 'Live stock checks are paused — the usage meter is unreachable.' : 'Too many stock checks. Try again shortly.' },
+      { status: paused ? 503 : 429, headers: rateHeaders(limit) },
+    )
   }
 
   const contentLength = Number(request.headers.get('content-length') ?? 0)

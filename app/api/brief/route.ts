@@ -4,7 +4,7 @@ import { INTAKE_OPTIONS } from '@/lib/agent/fitting-notes'
 import { friendlyModelError, resolveModel } from '@/lib/agent/models'
 import { briefParseSchema } from '@/lib/fitting/brief-parse'
 import { logCost } from '@/lib/cost-log'
-import { checkFeature, quotaResponse } from '@/lib/fitting/usage'
+import { checkFeature, featureBlocked, recordFeatureUse } from '@/lib/fitting/usage'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 30
@@ -41,10 +41,12 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: 'Bad request' }, { status: 400 })
   const { kind, sport } = parsed.data
 
-  const quota = await checkFeature(request, kind === 'surface' ? 'surface-guess' : 'describe')
-  if (!quota.ok) {
-    logCost('limit_hit', { surface: 'brief', reason: 'tier_quota', tier: quota.tier, used: quota.used })
-    return quotaResponse(quota)
+  const feature = kind === 'surface' ? 'surface-guess' : 'describe'
+  const quota = await checkFeature(request, feature)
+  const blocked = featureBlocked(quota)
+  if (blocked) {
+    logCost('limit_hit', { surface: 'brief', reason: quota.unavailable ? 'meter' : 'tier_quota', tier: quota.tier, used: quota.used })
+    return blocked
   }
 
   const started = Date.now()
@@ -94,6 +96,7 @@ export async function POST(request: Request) {
       logCost('paid_call', { route: 'brief', ok: false, ms: Date.now() - started, kind, sport, reason: 'no_model_available' })
       return Response.json({ error: 'Forma’s model is unreachable right now — try again shortly.' }, { status: 503 })
     }
+    await recordFeatureUse(request, feature)
     logCost('paid_call', { route: 'brief', ok: true, ms: Date.now() - started, kind, sport, model: first.resolved.label })
     return Response.json(first.output)
   } catch (error) {
@@ -102,6 +105,7 @@ export async function POST(request: Request) {
     try {
       const retry = await runOnce([failedLabel])
       if (retry.resolved) {
+        await recordFeatureUse(request, feature)
         logCost('paid_call', { route: 'brief', ok: true, ms: Date.now() - started, kind, sport, model: retry.resolved.label, fallback: true })
         return Response.json(retry.output)
       }

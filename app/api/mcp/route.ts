@@ -1,10 +1,14 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createMcpHandler } from 'mcp-handler'
 import { z } from 'zod'
 import { channel3Configured, searchCatalog } from '@/lib/agent/channel3'
+import { requestClientKey } from '@/lib/agent/stock-policy'
 import { logCost } from '@/lib/cost-log'
 import { checkFit, tokenFrom } from '@/lib/passport/fit'
 import { passportId, readPassport } from '@/lib/passport/token'
 import { guardSurfaceKey } from '@/lib/rate-limit'
+
+const mcpRequest = new AsyncLocalStorage<Request>()
 
 export const maxDuration = 60
 
@@ -91,7 +95,8 @@ const handler = createMcpHandler((server) => {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ query, limit }) => {
-      const guard = await guardSurfaceKey('catalog-search', 'global')
+      const request = mcpRequest.getStore()
+      const guard = await guardSurfaceKey('catalog-search', request ? requestClientKey(request) : 'unknown')
       if (!guard.allowed) {
         logCost('limit_hit', { surface: 'catalog-search', reason: guard.reason })
         return failure(guard.error)
@@ -112,4 +117,8 @@ const handler = createMcpHandler((server) => {
   )
 }, { serverInfo: { name: 'vertiqal-fit-passport', version: '1.0.0' } })
 
-export { handler as GET, handler as POST, handler as DELETE }
+async function route(request: Request) {
+  return mcpRequest.run(request, () => handler(request))
+}
+
+export { route as GET, route as POST, route as DELETE }

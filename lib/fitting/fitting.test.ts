@@ -31,7 +31,7 @@ import { applyParsedBrief, briefParseSchema } from './brief-parse.ts'
 import { SAMPLE_BRIEFS, agentRequestSchema, briefToPrompt } from '../agent/brief.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
 import { hostIsBotWalled, preferVerifiableOffers } from '../agent/domains.ts'
-import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
+import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed, takeStockSlot } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
 import { guardedStockVerdict, inspectStockPage, type StockPageEvidence } from '../agent/stock-page.ts'
 import { frameQuality, usableKeypoint } from '../pose/framing.ts'
@@ -47,7 +47,9 @@ import { tavilyCacheKey } from '../agent/tavily.ts'
 import { DEMO_PASSPORTS, issuePassport, passportId, readPassport, tokenFrom } from '../passport/token.ts'
 import { jointForAttribute, retargetPoseTo3D } from '../pose/twin-3d.ts'
 import { CAPACITY_MESSAGE, DEFAULT_SURFACE_POLICIES, createSurfaceGuard, disabledSurfaces } from '../rate-limit.ts'
-import { createMemoryCounterStore, createRedisCounterStore, redisConfig } from '../rate-limit/store.ts'
+import { createMemoryCounterStore, createRedisCounterStore, redisConfig, setCounterStore } from '../rate-limit/store.ts'
+import { checkFeature, recordFeatureUse } from './usage.ts'
+import { publicTransaction } from '../paypal/activity.ts'
 import { MissingSecretError, hasSecret } from '../secrets.ts'
 import { parseChain, parseSpec } from '../agent/model-spec.ts'
 import type { ModelMessage } from 'ai'
@@ -277,6 +279,104 @@ test('movement profile: retention follows the tier quota and deltas compare the 
   } finally {
     globalThis.localStorage = real
   }
+})
+
+test('feature quota: a free allowance of 1 runs once, and only after a successful call', async () => {
+  const saved = process.env.PASSPORT_SECRET
+  process.env.PASSPORT_SECRET = 'usage-test-secret'
+  setCounterStore(createMemoryCounterStore())
+  const originalWarn = console.warn
+  console.warn = () => {}
+  const free = new Request('https://vertiqal.test/api/vision', {
+    headers: { cookie: 'vertiqal-vid=vq-usage01', 'x-forwarded-for': '203.0.113.10' },
+  })
+  try {
+    const before = await checkFeature(free, 'sole-vision')
+    assert.equal(before.ok, true)
+    assert.equal(before.used, 0)
+    assert.equal((await checkFeature(free, 'sole-vision')).ok, true, 'a peek does not spend the allowance')
+    await recordFeatureUse(free, 'sole-vision')
+    const spent = await checkFeature(free, 'sole-vision')
+    assert.equal(spent.ok, false)
+    assert.equal(spent.used, 1)
+    assert.equal(spent.unavailable, undefined)
+
+    const keyframes = await checkFeature(free, 'keyframe-review')
+    assert.equal(keyframes.ok, false, 'a zero quota never opens')
+    assert.equal(keyframes.used, 0)
+
+    const proof = tierProof('pro')
+    const brief = encodeURIComponent(JSON.stringify({
+      size: '',
+      budgetPounds: '',
+      heightCm: '',
+      width: '',
+      tier: 'pro',
+      tierProof: proof,
+      bySport: {},
+    }))
+    const pro = new Request('https://vertiqal.test/api/tryon', {
+      headers: { cookie: `vertiqal-brief=${brief}; vertiqal-vid=vq-usagepro` },
+    })
+    assert.equal((await checkFeature(pro, 'tryon')).ok, true)
+    await recordFeatureUse(pro, 'tryon')
+    assert.equal((await checkFeature(pro, 'tryon')).ok, true, 'pro does not consume a finite counter')
+
+    setCounterStore({
+      name: 'broken',
+      read: async () => { throw new Error('down') },
+      hit: async () => { throw new Error('down') },
+    })
+    const down = await checkFeature(free, 'describe')
+    assert.equal(down.ok, false)
+    assert.equal(down.unavailable, true)
+  } finally {
+    console.warn = originalWarn
+    setCounterStore(null)
+    if (saved === undefined) delete process.env.PASSPORT_SECRET
+    else process.env.PASSPORT_SECRET = saved
+  }
+})
+
+test('stock slots: the shared counter caps a client and refuses when the meter is down', async () => {
+  const store = createMemoryCounterStore()
+  for (let i = 0; i < 6; i++) assert.equal((await takeStockSlot(store, '203.0.113.8')).allowed, true)
+  const blocked = await takeStockSlot(store, '203.0.113.8')
+  assert.equal(blocked.allowed, false)
+  if (!blocked.allowed) assert.equal(blocked.reason, 'limit')
+  assert.equal((await takeStockSlot(store, '203.0.113.9')).allowed, true, 'a second client has its own window')
+  const originalWarn = console.warn
+  console.warn = () => {}
+  try {
+    const down = await takeStockSlot({
+      name: 'broken',
+      read: async () => { throw new Error('down') },
+      hit: async () => { throw new Error('down') },
+    }, '203.0.113.8')
+    assert.equal(down.allowed, false)
+    if (!down.allowed) assert.equal(down.reason, 'meter')
+  } finally {
+    console.warn = originalWarn
+  }
+})
+
+test('public ledger rows drop the payer name and email', () => {
+  const row = publicTransaction({
+    transaction_info: {
+      transaction_id: 'CAP-1',
+      transaction_amount: { value: '144.99', currency_code: 'GBP' },
+      transaction_status: 'S',
+      transaction_initiation_date: '2026-11-12T00:00:00Z',
+    },
+    payer_info: { email_address: 'ada@example.com', payer_name: { full_name: 'Ada Lovelace' } },
+    cart_info: { item_details: [{ item_name: 'Forma demo', item_quantity: '1' }] },
+  })
+  const json = JSON.stringify(row)
+  assert.equal(row.amount, '144.99')
+  assert.equal(row.items[0], '1× Forma demo')
+  assert.equal(json.includes('ada@example.com'), false)
+  assert.equal(json.includes('Ada Lovelace'), false)
+  assert.equal(json.includes('payer'), false)
 })
 
 test('tier proof: a forged pro cookie downgrades to free, a signed one verifies', () => {
@@ -1067,7 +1167,11 @@ test('surface guard: a shared store is the single source of truth across guard i
 })
 
 test('surface guard: a broken counter store fails open instead of blocking shoppers', async () => {
-  const broken = { name: 'broken', hit: async () => { throw new Error('down') } }
+  const broken = {
+    name: 'broken',
+    read: async () => { throw new Error('down') },
+    hit: async () => { throw new Error('down') },
+  }
   const guard = createSurfaceGuard(DEFAULT_SURFACE_POLICIES, { store: broken })
   const originalWarn = console.warn
   console.warn = () => {}

@@ -9,6 +9,8 @@
 
 > "Status: **plan, not implemented.** As of 2026-10-01 vertiqal has no revenue path: the Buy button is a plain retailer link, there is no paywall or pricing, and the Fit Passport REST/MCP endpoints are free."
 
+That October sentence is stale. Current status is the top of `docs/monetisation.md`: Pro checkout and affiliate wrapping are in the code, and nobody has paid.
+
 Key constraint: **"Both stop before checkout"** is a deliberate product guardrail, not a bug. For Shipyard we have to *opt-in* to converting the purchase step.
 
 ## Why vertiqal can still work (and how hard it is)

@@ -2,7 +2,7 @@ import { generateImage } from 'ai'
 import { z } from 'zod'
 import { friendlyModelError } from '@/lib/agent/models'
 import { logCost } from '@/lib/cost-log'
-import { checkFeature, quotaResponse } from '@/lib/fitting/usage'
+import { checkFeature, featureBlocked, recordFeatureUse } from '@/lib/fitting/usage'
 import { guardRequest, guardResponse } from '@/lib/rate-limit'
 
 export const maxDuration = 60
@@ -38,9 +38,10 @@ export async function POST(request: Request) {
   const { image, shoe, sport } = parsed.data
 
   const quota = await checkFeature(request, 'tryon')
-  if (!quota.ok) {
-    logCost('limit_hit', { surface: 'tryon', reason: 'tier_quota', tier: quota.tier, used: quota.used })
-    return quotaResponse(quota)
+  const blocked = featureBlocked(quota)
+  if (blocked) {
+    logCost('limit_hit', { surface: 'tryon', reason: quota.unavailable ? 'meter' : 'tier_quota', tier: quota.tier, used: quota.used })
+    return blocked
   }
 
   const started = Date.now()
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
       model: TRYON_MODEL,
       prompt: { images: [image.slice(image.indexOf(',') + 1)], text: promptFor(shoe, sport) },
     })
+    await recordFeatureUse(request, 'tryon')
     logCost('paid_call', { route: 'tryon', ok: true, ms: Date.now() - started, sport })
     return Response.json({ image: `data:${result.mediaType};base64,${result.base64}`, model: TRYON_MODEL })
   } catch (error) {

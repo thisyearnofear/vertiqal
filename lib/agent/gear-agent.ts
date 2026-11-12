@@ -272,9 +272,10 @@ const gearTools = {
 const RESCUE_MARKER = 'FORMA-RESCUE:'
 
 export function createGearAgent(resolved: ResolvedModel) {
-  // When the loop gets stuck (a small model repeating hallucinated searches instead of
-  // recommending), escalate the remaining steps to the next candidate in the agent chain —
-  // a bigger reasoning model can read the accumulated context and just finish the job.
+  // Temporary host. The pinned open-weight model does not reliably finish a tool loop,
+  // so a stuck run is gated onto recommendProducts and, when one exists, the next chain
+  // candidate. Delete this once the agent role is a model that calls recommendProducts
+  // on its own. It is not a product feature.
   let rescuePromise: Promise<ResolvedModel | null> | null = null
   const rescueModel = () => {
     rescuePromise ??= resolveModel('agent', { skip: [resolved.label] }).catch(() => null)

@@ -2,9 +2,7 @@ import { cookies } from 'next/headers'
 import Link from 'next/link'
 import { BRIEF_COOKIE } from '@/lib/fitting/remembered-brief'
 import { verifiedBrief } from '@/lib/fitting/tier-proof'
-import { setTier } from '@/app/actions'
 import { paypalToolingReady } from '@/lib/paypal/toolkit'
-import { ActivatePro } from './activate'
 import { PayPalUpgrade } from './paypal-button'
 import { SubscribeButton } from './subscribe-button'
 
@@ -51,7 +49,9 @@ export default async function UpgradePage() {
           Pay with PayPal
         </a>
       ) : (
-        <ActivatePro activate={setTier} />
+        <p className="max-w-xl text-pretty text-sm leading-relaxed text-muted-foreground">
+          Pro checkout is not configured on this deployment. The on-device measurement stays free.
+        </p>
       )}
       <Link href="/" className="text-xs uppercase tracking-[0.2em] text-muted-foreground underline underline-offset-4 hover:text-foreground">
         Back to the fitting

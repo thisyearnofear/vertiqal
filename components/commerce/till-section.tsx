@@ -12,7 +12,6 @@ interface Txn {
   currency: string | null
   status: string | null
   date: string | null
-  payer: string | null
   items: string[]
 }
 
@@ -132,7 +131,6 @@ export function TillSection() {
                 <li key={t.id ?? i} className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 py-2">
                   <span className="shrink-0 text-muted-foreground">{when(t.date)}</span>
                   <span className="min-w-0 flex-1 truncate text-foreground">{t.items.join(', ') || '—'}</span>
-                  <span className="shrink-0 text-muted-foreground">{t.payer ?? ''}</span>
                   <span className="shrink-0 phosphor">
                     {t.currency ?? ''} {t.amount ?? '—'}
                   </span>

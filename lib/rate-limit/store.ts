@@ -12,6 +12,8 @@
  */
 
 export interface CounterStore {
+  /** Current count for `key`, or 0 when the window is absent or expired. Does not increment. */
+  read(key: string): Promise<number>
   /** Increments the counter for `key` and returns its new count and when the window resets. */
   hit(key: string, windowMs: number): Promise<{ count: number; resetAt: number }>
   /** Human-readable name, for logs. */
@@ -55,6 +57,11 @@ export async function redisPipeline(config: RedisConfig, commands: string[][]): 
 export function createRedisCounterStore(config: RedisConfig): CounterStore {
   return {
     name: 'redis',
+    async read(key: string) {
+      const results = await redisPipeline(config, [['GET', key]])
+      const count = Number(results[0] ?? 0)
+      return Number.isFinite(count) && count > 0 ? count : 0
+    },
     async hit(key: string, windowMs: number) {
       const results = await redisPipeline(config, [
         ['INCR', key],
@@ -74,6 +81,12 @@ export function createMemoryCounterStore(): CounterStore {
   const buckets = new Map<string, { count: number; resetAt: number }>()
   return {
     name: 'memory',
+    async read(key: string) {
+      const now = Date.now()
+      const current = buckets.get(key)
+      if (!current || current.resetAt <= now) return 0
+      return current.count
+    },
     async hit(key: string, windowMs: number) {
       const now = Date.now()
       if (buckets.size > 5_000) {

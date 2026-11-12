@@ -15,9 +15,6 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_SAMPLE_CLIP: sampleClip ? `/demo/${sampleClip}` : '',
   },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
   },

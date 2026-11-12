@@ -7,7 +7,7 @@ import { parseRememberedBrief, type RememberedBrief } from './remembered-brief.t
  * The tier claim in the remembered-brief cookie is HMAC-signed: the cookie is
  * plain JSON a visitor could otherwise edit into 'pro'. Only the server holds
  * PASSPORT_SECRET, so a valid proof can only come from the verified payment
- * routes (or the demo activation when no payment provider is configured).
+ * routes. The upgrade page cannot mint Pro.
  * Server-only — importing this into client code would ship node:crypto.
  */
 
