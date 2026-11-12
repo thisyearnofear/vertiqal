@@ -208,7 +208,7 @@ export function AgentPanel({
               {`  ${DEPTHS[ranDepth].label.toUpperCase()} SEARCH · ABOUT ${DEPTHS[ranDepth].seconds}S${status === 'submitted' ? ' · GROK IS THINKING' : ''}`}
             </p>
             {progress.length > 0 && (
-              <ol className="mt-3 flex flex-col gap-1 text-lg leading-snug" aria-label="Search progress">
+              <ol className="mt-3 flex flex-col gap-1.5 text-xl leading-snug" aria-label="Search progress">
                 {progress.map((step) => (
                   <li key={step.label} className={step.done ? 'opacity-70' : 'phosphor'}>
                     {`${step.done ? '[ OK ]' : '[ .. ]'} ${step.label.toUpperCase()}${step.count > 1 ? ` ×${step.count}` : ''}`}
@@ -220,14 +220,14 @@ export function AgentPanel({
               <div className="mt-4 flex flex-col gap-2" aria-label="Pages Forma is reading">
                 <p className="text-base uppercase leading-none opacity-60">{'> Forma is reading'}</p>
                 <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {reading.map((page) => (
+                  {reading.slice(-6).map((page) => (
                     <li
                       key={page.url}
-                      className="flex min-w-0 animate-in items-center gap-2 rounded-md border border-stage-foreground/25 bg-stage-foreground/5 px-3 py-2 fade-in slide-in-from-bottom-1 duration-500"
+                      className="flex min-w-0 animate-in items-center gap-2 rounded-md border border-stage-foreground/25 bg-stage-foreground/5 px-3 py-2 fade-in slide-in-from-bottom-1 duration-500 motion-reduce:animate-none"
                     >
                       {page.imageUrl && (
                         // eslint-disable-next-line @next/next/no-img-element -- retailer-hosted thumbnail; dimensions unknown until fetch
-                        <img src={page.imageUrl} alt="" loading="lazy" className="size-10 shrink-0 rounded-sm bg-foreground/80 object-contain p-0.5" />
+                        <img src={page.imageUrl} alt="" loading="lazy" decoding="async" className="size-10 shrink-0 rounded-sm bg-foreground/80 object-contain p-0.5" />
                       )}
                       <div className="flex min-w-0 flex-col gap-0.5">
                         <span className="truncate text-sm uppercase opacity-60">{page.host}</span>
@@ -243,6 +243,36 @@ export function AgentPanel({
 
         {outputs && !choice && (
           <>
+            <div className="flex flex-col gap-2 rounded-md border border-stage-foreground/25 bg-stage-foreground/5 px-4 py-3" aria-label="How Forma found these">
+              <p className="text-base uppercase leading-snug opacity-70">
+                {`> HOW FORMA FOUND THESE · ${activity.steps} STEPS · ${reading.length} PAGES READ`}
+              </p>
+              {progress.length > 0 && (
+                <ol className="flex flex-wrap gap-x-4 gap-y-1 text-base leading-snug" aria-label="Search trail">
+                  {progress.map((step) => (
+                    <li key={step.label} className="opacity-80">
+                      {`[ OK ] ${step.label.toUpperCase()}${step.count > 1 ? ` ×${step.count}` : ''}`}
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {reading.length > 0 && (
+                <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Sources Forma read">
+                  {reading.slice(-3).map((page) => (
+                    <li key={page.url} className="flex min-w-0 items-center gap-2 rounded-md border border-stage-foreground/25 bg-stage-foreground/5 px-3 py-2">
+                      {page.imageUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element -- retailer-hosted thumbnail
+                        <img src={page.imageUrl} alt="" loading="lazy" decoding="async" className="size-10 shrink-0 rounded-sm bg-foreground/80 object-contain p-0.5" />
+                      )}
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate text-sm uppercase opacity-60">{page.host}</span>
+                        <span className="line-clamp-2 font-sans text-sm leading-snug opacity-90">{page.title}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <Shortlist
               outputs={outputs}
               closingLine={busy ? '' : closingLineOf(messages)}
@@ -313,7 +343,11 @@ export function AgentPanel({
         )}
 
         {messages.length > 1 && (
-          <details name="forma-panels" className="border-t border-dashed border-stage-foreground/30 pt-4 text-lg leading-snug">
+          <details
+            name="forma-panels"
+            open={Boolean(outputs)}
+            className="border-t border-dashed border-stage-foreground/30 pt-4 text-lg leading-snug"
+          >
             <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">
               {`+ How Forma decided · ${activity.steps} steps`}
             </summary>

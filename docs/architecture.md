@@ -48,7 +48,7 @@ Callers: `agent` → `/api/agent` gear loop, `/api/brief` text parse, passport `
   - *Fixed — fatal tool-choice crash:* `prepareStep` used to force a specific tool per phase; when the model answered in text the AI SDK threw `AI_ToolChoiceViolationError` and killed the run. `prepareStep` now only restricts `activeTools` and leaves `toolChoice` auto, so a text answer ends the loop gracefully.
   - *Mitigated — stuck loops:* open-weight models used to spin on searches or hallucinated tools until the 16-step budget died (observed: 15 searches, ~90k input tokens, zero picks). `repairToolCall` (`lib/agent/tool-repair.ts`) executes any call that maps to a real tool with fixable args — but enforces the run budgets too: single-use tools (evidence, profile, community, athletes) can't be repaired twice, and once the run is stuck only `recommendProducts` repairs, so refused calls become error-text phantoms that feed the rescue instead of the loop (earlier, executed off-phase calls never reached the stuck thresholds — a 132 s run died at the step cap without recommending). `prepareStep` yields hidden tools back at most 3× per run, hard-caps corrective searches at 6 after a rejected shortlist, and past ≥3 phantom calls or ≥6 searches with no shortlist it gates to `recommendProducts`, appends a `FORMA-RESCUE:` user-turn directive listing the real product pages found (the SDK rejects system-role directives mid-conversation — `AI_InvalidPromptError`), and escalates the remaining steps to the next chain candidate via `resolveModel('agent', { skip })`. `/api/brief` retries a failed call once on the next chain candidate.
   - *Bounded generation:* `maxOutputTokens` is 4k (a measured runaway emitted 8.4k output tokens over ~200 s before the provider errored) and every provider call carries a 90 s fetch timeout (`AbortSignal.any`), so a hung upstream call fails fast — the client retries — instead of silently consuming the whole `maxDuration` budget.
-  - *Residual gaps (known):* `resolveModel` pins the first answering model for the instance lifetime and a provider that fails mid-run is not demoted (the `/api/agent` loop has no call-level fallback, unlike `/api/brief`); the `quick` depth allows one `searchProducts` call, which conflicts with the "one candidate per search" instruction when three distinct picks are required.
+  - *Residual gaps (known):* `resolveModel` pins the first answering model for the instance lifetime and a provider that fails mid-run is not demoted (the `/api/agent` loop has no call-level fallback, unlike `/api/brief`). Depth search budgets now cover three distinct picks (quick 3 / considered 3 / deep 4).
   - *Remaining — shared-infra latency:* on Featherless a realistic mid-loop call takes ~8–10 s and grows with context (search results accumulate), so a ~12-step fitting needs 100–300 s and competes with other tenants. Context was trimmed (5 results / 240-char snippets) to help. Under sustained back-to-back load the provider also degrades and even single brief calls can transiently 502/503; they recover within a minute.
   - Stronger tool models are not currently reachable: `meta-llama/Llama-3.3-70B-Instruct` is gated behind HuggingFace OAuth (no HF account is connected), `Mistral-Small-3.2-24B` answers in prose instead of calling tools, and `Qwen/Qwen3-32B` grounds well but its reasoning either blows the time budget (thinking on) or emits tool calls as plain text (thinking off). The Vercel AI Gateway fallback needs a credit balance this account doesn't have. **If agent reliability matters, the levers are: add gateway credits, connect HuggingFace on Featherless to unlock Llama-3.3-70B, or move the agent role to a dedicated/faster endpoint.**
 
@@ -62,6 +62,8 @@ Callers: `agent` → `/api/agent` gear loop, `/api/brief` text parse, passport `
 - `prefs.ts` validates the required brief (size, budget, 120–220 cm height, goal and surface) before `/api/agent` runs. Foot width and niggles remain optional.
 - `example.ts` supplies the synthetic, clearly labelled six-stage walkthrough (AI-generated running clip fixture plus synthetic measurements, brief, concepts and an un-run receipt template; see README for attribution). The running example draws a local 2D pose overlay over the generated clip — at most 12 fps while it plays and the tab is visible — but reports framing only and never touches measurements, hosted providers or TTS. Example mode cannot authorise research, stock or passport calls.
 - `stock.ts` separates a typed draft size from the explicitly submitted size and carries the server-issued product token, so an old verdict, passport or arbitrary URL cannot be applied to a new request.
+- Retailer allowlist (`lib/agent/domains.ts`) covers showroom and catalog merchants (laced, endclothing, asos, johnlewis, size, schuh, footlocker, office, soletrader) so catalog picks never 403 the live check.
+- Verified PayPal captures are recorded at capture time (`lib/captures/`) and lead the `/api/lab` feed, so the ledger shows money before the transaction-search index catches up. Local validation stays a lab instrument — off the shopper page.
 - `camera.ts` releases late `getUserMedia` streams that resolve after capture is stopped or superseded.
 
 ## Workspace and example tracking
@@ -109,6 +111,71 @@ FreeMoCap remains a separate, optional offline reference system. No FreeMoCap co
 | `/api/mcp` | GET, POST, DELETE | MCP server exposing `get_fit_passport`, `check_fit` and `find_products` (Channel3 catalog) to other agents. |
 
 Every paid route (`agent`, `deep`, `tryon`, `vision`, `brief`, `voice`, `pose-vlmrun`, `passport-fit`) passes through `lib/rate-limit.ts` (`guardRequest` / `guardSurfaceKey`, both async), backed by a shared Redis counter store (`lib/rate-limit/store.ts`; per-instance memory when none is configured, and a store outage fails open), enforcing per-visitor daily limits, global daily route capacity caps (`503` with `Forma is at capacity today — your measurement still works.`), and instant feature kill-switches (`FORMA_DISABLED_FEATURES`), while emitting structured cost and `limit_hit` events via `lib/cost-log.ts`.
+
+## Viewport and staged intent
+
+One viewport = one job, one primary action, at most five data chunks (Miller 5±2).
+Above-the-fold carries ~57% of viewing time, top two screenfuls ~74% (NN/G); mobile
+sees 80% less per viewport than desktop (Baymard), so the page must stage work by
+purchase intent instead of stacking it.
+
+- `invite/capture/confirm`: movement + 2–3 decisive brief questions only. Full gait
+  table, twin replay, validation trace, community/prices/till stay collapsed.
+- `research/choose`: activity line + 3 progress ticks + up to 3 source cards, then 3
+  pick cards + 1 pick CTA. Readout, twin, validation unmount once `hasOutputs`.
+- `decision`: pick hero + live size-check receipt + sticky buy/PayPal first; passport,
+  baseline, film-again and till ledger reveal only after `stockChecked`/`bought`.
+- Till and fit-notes never mount before a choice exists; the lab grid lives at `/lab`,
+  not under the fitting. Intent signals (`stock.phase`, `bought`, `takeAway`,
+  `shortlist_feedback`) gate each reveal — each stage earns the next question by
+  giving value first. See `lib/fitting/session.ts` `visibilityFor` + `stride-lab.tsx`
+  mount gates; guided-selling target is 2–3 questions, one at a time (quiz finishers
+  ~5.5% vs ~2% baseline).
+
+### Progressive disclosure without drawer graveyards
+
+Drawers are a promise, not a pattern: NN/G, Baymard and drawer-usability studies agree
+that tall accordions lose scroll position, hide comparison, and go unopened — expand
+rates under ~5% with flat conversion mean delete the content, not hide it better. Two
+layers is the practical ceiling. Prefer, in order:
+
+1. **Trim by frequency, not importance.** If everyone opens it, it was never secondary.
+   Lab instruments (`Local validation`) live at `/lab` or `?debug`, never on the shopper
+   page. Empty states (athletes with no coverage, replay links before upload) render
+   nothing — no drawer that says nothing.
+2. **Staged disclosure over accordions.** The fitting stage is the disclosure:
+   readout/twin/validation unmount once `hasOutputs`; till/notes mount only in
+   `decision`. Content absent until its stage needs no drawer.
+3. **Inline receipt over proof drawer.** Verdict + screenshot + observed URL stay
+   visible (`StockProof` is a div, not `<details>`); the drawer holds nothing. Papers
+   collapse to at most 2 inline DOI links on requirements that cite them.
+4. **Conditional over generic.** Width/niggles surface when the verdict is `unsure`
+   or feedback is negative — not as an always-open bucket. New branches get their own
+   conditional fields, never a broad bucket.
+5. **Drawer rules when one remains:** shorter than the viewport, labelled with the
+   payoff (`Research · 3 findings · 2 papers`), trigger and payoff in the same viewport,
+   independent open state, `Expand all` where scanning matters. `How Forma decided`
+   defaults open after outputs because it is the receipt, not secondary detail.
+
+## Cohesion, holistic flow and performance
+
+- **One voice:** product is `forma` (lowercase wordmark + `The right shoe…` tagline);
+  `vertiqal` is the repo/URL only. Metadata, headers and receipts all lead with forma.
+- **One material language:** `housing` (raised putty), `screen` (+`screen-readable` at
+  12% scanlines for text), `phosphor`/`engraved`/`led`/`well` — no new panel styles.
+  Focus stays visible (`focus-visible:ring`), motion is reduced-motion gated
+  (`motion-reduce:animate-none` on every `animate-in`; global kill for `animate-in`
+  under `prefers-reduced-motion`).
+- **One flow:** stage owns what mounts (`visibilityFor` + choice gates). Money and notes
+  mount only in `decision`; readout/twin/validation unmount once `hasOutputs`; lab
+  grid lives at `/lab`. Empty/error/loading copy names the next action, never a dead end.
+- **Performance budget:** three.js twin and AG Grid are `next/dynamic` (`ssr:false`);
+  retailer thumbnails are `loading=lazy decoding=async sizes=100vw/50vw`; below-fold panels use
+  `.below-fold` (`content-visibility:auto`); replay polling caps at 12×3s; till
+  refetches only after a paid event (+5s). `motion/react` is out of the stage critical
+  path (CSS `animate-in` instead); `optimizePackageImports` covers lucide/motion/ai;
+  PayPal preconnected, Channel3 dns-prefetched. Build stays green; total client chunks
+  ~3.3M with the pose/AI floor (MediaPipe + agent stream) isolated from first paint.
 
 ## Extension points
 

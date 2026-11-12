@@ -329,7 +329,14 @@
   .animate-hud-in,
   .animate-roll-in,
   .animate-pip,
-  .animate-focus-in {
-    animation: none;
+  .animate-focus-in,
+  .animate-in {
+    animation: none !important;
   }
+}
+
+/* Below-fold panels skip rendering until near viewport — cheap win for long fittings. */
+.below-fold {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
 }

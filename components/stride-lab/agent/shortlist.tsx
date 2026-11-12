@@ -42,7 +42,7 @@ export function Shortlist({
               key={p.url}
               style={{ animationDelay: `${i * 120}ms` }}
               className={cn(
-                'flex animate-in flex-col gap-3 rounded-md border p-4 fade-in slide-in-from-bottom-2 fill-mode-both duration-500',
+                'flex animate-in flex-col gap-3 rounded-md border p-4 fade-in slide-in-from-bottom-2 fill-mode-both duration-500 motion-reduce:animate-none',
                 i === 0 ? 'border-primary shadow-[0_0_24px_-6px_var(--primary)] md:col-span-2 md:p-5' : 'border-stage-foreground/30',
               )}
             >
@@ -69,6 +69,8 @@ export function Shortlist({
                       src={p.imageUrl}
                       alt={p.name}
                       loading="lazy"
+                      decoding="async"
+                      sizes="(max-width: 768px) 100vw, 50vw"
                       onLoad={(e) => e.currentTarget.classList.remove('opacity-0')}
                       className="relative max-h-full max-w-full object-contain opacity-0 transition-opacity duration-500"
                     />

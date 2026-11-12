@@ -2,7 +2,6 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
 import { PinOff, Play } from 'lucide-react'
 import { forgetBrief, saveBrief, savePersona } from '@/app/actions'
 import { Button } from '@/components/ui/button'
@@ -54,7 +53,6 @@ import { LiveOverlay } from './live-overlay'
 import { PoseStage, type Keyframe } from './pose-stage'
 import { ProviderPicker } from './provider-picker'
 import { StageControls } from './stage-controls'
-import { ValidationControls } from './validation-controls'
 import { useBriefFlow } from './use-brief-flow'
 import { useInlineConfirm } from './use-inline-confirm'
 import { useLiveCamera } from './use-live-camera'
@@ -146,7 +144,6 @@ export function StrideLab({
   const [caption, setCaption] = useState<string | null>(null)
   const [keyframes, setKeyframes] = useState<Keyframe[]>([])
   const [hero, setHero] = useState<HeroFrame | null>(null)
-  const still = useReducedMotion() ?? false
   const [notes, setNotes] = useState<FittingNotesState>(() => ({ ...EMPTY_NOTES, width: initialBrief?.width ?? '' }))
   const [lockLine, setLockLine] = useState<string | null>(null)
   const [choice, setChoice] = useState<ShoePick | null>(null)
@@ -834,12 +831,9 @@ export function StrideLab({
               overlay={
                 live.phase === 'off' || live.phase === 'error' ? (
                   askDocked ? (
-                    <motion.div
+                    <div
                       key={`${question}-${stage}`}
-                      initial={still ? false : { opacity: 0, y: 14 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, ease: 'easeOut' }}
-                      className="absolute inset-0 z-10 flex flex-col overflow-y-auto bg-stage/70 font-mono text-stage-foreground backdrop-blur-md"
+                      className="absolute inset-0 z-10 flex animate-in flex-col overflow-y-auto bg-stage/70 font-mono text-stage-foreground backdrop-blur-md fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
                       style={
                         {
                           '--foreground': 'var(--stage-foreground)',
@@ -858,7 +852,7 @@ export function StrideLab({
                         <p className="text-pretty text-xl font-semibold leading-snug phosphor md:text-2xl">{askDocked.prompt}</p>
                         <div className="mt-1 md:mt-2">{askDocked.controls}</div>
                       </div>
-                    </motion.div>
+                    </div>
                   ) : undefined
                 ) : (
                   <LiveOverlay
@@ -1122,7 +1116,7 @@ export function StrideLab({
               </div>
             )}
 
-            {(twinOpen || measuredReady) && (
+            {visible.readout && (twinOpen || measuredReady) && (
               <div id="movement-twin" className="scroll-mt-6">
                 <MovementTwin
                   sport={sport}
@@ -1134,32 +1128,6 @@ export function StrideLab({
                   onCaptureHero={setHero}
                 />
               </div>
-            )}
-
-            {visible.validation && sport === 'running' && (clip || liveActive || validation.status === 'ready') && (
-              <details name="forma-panels" className="group housing rounded-2xl p-4 md:p-5">
-                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-                  <span className={LABEL}>Local validation</span>
-                  <span className="font-mono text-lg leading-none text-muted-foreground" aria-hidden>
-                    +
-                  </span>
-                </summary>
-                <div className="mt-3">
-                  <ValidationControls
-                    status={validation.status}
-                    source={validation.source}
-                    traceSource={validation.trace?.sourceKind ?? null}
-                    onSource={validation.setSource}
-                    canStart={validationCanStart}
-                    onStart={validation.start}
-                    onStop={validation.stop}
-                    onExport={validation.exportTrace}
-                    stopReason={validation.trace?.stopReason ?? null}
-                    frameCount={validation.trace?.frames.length ?? 0}
-                    contactCount={validation.trace?.contacts.length ?? 0}
-                  />
-                </div>
-              </details>
             )}
 
             {baseline && (
@@ -1193,7 +1161,7 @@ export function StrideLab({
           onFilmAgain={() => setHero(null)}
         />
 
-        {shopping && picks.length > 0 && !choice && !example && (
+        {shopping && picks.length > 0 && choice && !example && (
           <div id="fitting-notes" className="scroll-mt-6">
             <FittingNotes
               sport={sport}
@@ -1207,7 +1175,7 @@ export function StrideLab({
           </div>
         )}
 
-        {!example && <TillSection />}
+        {!example && choice && <TillSection />}
       </main>
     </div>
   )

@@ -326,10 +326,7 @@ export function DecisionPanel({
           <p className="text-xl uppercase leading-none phosphor">{'> TAKE IT WITH YOU'}</p>
           <FollowUp link={outcomeLink} name={pick.name} sport={sport} />
 
-          <details name="forma-panels" className="text-lg leading-snug">
-            <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ More: fit passport · baseline for next time'}</summary>
-            <div className="mt-4 flex flex-col gap-6">
-
+          <div className="flex flex-col gap-6 text-lg leading-snug">
           {onPinBaseline && (
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <p className="max-w-xl text-pretty font-sans text-base leading-relaxed opacity-80">
@@ -348,17 +345,14 @@ export function DecisionPanel({
 
           {passport &&
             (passportCurrent ? (
-              <details className="text-lg leading-snug">
-                <summary className="w-fit cursor-pointer opacity-70 hover:text-primary">{'+ Your fit passport, for other shops and AI assistants'}</summary>
-                <div className="mt-4">
-                  <PassportCard passport={passport} />
-                </div>
-              </details>
+              <div className="flex flex-col gap-2">
+                <p className="text-base uppercase leading-none opacity-60">{'Your fit passport · for other shops and AI assistants'}</p>
+                <PassportCard passport={passport} />
+              </div>
             ) : draft.trim() ? (
               <p className="text-lg leading-snug opacity-70">{'Check this size to update your fit passport.'}</p>
             ) : null)}
-            </div>
-          </details>
+          </div>
         </div>
       )}
     </div>

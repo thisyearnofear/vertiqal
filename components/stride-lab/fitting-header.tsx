@@ -32,7 +32,7 @@ export function FittingHeader() {
   return (
     <header className="flex flex-col gap-2 px-1 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <p className="font-mono text-2xl leading-none tracking-wider text-foreground engraved lg:text-3xl">vertiqal</p>
+        <p className="font-mono text-2xl leading-none tracking-wider text-foreground engraved lg:text-3xl">forma</p>
         <h1 className="text-balance text-base font-semibold leading-tight text-foreground lg:text-lg">
           The right shoe, in your size, checked in stock.
         </h1>

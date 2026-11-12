@@ -36,7 +36,7 @@ function Step({
   children?: ReactNode
 }) {
   return (
-    <li className="flex animate-in flex-col gap-3 fade-in slide-in-from-bottom-1 duration-300">
+    <li className="flex animate-in flex-col gap-3 fade-in slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xl leading-snug">
         <span
           className={cn(
@@ -110,25 +110,23 @@ function renderPart(part: Part, key: string) {
                 </p>
               )}
               {output.papers.length > 0 && (
-                <details className="text-lg leading-snug">
-                  <summary className="w-fit cursor-pointer opacity-80 hover:text-primary">
-                    {`+ ${output.papers.length} papers from live literature search`}
-                  </summary>
-                  <ul className="mt-2 flex flex-col gap-1">
-                    {output.papers.map((p) => (
-                      <li key={p.url}>
-                        <a
-                          href={p.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline decoration-dotted underline-offset-4 opacity-70 hover:text-primary"
-                        >
-                          {`↳ ${hostOf(p.url)} · ${p.title}`}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
+                <ul className="mt-2 flex flex-col gap-1 text-lg leading-snug" aria-label="Live literature search">
+                  {output.papers.slice(0, 2).map((p) => (
+                    <li key={p.url}>
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline decoration-dotted underline-offset-4 opacity-70 hover:text-primary"
+                      >
+                        {`↳ ${hostOf(p.url)} · ${p.title}`}
+                      </a>
+                    </li>
+                  ))}
+                  {output.papers.length > 2 && (
+                    <li className="opacity-60">{`+ ${output.papers.length - 2} more in the full trail`}</li>
+                  )}
+                </ul>
               )}
             </>
           )}
@@ -216,10 +214,15 @@ function renderPart(part: Part, key: string) {
     case 'tool-searchProducts': {
       const output = part.state === 'output-available' ? part.output : null
       const query = part.input?.query
+      const catalogCount = output && Array.isArray(output.catalog) ? output.catalog.length : 0
       return (
         <Step
           key={key}
-          title={output ? `Live web search · ${output.results.length} hits` : 'Searching live stock'}
+          title={
+            output
+              ? `Live stock search · ${output.results.length} pages${catalogCount ? ` · ${catalogCount} catalog products` : ''}`
+              : 'Searching live stock'
+          }
           detail={query ? `"${query}"` : undefined}
           state={isPending(part.state) ? 'pending' : 'done'}
         >

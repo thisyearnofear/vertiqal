@@ -8,6 +8,10 @@ const sampleClip = ['sample-run.mp4', 'sample-run.webm', 'sample-run.mov'].find(
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'motion', 'ai', '@ai-sdk/react'],
+  },
   env: {
     NEXT_PUBLIC_SAMPLE_CLIP: sampleClip ? `/demo/${sampleClip}` : '',
   },

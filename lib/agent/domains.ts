@@ -27,4 +27,15 @@ export const RETAILER_DOMAINS = [
   'cotswoldoutdoor.com',
   'ldmountaincentre.com',
   'epictv.com',
+  // Showroom + catalog merchants seen on camera — a pick from Channel3 or the
+  // agent must never 403 the live stock check as "not an approved retailer".
+  'laced.com',
+  'endclothing.com',
+  'asos.com',
+  'johnlewis.com',
+  'size.co.uk',
+  'schuh.co.uk',
+  'footlocker.co.uk',
+  'office.co.uk',
+  'soletrader.co.uk',
 ]

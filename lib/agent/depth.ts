@@ -23,22 +23,22 @@ export const DEPTHS: Record<Depth, DepthPlan> = {
     label: 'Quick',
     blurb: 'Straight to three shoes that fit your numbers.',
     layers: ['measure', 'stock'],
-    searches: 1,
-    seconds: 35,
+    searches: 3,
+    seconds: 45,
   },
   considered: {
     label: 'Considered',
     blurb: 'Adds what real runners and climbers say before shortlisting.',
     layers: ['measure', 'stock', 'riders'],
-    searches: 2,
-    seconds: 60,
+    searches: 3,
+    seconds: 70,
   },
   deep: {
     label: 'Deep',
     blurb: 'Adds the research behind every requirement and who wears each shoe.',
     layers: ['measure', 'stock', 'riders', 'research', 'athletes'],
-    searches: 2,
-    seconds: 90,
+    searches: 4,
+    seconds: 100,
   },
 }
 

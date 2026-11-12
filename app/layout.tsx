@@ -7,7 +7,7 @@ const plex = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '
 const vt323 = VT323({ subsets: ['latin'], weight: '400', variable: '--font-vt323' })
 
 export const metadata: Metadata = {
-  title: 'vertiqal · The right shoe, in your size, checked in stock',
+  title: 'forma · The right shoe, in your size, checked in stock',
   description:
     'Climbing and running shoes sized for you. Film a short clip, tell Forma your size, and it checks real stock in that size before you buy.',
   icons: {
@@ -32,6 +32,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${plex.variable} ${vt323.variable} bg-background`}>
+      <head>
+        <link rel="preconnect" href="https://www.paypal.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://api-m.sandbox.paypal.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://api.trychannel3.com" />
+      </head>
       <body className="font-sans antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}

@@ -76,7 +76,7 @@ export function TillSection() {
   }, [])
 
   return (
-    <section className="housing flex flex-col gap-4 rounded-2xl p-4 md:p-5" aria-label="Checkout and recent payments">
+    <section className="housing below-fold flex flex-col gap-4 rounded-2xl p-4 md:p-5" aria-label="Checkout and recent payments">
       <div className="flex flex-col gap-1.5">
         <p className={LABEL}>The till · PayPal sandbox, live</p>
         <p className="max-w-2xl text-pretty font-sans text-base leading-relaxed text-muted-foreground">
