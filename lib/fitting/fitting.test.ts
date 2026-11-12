@@ -568,6 +568,20 @@ test('stock page gate: numeric-only product names cannot verify identity', () =>
   assert.equal(inspectStockPage('41', pageFixture()).status, 'unclear')
 })
 
+test('stock page gate: US/UK spelling splits verify but version digits stay exact', () => {
+  const vapour = pageFixture({
+    finalUrl: 'https://www.outside.co.uk/products/vapour-v-men-s-climbing-shoe.html',
+    title: "Vapour V Men's Climbing Shoe | Outside",
+    headings: ["Scarpa Vapour V Men's Climbing Shoe"],
+  })
+  assert.equal(inspectStockPage("Scarpa Vapor V Men's Climbing Shoe", vapour).status, 'verified')
+  assert.equal(
+    inspectStockPage('Nike Pegasus 41', pageFixture({ headings: ['Nike Pegasus 4 Running Shoes'] })).status,
+    'unclear',
+    'short version tokens still match exactly',
+  )
+})
+
 test('stock page gate: allowed redirect verifies, disallowed or malformed final URLs are blocked', () => {
   assert.equal(inspectStockPage('Nike Pegasus 41', pageFixture({ finalUrl: 'https://sportsshoes.com/p/redirected' })).status, 'verified')
   assert.equal(

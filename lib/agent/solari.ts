@@ -149,8 +149,17 @@ async function readProductPage(browser: BrowserSession, url: string) {
       } catch {}
     }
 
+    // Join child nodes with spaces: retailer templates render brand and model
+    // as sibling elements with no whitespace between them, and raw textContent
+    // glues them into one token ("ScarpaVapour"), which the identity gate
+    // can never match. A single text node keeps its own spacing.
+    const headingText = (el: Element): string =>
+      Array.from(el.childNodes)
+        .map((node) => (node.textContent ?? '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join(' ')
     const headings = Array.from(document.querySelectorAll('h1'))
-      .map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
+      .map((el) => headingText(el))
       .filter(Boolean)
       .slice(0, 6)
       .map((text) => text.slice(0, 160))

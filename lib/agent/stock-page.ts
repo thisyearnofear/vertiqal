@@ -45,6 +45,33 @@ function identityTokens(productName: string): string[] {
   return tokens(productName).filter((token) => !GENERIC_TOKENS.has(token))
 }
 
+/**
+ * One single-character insertion, deletion or substitution. Covers the US/UK
+ * spelling splits retailers actually use (vapor/vapour, color/colour) without
+ * loosening short model codes: tokens under 4 chars must match exactly, so
+ * "Pegasus 40" never verifies as "Pegasus 41".
+ */
+function nearToken(wanted: string, candidate: string): boolean {
+  if (wanted === candidate) return true
+  if (wanted.length < 4 || candidate.length < 4) return false
+  const [short, long] = wanted.length <= candidate.length ? [wanted, candidate] : [candidate, wanted]
+  if (long.length - short.length > 1) return false
+  let i = 0
+  let j = 0
+  let edits = 0
+  while (i < short.length && j < long.length) {
+    if (short[i] === long[j]) {
+      i++
+      j++
+      continue
+    }
+    if (++edits > 1) return false
+    if (short.length === long.length) i++
+    j++
+  }
+  return edits + (long.length - j) <= 1
+}
+
 export function inspectStockPage(productName: string, page: StockPageEvidence, extraHosts: string[] = []): StockPageGate {
   if (!stockUrlAllowed(page.finalUrl, extraHosts)) {
     return { status: 'blocked', evidence: 'The check ended on a URL outside the approved retailers.' }
@@ -69,8 +96,8 @@ export function inspectStockPage(productName: string, page: StockPageEvidence, e
   }
   const candidates = [...page.headings, ...page.productNames]
   const identified = candidates.some((candidate) => {
-    const candidateTokens = new Set(tokens(candidate))
-    return wanted.every((token) => candidateTokens.has(token))
+    const candidateTokens = tokens(candidate)
+    return wanted.every((token) => candidateTokens.some((ct) => nearToken(token, ct)))
   })
   if (!identified) {
     return { status: 'unclear', evidence: `The page did not present "${productName}" as its product.` }
