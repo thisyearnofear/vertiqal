@@ -78,3 +78,10 @@ https://vertiqal.vercel.app` (pass `--product "X"` to vary the shoe,
 ## Rough cut (assembled)
 
 `demo-video/rough-cut.mp4` — 111s, ffmpeg-assembled: title cards (FORMA / "agents sell · agents buy — PayPal settles"), all 6 webm clips trimmed (brief + search beats at 1.67x), Ken Burns on the showroom/decision stills, shopper-agent terminal as the closer. Rebuild: `/tmp/vqcut/finish.sh` pattern — trim offsets are in the concat order documented above. Missing still: voiceover/music bed, and a live pick-travel motion shot if one is re-captured.
+
+## Sound layer (final)
+
+`forma-demo.mp4` — 114s master cut with VO + music.
+- **VO**: ElevenLabs `eleven_v4`, voice "Keith — Warm East African Narrator" (`uLfPT2jUO3X81OwnftBP`). One segment per beat, timed in `narration-beats.py` (text + slot start/end). Regenerate any line by re-running the TTS call with that JSON body.
+- **Music**: `music-bed.mp3` — ElevenLabs music API, "cinematic sports documentary underscore…" 115s instrumental, faded in/out, sidechain-ducked −8dB under VO.
+- **Mix**: VO delayed per-beat → amix → ×1.9; bed ×0.42 ducked via sidechaincompress; alimiter 0.95. Mean −14.9dB. Rebuild filter in the session log or re-run the ffmpeg -filter_complex in git history.
