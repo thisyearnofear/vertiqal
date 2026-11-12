@@ -24,6 +24,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Reach DOM nodes via refs passed down (`buyLinkRef`, `actionButtonsRef`, `panelRef`…), never `getElementById`/`querySelectorAll`.
 - `MovementTwin` (three.js) is `next/dynamic` `ssr: false` — keep it out of the initial bundle. Same for the `/lab` Fit Lab grid (`components/lab/fit-lab.tsx`, AG Grid).
 - `/lab` is the merchant view: `/api/lab` joins PayPal transactions (`lib/paypal/activity.ts`) with fit outcomes (`lib/outcome/read.ts`, Redis `vq:outcomes`).
+- "Demo fitting" in the stage transport row sends `SAMPLE_BRIEFS` to the real agent — the zero-camera path to picks (keep it wired; the dock's `secondaryAction` is suppressed by `actionInStage` and cannot render it).
+- `scripts/shopper-agent.mjs` is the inbound demo: an external agent that reads a Fit Passport over MCP (`demo-running`/`demo-climbing` resolve without a secret), checks a shoe via `check_fit`, then stages a real PayPal order through `/api/paypal/order`.
 - Channel3 catalog lives in `lib/agent/channel3.ts` — feeds gear-agent `searchProducts` and the MCP `find_products` tool; gated by `CHANNEL3_API_KEY`.
 - Hackathon work is tracked in `docs/hackathon-plan.md`; the agent/commerce API surface is spec'd in `docs/openapi.yaml`.
 - Blob downloads go through `lib/downloads.ts` (`downloadBlob` revokes after 1s — synchronous revoke can cancel the download).

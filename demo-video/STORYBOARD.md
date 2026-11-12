@@ -18,7 +18,8 @@ Music: understated pulse. Captions instead of voiceover keep it tight.
 | 8 | 62–70 | Decision panel: size check, stock verdict, evidence | NEEDS: successful run | "Your size. Verified in stock." |
 | 9 | 70–80 | THE TILL: click → order created → PayPal approval | vq-04-till | "Then it does the thing most agents can't." |
 | 10 | 80–86 | Ledger row lands + /lab merchant grid | vq-03-lab + fresh ledger | "Real money. Real receipts." |
-| 11 | 86–90 | End card: Forma wordmark + "Fit Passport · /api/mcp" | title card | "Built on PayPal. Open to agents." |
+| 11 | 86–98 | AGENT-TO-AGENT: terminal — second agent reads the Fit Passport over MCP, checks the shoe, stages a real PayPal order | shopper-agent.mp4 (17s) | "And your fit? Any agent can shop with it." |
+| 12 | 98–104 | End card: Forma wordmark + "agents sell · agents buy · PayPal settles" | title card | "Built on PayPal." |
 
 ## Captured run (ego-browser, localhost — 12 Nov)
 
@@ -48,6 +49,22 @@ live checks only for approved footwear retailers" for laced.com.
 Still useful but optional: a moving capture of the pick-travel
 (~2s) and the reading tray assembling — re-shoot in a normal browser
 with QuickTime if wanted, but the stills + Ken Burns cover the edit.
+
+## The closer (shot 11) — proven live
+
+`shopper-agent.mp4` is a real asciinema capture of `scripts/shopper-agent.mjs`
+running against **production**: MCP handshake → `get_fit_passport`
+(demo-running) → `find_products` (live Channel3) → `check_fit`
+("workable 70/100" with reasons) → real PayPal sandbox order
+`4VX33017CM346391B` staged with approval link. The refund beat is also
+proven: capture `8AP69603PF5719641` → `REFUNDED` via
+`/api/paypal/refund` (the misfit self-unwind — worth one line of VO or
+a caption if you want to reference it; re-run it live if you want it on
+film too).
+
+Run it again anytime: `node scripts/shopper-agent.mjs --base
+https://vertiqal.vercel.app` (pass `--product "X"` to vary the shoe,
+`--passport demo-climbing` for the climbing profile).
 
 ## Edit notes
 
