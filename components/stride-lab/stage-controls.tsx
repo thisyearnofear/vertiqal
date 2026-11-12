@@ -1,6 +1,6 @@
 'use client'
 
-import { Box, Camera, Pause, Play, RotateCcw, Square, Upload } from 'lucide-react'
+import { Box, Camera, Pause, Play, RotateCcw, Sparkles, Square, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +29,9 @@ interface StageControlsProps {
   showSample: boolean
   sampleArmed: boolean
   onSample: () => void
+  /** Invite-stage shortcut: canned measurements sent to the real agent. */
+  showDemo: boolean
+  onDemo: () => void
 }
 
 /** The transport row under the stage: upload, film, play, restart, voice, twin, sample. */
@@ -53,6 +56,8 @@ export function StageControls({
   showSample,
   sampleArmed,
   onSample,
+  showDemo,
+  onDemo,
 }: StageControlsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -118,6 +123,18 @@ export function StageControls({
         >
           <Play aria-hidden />
           {sampleArmed ? 'Clears this clip — sure?' : 'Sample fitting'}
+        </Button>
+      )}
+      {showDemo && (
+        <Button
+          variant="ghost"
+          size="lg"
+          className="h-10 whitespace-nowrap px-3 font-semibold uppercase tracking-wider text-primary hover:text-primary"
+          title="Sends the example measurements to the real agent — real picks, no camera needed."
+          onClick={onDemo}
+        >
+          <Sparkles aria-hidden />
+          Demo fitting
         </Button>
       )}
     </div>

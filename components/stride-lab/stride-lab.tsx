@@ -943,6 +943,8 @@ export function StrideLab({
                 if (measuredReady && !sampleConfirm.confirm()) return
                 showExample()
               }}
+              showDemo={!example && stage === 'invite' && !clip && !live.stream}
+              onDemo={runDemoFitting}
             />
           )}
         </div>
@@ -986,13 +988,7 @@ export function StrideLab({
                           ? 'Live analysis is unavailable right now — upload a clip instead.'
                           : undefined,
                 }
-              : stage === 'invite' && !clip && !live.stream
-                ? {
-                    label: 'Run a demo fitting',
-                    onClick: runDemoFitting,
-                    hint: 'Sends the example measurements to the real agent — real picks, no camera needed.',
-                  }
-                : undefined
+              : undefined
           }
           privacyLine={PRIVACY_LINE}
           analysisSettings={
