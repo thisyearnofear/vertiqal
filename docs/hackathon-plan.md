@@ -83,3 +83,7 @@ PayPal is already partially integrated: orders + refunds via direct REST (`lib/p
 **Sponsors.** Channel3 (catalog + offers + product imagery powering the showroom and `find_products` MCP tool), AG Grid (`/lab`), APIMatic PayPal Context Plugin (SDK-accurate PayPal context while building).
 
 **Honesty as design.** Stock checks show screenshot + observed-URL receipts labelled "template, not verified" where applicable; athlete picks disclose paid sponsorship; video never leaves the device; PayPal state flips only after server verification.
+
+## Demo film status (2026-11-12)
+
+Rough-cut `demo-video/vq-rough-v2.mp4` (44s, 6 scenes, music bed) assembled from ego-captured timelapses + a real shopper-agent run (92/100 great-fit, live sandbox order). Rendered video stays on disk and goes to YouTube when approved — never committed (`*.mp4/*.webm` gitignored; only the runtime example clip is tracked). Stock-gate recall fixes (near-match tokens, space-joined headings) landed and proven live. Still open: hero `in_stock` receipt, PayPal approve→capture→lab→refund (needs the owner's sandbox login), VO record, then master/vertical/TV30 exports.

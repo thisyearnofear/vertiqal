@@ -21,7 +21,7 @@ disclaimer as its largest text. Captions burned in (sound-off watchable).
 | 5 | 55–68 | "Three shoes. In your size. From shops that actually sell them." | Showroom, 3 distinct picks, craft + rider note. Pick-travel shortlist→decision (View Transition). |
 | 6 | 68–80 | "And it checks the shelf before you pay." | Stock check LIVE on hero pick: in_stock verdict + receipt expand + price. |
 | 7 | 80–90 | "PayPal settles it — order, approval, capture. Verified, and in the ledger before the page settles." | Create → approve → COMPLETED + captureId short → /lab row lands <5s. |
-| 8 | 90–100 | "Any agent can shop this way. Ours read the fit passport, judged the shoe, and staged the order." | shopper-agent terminal, `check_fit 70/100 workable`, staged order id legible. |
+| 8 | 90–100 | "Any agent can shop this way. Ours read the fit passport, judged the shoe, and staged the order." | shopper-agent terminal, `check_fit 92/100 great-fit`, sandbox order `6E631964L2805320A` legible (shot 2026-11-12, real staged order). |
 | 9 | 100–108 | "And the agent that fitted you unwinds you. Wrong pair? Refunded." | `create_refund` → REFUNDED on screen. The punchline. |
 | 10 | 108–115 | "Forma. Agents sell. Agents buy. PayPal settles." | End card 5s hold: FORMA + vertiqal URL + QR. |
 
@@ -50,10 +50,22 @@ dual FORMA/vertiqal branding in one frame.
 
 ## Verification before you call it wrapped
 
-- [ ] Demo yields 3 distinct allowed-domain picks (no HALT in the take).
+- [x] Demo yields 3 distinct allowed-domain picks (no HALT in the take — take 4, 2026-11-12).
 - [ ] Hero stock-check `in_stock` live, receipt + price visible.
 - [ ] Capture COMPLETED + captureId; lab row <5s.
 - [ ] Refund REFUNDED on that capture.
-- [ ] Shopper-agent order id legible at 720p.
+- [x] Shopper-agent order id legible at 720p (`6E631964L2805320A`, 92/100 great-fit).
+
+## Shoot log (ego timelapse + ffmpeg assembly — renders stay local, never committed)
+
+- 2026-11-12: beats 4–5 filmed (35-frame agent-run timelapse, decision travel, size check).
+  Honest receipts kept: LD "no size options", Sportsshoes HTTP 403, Outside "Vapour≠Vapor"
+  mismatch — the last one exposed the stock-gate recall bug, fixed same day
+  (`nearToken` + space-joined headings) and proven live: re-check returned HTTP 200
+  with the page correctly identified, verdict genuinely `out_of_stock`.
+- 2026-11-12: beat 8 filmed — full shopper-agent run, terminal scroll-rendered at
+  1080p, real sandbox order id. Rough-cut `vq-rough-v2.mp4` (44s, 6 scenes, music
+  bed) assembled on disk. Still open: hero `in_stock`, beats 7/9 (need human PayPal
+  approval), VO record.
 - [ ] Loudness: -16 LUFS web, -23 LUFS broadcast stem.
 - [ ] Exports: master 115s 16:9, vertical 35s 9:16, TV 30s.
