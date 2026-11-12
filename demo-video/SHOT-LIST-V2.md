@@ -56,6 +56,16 @@ dual FORMA/vertiqal branding in one frame.
 - [ ] Refund REFUNDED on that capture.
 - [x] Shopper-agent order id legible at 720p (`6E631964L2805320A`, 92/100 great-fit).
 
+## Cut state (2026-11-12)
+
+`vq-rough-v3.mp4` (56s, untracked): till → 21s agent-run timelapse (real run, 2943 steps) →
+shortlist → **hero receipt: IN STOCK · 42 · £122.50 at Outside.co.uk** (live check, screenshot in
+frame, Buy button) → shopper-agent terminal → end card. Music bed under.
+
+Capture limits learned the hard way: `agent-browser record` drops its encoder once an agent run
+loads the tab, and concurrent `screenshot` calls wedge the renderer (a run survives ~20s of it).
+Reliable path = start the run, leave the tab alone, then screenshot + assemble in ffmpeg.
+
 ## Shoot log (ego timelapse + ffmpeg assembly — renders stay local, never committed)
 
 - 2026-11-12: beats 4–5 filmed (35-frame agent-run timelapse, decision travel, size check).

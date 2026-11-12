@@ -87,3 +87,10 @@ PayPal is already partially integrated: orders + refunds via direct REST (`lib/p
 ## Demo film status (2026-11-12)
 
 Rough-cut `demo-video/vq-rough-v2.mp4` (44s, 6 scenes, music bed) assembled from ego-captured timelapses + a real shopper-agent run (92/100 great-fit, live sandbox order). Rendered video stays on disk and goes to YouTube when approved — never committed (`*.mp4/*.webm` gitignored; only the runtime example clip is tracked). Stock-gate recall fixes (near-match tokens, space-joined headings) landed and proven live. Still open as of 2026-11-12 midday: hero found (Solution Comp / Alpinetrek / UK 8 / £135.96, `in_stock` live) but UI CHECK still to film; PayPal approve→capture→lab→refund (needs the owner's sandbox login); Tavily key returns 401 — owner to check the Tavily account for revocation/credits, without it the agent's research path is down; VO record, then master/vertical/TV30 exports.
+
+Later 2026-11-12, superseding the above in part:
+- Tavily key rotated by the owner; research path back (a 2943-step climbing run completed).
+- Hero confirmed in the product itself: **IN STOCK · EU 42 · £122.50 at Outside.co.uk**, live receipt screenshot in frame; a second verifiable lead (Alpinetrek, UK 8, £135.96) also passed. Cut `vq-rough-v3.mp4` now ends its product beats on that receipt.
+- Provider per-call timeout raised 90s → 170s (`lib/agent/models.ts`): the agent was dying mid-loop at the old ceiling and surfacing as a bare "network error".
+- Bot-walled retailers found (Rock+Run, Bananafingers, SportsShoes all answer 403 to the stealth browser). Catalog offers from them now sort last (`preferVerifiableOffers`) and a pick's grounded URL yields to a verifiable same-shoe page (`reconcileUrl`), so a shortlist is not three unreadable shelves.
+- Remaining: PayPal beats 7/9 (owner's sandbox login), VO, exports. Renders stay local — YouTube for the keeper.
