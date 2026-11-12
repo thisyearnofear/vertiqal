@@ -1,4 +1,5 @@
 import 'server-only'
+import { preferVerifiableOffers } from './domains.ts'
 
 /**
  * Channel3 — the product-catalog layer for agentic commerce. One API returns
@@ -95,7 +96,7 @@ export async function searchCatalog(query: string, limit = 8): Promise<CatalogPr
         brand: p.brands?.[0]?.name ?? null,
         imageUrl: main?.url ?? null,
         category: p.category?.title ?? null,
-        offers: offers.slice(0, 4),
+        offers: preferVerifiableOffers(offers).slice(0, 4),
       },
     ]
   })

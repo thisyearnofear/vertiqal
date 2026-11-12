@@ -169,7 +169,7 @@ function disableQwenThinking(args: Record<string, unknown>): Record<string, unkn
  * can retry, instead of stalling to the wall-clock limit.
  */
 function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const timeout = AbortSignal.timeout(90_000)
+  const timeout = AbortSignal.timeout(170_000)
   const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
   return fetch(input, { ...init, signal })
 }

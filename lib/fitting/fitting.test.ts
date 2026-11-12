@@ -30,6 +30,7 @@ import { draftFromRemembered, parseRememberedBrief, rememberBrief, type Remember
 import { applyParsedBrief, briefParseSchema } from './brief-parse.ts'
 import { SAMPLE_BRIEFS, agentRequestSchema, briefToPrompt } from '../agent/brief.ts'
 import { EMPTY_NOTES } from '../agent/fitting-notes.ts'
+import { hostIsBotWalled, preferVerifiableOffers } from '../agent/domains.ts'
 import { createRateLimiter, createStockCheckRunner, createTtlCache, extraStockHosts, requestClientKey, stockTargetKey, stockUrlAllowed } from '../agent/stock-policy.ts'
 import { STOCK_TARGET_TTL_MS, issueStockToken, verifyStockToken } from '../agent/stock-token.ts'
 import { guardedStockVerdict, inspectStockPage, type StockPageEvidence } from '../agent/stock-page.ts'
@@ -562,6 +563,21 @@ test('stock page gate: same brand different model or version is unclear', () => 
     inspectStockPage('Nike Pegasus 41', pageFixture({ headings: ['Nike Pegasus 40 Running Shoes'] })).status,
     'unclear',
   )
+})
+
+test('catalog offers: verifiable shops lead the bot-walled ones, order otherwise kept', () => {
+  const offers = [
+    { domain: 'rockrun.com', price: 99 },
+    { domain: 'outside.co.uk', price: 120 },
+    { domain: 'www.bananafingers.co.uk', price: 113 },
+    { domain: 'alpinetrek.co.uk', price: 135 },
+  ]
+  assert.deepEqual(
+    preferVerifiableOffers(offers).map((o) => o.domain),
+    ['outside.co.uk', 'alpinetrek.co.uk', 'rockrun.com', 'www.bananafingers.co.uk'],
+  )
+  assert.equal(hostIsBotWalled('shop.rockrun.com'), true)
+  assert.equal(hostIsBotWalled('notrockrun.com'), false)
 })
 
 test('stock page gate: numeric-only product names cannot verify identity', () => {
