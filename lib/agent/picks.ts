@@ -1,3 +1,13 @@
+import { hostIsBotWalled } from './domains.ts'
+
+const hostReadable = (url: string) => {
+  try {
+    return !hostIsBotWalled(new URL(url).hostname)
+  } catch {
+    return true
+  }
+}
+
 /**
  * Same shoe model regardless of gender label, waterproof or width variant, punctuation or case:
  * "HOKA Speedgoat 6 GORE-TEX Men's Trail Running Shoes" = "Hoka Speedgoat 6".
@@ -73,7 +83,11 @@ export function reconcileUrl(
   hits: { title: string; url: string }[],
   allowed: Set<string>,
 ): string {
-  if (allowed.has(urlKey(pick.url))) return pick.url
-  const match = hits.find((h) => sameShoe(pick.name, h.title))
-  return match ? match.url : pick.url
+  const grounded = allowed.has(urlKey(pick.url))
+  // A grounded page the stock check cannot read (bot wall) loses to a grounded same-shoe page from
+  // a shop we can verify, so the pick the shopper lands on is one we can actually confirm.
+  if (grounded && hostReadable(pick.url)) return pick.url
+  const match = hits.find((h) => sameShoe(pick.name, h.title) && allowed.has(urlKey(h.url)) && hostReadable(h.url))
+  if (match) return match.url
+  return grounded || !hits.length ? pick.url : (hits.find((h) => sameShoe(pick.name, h.title))?.url ?? pick.url)
 }
