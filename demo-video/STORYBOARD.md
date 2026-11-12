@@ -74,3 +74,7 @@ https://vertiqal.vercel.app` (pass `--product "X"` to vary the shoe,
 - Speed ramp: agent search at 1.5–2×, everything else 1×.
 - The till clip ends at the PayPal login page — cut on the handoff,
   imply approval, land on the capture/ledger instead (it exists server-side).
+
+## Rough cut (assembled)
+
+`demo-video/rough-cut.mp4` — 111s, ffmpeg-assembled: title cards (FORMA / "agents sell · agents buy — PayPal settles"), all 6 webm clips trimmed (brief + search beats at 1.67x), Ken Burns on the showroom/decision stills, shopper-agent terminal as the closer. Rebuild: `/tmp/vqcut/finish.sh` pattern — trim offsets are in the concat order documented above. Missing still: voiceover/music bed, and a live pick-travel motion shot if one is re-captured.
