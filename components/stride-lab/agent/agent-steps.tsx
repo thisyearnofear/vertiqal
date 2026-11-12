@@ -357,7 +357,7 @@ export function readingOf(messages: GearAgentUIMessage[], max = 6) {
 export function AgentSteps({ messages }: { messages: GearAgentUIMessage[] }) {
   const parts = messages
     .filter((m) => m.role === 'assistant')
-    .flatMap((m) => m.parts.map((part, i) => ({ part, key: `${m.id}-${i}` })))
+    .flatMap((m, mIndex) => m.parts.map((part, i) => ({ part, key: `${m.id}-${mIndex}-${i}` })))
 
   return (
     <ol className="flex flex-col gap-6" aria-label="Agent activity">

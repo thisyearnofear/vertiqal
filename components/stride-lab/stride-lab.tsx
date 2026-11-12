@@ -1175,7 +1175,7 @@ export function StrideLab({
           </div>
         )}
 
-        {!example && choice && <TillSection />}
+        {!example && (!shopping || choice) && <TillSection />}
       </main>
     </div>
   )
